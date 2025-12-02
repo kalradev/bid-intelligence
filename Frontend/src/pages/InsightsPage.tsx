@@ -1,9 +1,11 @@
+import { Download } from "lucide-react";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import DepartmentCard from "../components/DepartmentCard";
 import FeatureCard from "../components/FeatureCard";
 import InteractiveBackground from "../components/InteractiveBackground";
 import { departments, features } from "../data/uiData";
+import { generateSummaryPDF } from "../utils/summaryPdfExport";
 
 export default function InsightsPage() {
   const navigate = useNavigate();
@@ -21,17 +23,61 @@ export default function InsightsPage() {
     }
   }, []);
 
+  const handleDownloadSummary = () => {
+    const analysisData = localStorage.getItem("analysisData");
+    if (analysisData) {
+      generateSummaryPDF(JSON.parse(analysisData));
+    } else {
+      alert("No analysis data available to download");
+    }
+  };
+
   return (
     <div className="universal-page-wrapper" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* 🌟 NAVBAR START */}
       <nav className="insights-navbar" style={{ zIndex: 20, position: 'relative' }}>
+        {/* Left spacer to balance right buttons */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', visibility: 'hidden' }}>
+          <button style={{ padding: '10px 16px' }}><span style={{ width: '20px', display: 'inline-block' }}></span></button>
+          <button style={{ padding: '10px 24px' }}>Analysis</button>
+        </div>
+
         <div className="navbar-title">Bid Intelligence.AI</div>
-        <button className="navbar-btn" onClick={() => {
-          window.scrollTo({ top: 0, behavior: "instant" });
-          navigate("/");
-        }}>
-          Analysis
-        </button>
+
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Download Summary Button */}
+          <button
+            className="navbar-btn-icon"
+            onClick={handleDownloadSummary}
+            title="Download Summary PDF"
+            style={{
+              background: '#0891b2',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '10px 16px',
+              fontSize: '16px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: '0.3s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#0e7490')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#0891b2')}
+          >
+            <Download size={20} />
+          </button>
+
+          {/* Analysis Button */}
+          <button className="navbar-btn" onClick={() => {
+            window.scrollTo({ top: 0, behavior: "instant" });
+            navigate("/");
+          }}>
+            Analysis
+          </button>
+        </div>
       </nav>
       {/* 🌟 NAVBAR END */}
 
@@ -99,13 +145,6 @@ export default function InsightsPage() {
                   icon={dept.icon}
                   name={dept.name}
                   textClass={dept.textClass}
-                // onClick={() => {
-                //   if (dept.name === "Bid Management") {
-                //     navigate("/bid-management");
-                //   } else {
-                //     alert("This department is not configured yet.");
-                //   }
-                // }}
                 />
               ))}
             </div>

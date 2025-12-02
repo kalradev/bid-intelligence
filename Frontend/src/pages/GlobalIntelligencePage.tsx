@@ -1,5 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
+import SearchBar from "./GlobalIntelligence/components/SearchBar";
+
+interface ProductData {
+  product: string;
+  oem: string;
+  country: string;
+  mii: boolean;
+}
 
 export default function GlobalIntelligencePage() {
   const navigate = useNavigate();
@@ -7,12 +16,60 @@ export default function GlobalIntelligencePage() {
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState("All");
   const [miiFilter, setMiiFilter] = useState("All");
+  const [data, setData] = useState<ProductData[]>([]);
 
-  const data = [
-    { product: "IoT Gateway", oem: "HFCL", country: "India", mii: true },
-    { product: "Smart Router", oem: "Cisco", country: "USA", mii: false },
-    { product: "CCTV Camera", oem: "CP Plus", country: "India", mii: true },
-  ];
+  // Load product mapping data from localStorage
+  useEffect(() => {
+    const analysisData = localStorage.getItem("analysisData");
+    if (analysisData) {
+      try {
+        const parsed = JSON.parse(analysisData);
+        const productMapping = parsed?.data?.departmentalSummaries?.productMapping;
+
+        if (productMapping?.miiProductStatus && Array.isArray(productMapping.miiProductStatus)) {
+          // Transform miiProductStatus to the format needed for the table
+          const transformedData: ProductData[] = productMapping.miiProductStatus.map((item: any) => {
+            // Determine country based on MII status
+            let country = "Unknown";
+            let isMII = false;
+
+            if (item.miiStatus) {
+              const status = item.miiStatus.toLowerCase();
+              if (status.includes("indian") || status.includes("mii-compliant") || status.includes("likely indian")) {
+                country = "India";
+                isMII = true;
+              } else if (status.includes("global") || status.includes("foreign")) {
+                // Try to infer country from OEM name or default to "Global"
+                country = "Global";
+                isMII = false;
+              } else if (status.includes("review") || status.includes("unspecified")) {
+                country = "Unknown";
+                isMII = false;
+              }
+            }
+
+            return {
+              product: item.productName || "N/A",
+              oem: item.oem || "Unspecified",
+              country: country,
+              mii: isMII,
+            };
+          });
+
+          setData(transformedData);
+        } else {
+          // No product mapping data available
+          setData([]);
+        }
+      } catch (error) {
+        console.error("Error parsing analysis data:", error);
+        setData([]);
+      }
+    } else {
+      // No analysis data in localStorage
+      setData([]);
+    }
+  }, []);
 
   const filteredData = data.filter((item) => {
     const matchesSearch =
@@ -59,7 +116,7 @@ export default function GlobalIntelligencePage() {
             color: "#ffffff",
           }}
         >
-          Product OEM Verification
+          Global Intelligence
         </h1>
 
         <button
@@ -113,64 +170,17 @@ export default function GlobalIntelligencePage() {
           }}
         >
           {/* ✅ SEARCH + FILTERS */}
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "1200px",
-              display: "flex",
-              gap: "12px",
-              marginBottom: "20px",
-            }}
-          >
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by Product or OEM..."
-              style={{
-                flex: 1,
-                padding: "14px 18px",
-                borderRadius: "10px",
-                border: "1px solid #ccc",
-                fontSize: "15px",
-              }}
-            />
-
-            <select
-              value={countryFilter}
-              onChange={(e) => setCountryFilter(e.target.value)}
-              style={{
-                padding: "14px",
-                borderRadius: "10px",
-                border: "1px solid #ccc",
-                fontSize: "15px",
-                background: "white",
-              }}
-            >
-              <option>All</option>
-              <option>India</option>
-              <option>USA</option>
-            </select>
-
-            <select
-              value={miiFilter}
-              onChange={(e) => setMiiFilter(e.target.value)}
-              style={{
-                padding: "14px",
-                borderRadius: "10px",
-                border: "1px solid #ccc",
-                fontSize: "15px",
-                background: "white",
-              }}
-            >
-              <option>All</option>
-              <option>MII</option>
-              <option>Not MII</option>
-            </select>
-          </div>
+          <SearchBar
+            search={search}
+            setSearch={setSearch}
+            countryFilter={countryFilter}
+            setCountryFilter={setCountryFilter}
+            miiFilter={miiFilter}
+            setMiiFilter={setMiiFilter}
+          />
 
           {/* ✅ TABLE */}
           <div
-            className="hoverable-card hover-cyan"
             style={{
               background: "#fff",
               width: "100%",
@@ -191,28 +201,31 @@ export default function GlobalIntelligencePage() {
               </thead>
 
               <tbody>
-                {filteredData.map((item, i) => (
-                  <tr
-                    key={i}
-                    style={{
-                      borderTop: "1px solid #e5e7eb",
-                      transition: "0.25s",
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLTableRowElement).style.background = "#f4f7fc";
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLTableRowElement).style.background = "#fff";
-                    }}
-                  >
-                    <td style={{ padding: "14px 16px" }}>{item.product}</td>
-                    <td style={{ padding: "14px 16px" }}>{item.oem}</td>
-                    <td style={{ padding: "14px 16px" }}>{item.country}</td>
-                    <td style={{ padding: "14px 16px", fontWeight: 600, color: item.mii ? "#059669" : "#dc2626" }}>
-                      {item.mii ? "✅ MII" : "❌ Not MII"}
+                {filteredData.length > 0 ? (
+                  filteredData.map((item, i) => (
+                    <tr
+                      key={i}
+                      style={{
+                        borderTop: "1px solid #e5e7eb",
+                      }}
+                    >
+                      <td style={{ padding: "14px 16px" }}>{item.product}</td>
+                      <td style={{ padding: "14px 16px" }}>{item.oem}</td>
+                      <td style={{ padding: "14px 16px" }}>{item.country}</td>
+                      <td style={{ padding: "14px 16px", fontWeight: 600, color: item.mii ? "#059669" : "#dc2626" }}>
+                        {item.mii ? "✅ MII" : "❌ Not MII"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} style={{ padding: "40px 16px", textAlign: "center", color: "#6b7280" }}>
+                      {data.length === 0
+                        ? "No analysis data available. Please upload and analyze a tender document first."
+                        : "No products match your search criteria."}
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

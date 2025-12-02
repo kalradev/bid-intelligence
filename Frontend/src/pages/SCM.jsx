@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { exportToPDF } from "../utils/pdfExport";
 
 const SCM = () => {
   const [data, setData] = useState(null);
+  const contentRef = useRef(null);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
@@ -11,6 +13,12 @@ const SCM = () => {
       setData(parsed?.data?.departmentalSummaries?.scm);
     }
   }, []);
+
+  const handleDownloadPDF = () => {
+    if (contentRef.current) {
+      exportToPDF(contentRef.current, "SCM_Summary");
+    }
+  };
 
   if (!data) {
     return (
@@ -25,10 +33,11 @@ const SCM = () => {
 
   return (
     <>
-      <NavbarBidManagement pageTitle="SCM" />
+      <NavbarBidManagement pageTitle="SCM" onDownloadPDF={handleDownloadPDF} />
 
       {/* CONTENT SECTION */}
       <div
+        ref={contentRef}
         style={{
           maxWidth: "900px",
           margin: "40px auto",
@@ -66,9 +75,9 @@ const SCM = () => {
         >
           Risk Level
         </h3>
-        <p style={{ 
-          fontWeight: "700", 
-          color: data.riskLevel === "High" ? "#dc2626" : data.riskLevel === "Medium" ? "#d97706" : "#059669" 
+        <p style={{
+          fontWeight: "700",
+          color: data.riskLevel === "High" ? "#dc2626" : data.riskLevel === "Medium" ? "#d97706" : "#059669"
         }}>
           {data.riskLevel || "N/A"}
         </p>

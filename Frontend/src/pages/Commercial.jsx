@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { exportToPDF } from "../utils/pdfExport";
 
 const Commercial = () => {
   const [data, setData] = useState(null);
+  const contentRef = useRef(null);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
@@ -11,6 +13,12 @@ const Commercial = () => {
       setData(parsed?.data?.departmentalSummaries?.commercial);
     }
   }, []);
+
+  const handleDownloadPDF = () => {
+    if (contentRef.current) {
+      exportToPDF(contentRef.current, "Commercial_Summary");
+    }
+  };
 
   if (!data) {
     return (
@@ -25,10 +33,11 @@ const Commercial = () => {
 
   return (
     <>
-      <NavbarBidManagement pageTitle="Commercial" />
+      <NavbarBidManagement pageTitle="Commercial" onDownloadPDF={handleDownloadPDF} />
 
       {/* CONTENT SECTION */}
       <div
+        ref={contentRef}
         style={{
           maxWidth: "900px",
           margin: "40px auto",

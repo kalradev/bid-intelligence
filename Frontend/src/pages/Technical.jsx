@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { exportToPDF } from "../utils/pdfExport";
 
 const Technical = () => {
   const [data, setData] = useState(null);
+  const contentRef = useRef(null);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
@@ -11,6 +13,12 @@ const Technical = () => {
       setData(parsed?.data?.departmentalSummaries?.technical);
     }
   }, []);
+
+  const handleDownloadPDF = () => {
+    if (contentRef.current) {
+      exportToPDF(contentRef.current, "Technical_Summary");
+    }
+  };
 
   if (!data) {
     return (
@@ -25,10 +33,11 @@ const Technical = () => {
 
   return (
     <>
-      <NavbarBidManagement pageTitle="Technical" />
+      <NavbarBidManagement pageTitle="Technical" onDownloadPDF={handleDownloadPDF} />
 
       {/* CONTENT SECTION */}
       <div
+        ref={contentRef}
         style={{
           maxWidth: "900px",
           margin: "40px auto",
@@ -43,20 +52,6 @@ const Technical = () => {
         {/* Total Items */}
         <h3 style={{ fontWeight: "700", marginBottom: "8px" }}>Total Items</h3>
         <p style={{ fontWeight: "700", fontSize: "24px" }}>{data.totalItems || "N/A"}</p>
-
-        {/* Compliance */}
-        <h3
-          style={{
-            fontWeight: "700",
-            marginTop: "26px",
-            marginBottom: "8px",
-          }}
-        >
-          Compliance
-        </h3>
-        <p style={{ fontWeight: "700", color: "#1e9e55", fontSize: "24px" }}>
-          {data.compliancePercent || "N/A"}
-        </p>
 
         {/* Key Specifications */}
         <h3
@@ -76,43 +71,23 @@ const Technical = () => {
                 key={idx}
                 style={{
                   background: "#d5ffe4",
-                  padding: "6px 14px",
-                  borderRadius: "20px",
+                  padding: "8px 14px",
+                  borderRadius: "8px",
                   fontSize: "14px",
                   color: "#137f41",
                   fontWeight: "600",
+                  display: "block",
+                  width: "100%",
+                  marginBottom: "4px",
                 }}
               >
-                {spec}
+                <strong>{spec.productName || "N/A"}:</strong> {spec.specification || "N/A"}
               </span>
             ))
           ) : (
             <p>No specifications available</p>
           )}
         </div>
-
-        {/* Gaps Identified */}
-        <h3
-          style={{
-            fontWeight: "700",
-            marginTop: "26px",
-            marginBottom: "12px",
-          }}
-        >
-          Gaps Identified
-        </h3>
-
-        <ul style={{ paddingLeft: "18px" }}>
-          {data.gapsIdentified && data.gapsIdentified.length > 0 ? (
-            data.gapsIdentified.map((gap, idx) => (
-              <li key={idx} style={{ color: "#c33", fontWeight: "600", marginBottom: "6px" }}>
-                {gap}
-              </li>
-            ))
-          ) : (
-            <li>No gaps identified</li>
-          )}
-        </ul>
 
         {/* Key Points */}
         {data.keyPoints && data.keyPoints.length > 0 && (
@@ -144,14 +119,14 @@ const Technical = () => {
           </>
         )}
 
-        {/* Compliance Requirements */}
-        {data.complianceRequirements && data.complianceRequirements.length > 0 && (
+        {/* Critical Requirements */}
+        {data.criticalRequirements && data.criticalRequirements.length > 0 && (
           <>
             <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
-              Compliance Requirements
+              Critical Requirements
             </h3>
             <ul style={{ paddingLeft: "20px" }}>
-              {data.complianceRequirements.map((req, idx) => (
+              {data.criticalRequirements.map((req, idx) => (
                 <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
               ))}
             </ul>

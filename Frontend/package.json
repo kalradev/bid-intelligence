@@ -12,6 +12,8 @@
   "dependencies": {
     "chart.js": "^4.5.1",
     "framer-motion": "^12.23.24",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.4",
     "lucide-react": "^0.552.0",
     "react": "^19.1.1",
     "react-chartjs-2": "^5.3.1",

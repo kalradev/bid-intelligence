@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { exportToPDF } from "../utils/pdfExport";
 
 const Finance = () => {
   const [data, setData] = useState(null);
+  const contentRef = useRef(null);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
@@ -11,6 +13,12 @@ const Finance = () => {
       setData(parsed?.data?.departmentalSummaries?.finance);
     }
   }, []);
+
+  const handleDownloadPDF = () => {
+    if (contentRef.current) {
+      exportToPDF(contentRef.current, "Finance_Summary");
+    }
+  };
 
   if (!data) {
     return (
@@ -25,10 +33,11 @@ const Finance = () => {
 
   return (
     <>
-      <NavbarBidManagement pageTitle="Finance" />
+      <NavbarBidManagement pageTitle="Finance" onDownloadPDF={handleDownloadPDF} />
 
       {/* CONTENT SECTION */}
       <div
+        ref={contentRef}
         style={{
           maxWidth: "900px",
           margin: "40px auto",
@@ -58,44 +67,9 @@ const Finance = () => {
         </h3>
         <p style={{ fontWeight: "700" }}>{data.bankGuarantee || "N/A"}</p>
 
-        {/* Eligibility */}
-        <h3
-          style={{
-            fontWeight: "700",
-            marginTop: "26px",
-            marginBottom: "12px",
-          }}
-        >
-          Eligibility
-        </h3>
 
-        <div
-          style={{
-            background: data.eligibilityStatus === "Compliant" ? "#d5ffe4" : "#fee2e2",
-            padding: "12px 18px",
-            borderRadius: "8px",
-            marginBottom: "24px",
-            fontWeight: "600",
-            color: data.eligibilityStatus === "Compliant" ? "#137f41" : "#b91c1c",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <span style={{ fontSize: "20px" }}>{data.eligibilityStatus === "Compliant" ? "✔" : "✘"}</span> 
-          {data.eligibilityStatus || "N/A"}
-        </div>
 
-        {/* Profitability */}
-        <h3
-          style={{
-            fontWeight: "700",
-            marginBottom: "8px",
-          }}
-        >
-          Profitability
-        </h3>
-        <p>{data.profitabilityNotes || "N/A"}</p>
+
 
         {/* Key Points */}
         {data.keyPoints && data.keyPoints.length > 0 && (

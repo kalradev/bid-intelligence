@@ -1462,7 +1462,7 @@ tbody tr:hover {
   background: #0b1f50; /* dark navy blue */
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between; /* Changed from center to space-between */
   padding: 18px 40px;
   z-index: 100;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
@@ -1481,10 +1481,8 @@ tbody tr:hover {
   white-space: nowrap;
 }
 
-/* Right-Aligned Button */
+/* Right-Aligned Button Container */
 .navbar-btn {
-  position: absolute;
-  right: 40px;
   background: linear-gradient(90deg, #22d3ee, #3b82f6);
   color: #fff;
   border: none;
@@ -1501,4 +1499,93 @@ tbody tr:hover {
   transform: translateY(-3px);
   box-shadow: 0 8px 20px rgba(59, 130, 246, 0.6);
   background: linear-gradient(90deg, #3b82f6, #6366f1);
+}
+
+/* ==== NEW UPLOAD PAGE STYLES ==== */
+.upload-container {
+  max-width: 560px;
+  margin: 60px auto;
+  background: white;
+  padding: 36px;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  position: relative;
+  z-index: 10;
+}
+
+.upload-box {
+  width: 100%;
+  border: 2px dashed #4a84ff;
+  border-radius: 16px;
+  padding: 48px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: 0.3s;
+  background: #fff;
+}
+
+.upload-box:hover {
+  background: #f3f8ff;
+  border-color: #296bff;
+}
+
+.upload-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1d2a45;
+  margin: 0;
+}
+
+.description-list {
+  background: #f8faff;
+  border-radius: 12px;
+  padding: 18px 24px;
+  width: 100%;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.description-list p {
+  margin-bottom: 8px;
+  color: #4b5563;
+}
+
+.description-list p:last-child {
+  margin-bottom: 0;
+}
+
+/* Scoped button styles to avoid breaking other pages */
+.upload-container button {
+  width: 220px;
+  padding: 14px;
+  font-size: 17px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.2s;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #3772ff;
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover {
+  background: #2952cc;
+}
+
+.btn-secondary {
+  background: #e8eefc;
+  color: #2952cc;
+  border: none;
+}
+
+.btn-secondary:hover {
+  background: #dbeafe;
 }
