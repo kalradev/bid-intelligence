@@ -1,6 +1,7 @@
 const { extractText } = require('../services/documentExtractor');
 const { generateDepartmentalSummaries } = require('../services/aiService'); // Dual AI: OpenAI → Gemini fallback
 const { enrichProducts, getEnrichmentStats } = require('../services/oemEnrichmentService');
+const { extractBOQDeterministic } = require('../services/deterministicBOQService');
 const FileCache = require('../models/fileCache');
 const { computeFileHash } = require('../utils/hashUtils');
 const { PROCESSING_VERSION } = require('../config/version');
@@ -71,16 +72,79 @@ const analyzeRFP = async (req, res, next) => {
         console.log(extractionResult.text.substring(0, 500));
         console.log('------------------------------------------------');
 
+        // Step 1.5: Try NEW Deterministic BOQ Extraction (Table-based)
+        console.log('\n🎯 Attempting NEW deterministic BOQ extraction...');
+        let useDeterministicFlow = false;
+        let deterministicResult = null;
+        
+        // Only try deterministic extraction for PDFs (for now)
+        if (mimetype === 'application/pdf') {
+            try {
+                deterministicResult = await extractBOQDeterministic(
+                    buffer,
+                    extractionResult.text,
+                    originalname
+                );
+                
+                if (deterministicResult.success && deterministicResult.products.length > 0) {
+                    useDeterministicFlow = true;
+                    console.log(`✅ Deterministic extraction SUCCESS: ${deterministicResult.products.length} products`);
+                } else {
+                    console.log('⚠️ Deterministic extraction found no products, falling back to LLM method...');
+                }
+            } catch (error) {
+                console.error('❌ Deterministic extraction failed:', error.message);
+                console.log('⚠️ Falling back to traditional LLM-based extraction...');
+            }
+        } else {
+            console.log('ℹ️ Non-PDF document, using traditional LLM-based extraction...');
+        }
+
         // Step 2: Generate departmental summaries using Gemini
-        console.log('Generating departmental summaries with Gemini...');
+        console.log('\nGenerating departmental summaries with Gemini...');
         const aiResult = await generateDepartmentalSummaries(
             extractionResult.text,
             originalname
         );
 
-        // Step 2.5: Auto-enrich ALL products with proper OEM and MII classification
-        console.log('🔍 Auto-enriching ALL products with OEM and MII verification...');
+        // Step 2.5: Merge deterministic BOQ results with AI summaries (if available)
         let enrichedSummaries = aiResult.summaries;
+        
+        if (useDeterministicFlow && deterministicResult) {
+            console.log('\n🔥 Using DETERMINISTIC BOQ results (guaranteed stable output)');
+            
+            // Replace product mapping with deterministic results
+            enrichedSummaries.productMapping = {
+                sourceType: 'BOQ',
+                totalItems: deterministicResult.statistics.totalProducts,
+                totalOEMs: {
+                    count: deterministicResult.statistics.uniqueOEMs,
+                    indian: deterministicResult.statistics.indianOEMs,
+                    global: deterministicResult.statistics.globalOEMs
+                },
+                productsMapped: deterministicResult.statistics.mapped,
+                makeInIndiaMapping: {
+                    status: deterministicResult.statistics.miiPercentage >= 50 ? 'Compliant' : 'Partial',
+                    mapped: deterministicResult.statistics.indianProducts,
+                    unmapped: deterministicResult.statistics.globalProducts + deterministicResult.statistics.unspecifiedProducts
+                },
+                miiProductStatus: deterministicResult.products,
+                extractionMetadata: deterministicResult.metadata
+            };
+            
+            // Update technical totalItems to match
+            if (enrichedSummaries.technical) {
+                enrichedSummaries.technical.totalItems = deterministicResult.statistics.totalProducts;
+            }
+            
+            console.log('✅ Deterministic BOQ merged into AI summaries');
+        } else {
+            console.log('\n📝 Using TRADITIONAL LLM-based BOQ extraction');
+        }
+
+        // Step 2.6: Auto-enrich ALL products with proper OEM and MII classification (for LLM-based extraction)
+        if (!useDeterministicFlow) {
+            console.log('🔍 Auto-enriching ALL products with OEM and MII verification...');
         
         // Validate that productMapping exists
         if (!enrichedSummaries) {
@@ -212,6 +276,7 @@ const analyzeRFP = async (req, res, next) => {
                 miiProductStatus: []
             };
         }
+        } // End of if (!useDeterministicFlow) block
 
         const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 

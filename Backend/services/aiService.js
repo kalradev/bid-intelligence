@@ -42,6 +42,11 @@ const TEMPERATURE = 0.3;
 const MAX_TOKENS_OPENAI = 16384;
 const MAX_TOKENS_GEMINI = 8192;
 
+// Chunking configuration
+const CHUNK_SIZE_OPENAI = 100000; // ~80k tokens per chunk for OpenAI
+const CHUNK_SIZE_GEMINI = 30000; // ~7.5k tokens per chunk for Gemini
+const MAX_CONTEXT_OPENAI = 100000; // ~25k tokens, safe limit for input (128k total - output buffer)
+
 /**
  * Generate departmental summaries using AI (OpenAI → Gemini fallback)
  * @param {String} documentText - Extracted document text
@@ -51,20 +56,35 @@ const MAX_TOKENS_GEMINI = 8192;
 const generateDepartmentalSummaries = async (documentText, fileName) => {
     const systemPrompt = `You are an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
 
-FOCUS: Extract actionable information needed to WIN the bid.
+FOCUS: Extract UNIQUE, SPECIFIC information needed to WIN the bid.
 
 OUTPUT RULES:
-- Be thorough but concise
-- Include ALL critical data points (amounts, dates, percentages)
-- Keep descriptions focused and scannable
-- Arrays: 3-5 most important items
-- NO generic advice - only document-specific data`;
+- PRIORITIZE data with NUMBERS (amounts, percentages, dates, quantities, thresholds)
+- EXCLUDE common/standard requirements (e.g., "bid in INR", "submit original documents", "EMD refundable")
+- EXCLUDE self-explanatory points that apply to all tenders
+- Include ONLY differentiating factors and unusual requirements
+- Arrays: 3-5 MOST CRITICAL items with numeric/specific data
+- NO generic advice - only document-specific, actionable intelligence
+
+🚨 CRITICAL: Do NOT make up or infer values that are not in the document!
+- If Bid Value not found → Use "N/A"
+- Do NOT confuse Estimated Value with Bid Value
+- Do NOT guess or calculate missing values`;
 
     const userPrompt = buildUserPrompt(documentText, fileName);
-
+    
+    // Estimate document size
+    const estimatedTokens = estimateTokens(documentText);
+    const documentTooLarge = estimatedTokens > 25000; // ~100k characters
+    
     // Try OpenAI first (if available)
     if (openai) {
         try {
+            if (documentTooLarge) {
+                console.log(`⚡ Large document (${estimatedTokens} tokens), using OpenAI chunking strategy...`);
+                return await processLargeDocument(documentText, fileName, 'openai');
+            }
+            
             console.log('🤖 Attempting with OpenAI (gpt-4o-mini)...');
             const result = await generateWithOpenAI(systemPrompt, userPrompt);
             console.log('✅ OpenAI generation successful');
@@ -85,6 +105,11 @@ OUTPUT RULES:
     
     // Use Gemini (either as fallback or primary)
     try {
+        if (documentTooLarge) {
+            console.log(`⚡ Large document (${estimatedTokens} tokens), using Gemini chunking strategy...`);
+            return await processLargeDocument(documentText, fileName, 'gemini');
+        }
+        
         console.log('🤖 Attempting with Gemini (gemini-2.0-flash-exp)...');
         const result = await generateWithGemini(systemPrompt, userPrompt, documentText, fileName);
         console.log('✅ Gemini generation successful');
@@ -133,14 +158,8 @@ const generateWithOpenAI = async (systemPrompt, userPrompt) => {
  * Generate summaries using Gemini
  */
 const generateWithGemini = async (systemPrompt, userPrompt, documentText, fileName) => {
-    // Check if document needs chunking
     const estimatedTokens = estimateTokens(documentText);
     
-    if (estimatedTokens > 25000) {
-        console.log('⚡ Document too large, using PARALLEL chunking strategy...');
-        return await processLargeDocument(documentText, fileName);
-    }
-
     const model = genAI.getGenerativeModel({ 
         model: GEMINI_MODEL,
         generationConfig: {
@@ -232,24 +251,81 @@ ${documentText}
 === END DOCUMENT ===
 
 EXTRACTION RULES:
-1. Extract ALL critical bidding information
-2. Keep descriptions concise but complete
-3. Use compact notation for financial data: "EMD: ₹5L (2%)"
-4. Arrays: Include 3-5 most important items
-5. If field not found, return "N/A"
-6. Search BOQ/BOM for products
+1. PRIORITIZE information with NUMERIC values (amounts, %, timelines, quantities, thresholds)
+2. EXCLUDE common/standard requirements found in most tenders
+3. EXCLUDE generic statements like "bid in INR", "original documents required", "standard formats"
+4. Focus on UNIQUE, DIFFERENTIATING requirements specific to THIS tender
+5. Use compact notation for financial data: "EMD: ₹5L (2%)"
+6. Arrays: Include 3-5 MOST CRITICAL items (preferably with numbers)
+7. **If field not found, return "N/A" - DO NOT guess, infer, or make up values**
+8. **CRITICAL**: Search ENTIRE document for BOQ/BOM/product lists and extract ALL items found
+9. **CONSISTENCY MANDATE**: The lastSubmissionDate in projectOverview MUST be the same date used in bidManagement.keyDeadlines
+10. **BID VALUE MANDATE**: ONLY extract Bid Value if explicitly found. Do NOT use Estimated Value as Bid Value!
+
+**PRODUCT EXTRACTION (HIGHEST PRIORITY):**
+- Scan ENTIRE document for: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, Technical Specifications
+- Extract EVERY product/item listed - do NOT skip any entries
+- Look for tables, lists, annexures containing product information
+- Each row in BOQ/BOM = one product entry in miiProductStatus array
+- MANDATORY: Extract ALL items, even if they seem repetitive
 
 **OEM EXTRACTION:**
-- Search for brand names in: product descriptions, "Approved Makes", specifications
+- Search for brand names in: product descriptions, "Approved Makes", specifications, "Make & Model" columns
 - Multiple brands listed → extract FIRST one
-- Keywords: "Make:", "Brand:", "or equivalent"
-- Only return "Unspecified" if NO brand found in entire document
+- Keywords: "Make:", "Brand:", "or equivalent", "Approved Manufacturer"
+- Only return "Unspecified" if NO brand found for that specific product
 
 **MII STATUS:**
 - Indian OEMs: ${getAllIndianOEMs().join(', ')}
 - Global OEMs: ${getAllGlobalOEMs().join(', ')}
 - If mentions "Make in India", "MII compliant", "Class-I Local" → mark as "MII-Compliant"
 - If uncertain, use "Requires Review"
+
+**BID VALUE EXTRACTION (Search for ALL alternative names):**
+🚨 CRITICAL: Only extract if EXPLICITLY mentioned in the document!
+
+Search for these alternative names:
+- Contract Value
+- Project Value  
+- Tender Value
+- Total Bid Amount
+- Quoted Amount
+- Financial Proposal Value
+- BOQ Value / BOQ Total
+- Offer Price
+- Proposal Value
+- Cost of Work
+- Estimated Contract Price (ECP)
+- Commercial Bid Value
+- Total Contract Value
+- Work Order Value
+- NIT Value (Notice Inviting Tender Value)
+
+⚠️ STRICT RULES FOR BID VALUE:
+1. ONLY extract if you find one of the above terms in the document
+2. Do NOT use "Estimated Value", "Estimated Cost", or "Estimated Tender Value" as Bid Value
+3. Do NOT guess, infer, or calculate Bid Value
+4. Do NOT use EMD to calculate Bid Value
+5. If NONE of the above terms are found → Use "N/A"
+6. When in doubt → Use "N/A"
+
+**ESTIMATED VALUE EXTRACTION (Search for ALL alternative names):**
+If "Estimated Value" is not explicitly mentioned, search for these alternatives:
+- Estimated Cost
+- Project Estimate
+- Estimated Tender Value (ETV)
+- Approximate Cost
+- Indicative Value
+- Budgetary Estimate
+- Sanctioned Cost / Approved Cost
+- Probable Contract Value (PCV)
+- Engineer's Estimate
+- Cost Estimate
+- Projected Cost
+- Pre-Tender Estimate (PTE)
+- Departmental Estimate
+- Government Estimate
+- Reserved Price
 
 Return ONLY valid JSON with this structure:
 
@@ -258,20 +334,20 @@ Return ONLY valid JSON with this structure:
     "projectName": "string",
     "client": "string",
     "tenderId": "string",
-    "bidValue": "string (with currency)",
-    "emd": "string (amount with currency)",
+    "bidValue": "string (ONLY if EXPLICITLY found using alternative names above. Do NOT use Estimated Value. If not found, use 'N/A')",
+    "emd": "string (Earnest Money Deposit with currency. Typically 1-5% of bid value)",
     "completionPeriod": "string (duration)",
     "lastSubmissionDate": "string (deadline with time)"
   },
   "bidManagement": {
-    "projectOverview": "string (2-3 sentences: scope, value, timeline)",
-    "keyDeadlines": "string (critical dates with times)",
-    "strategy": "string (1-2 sentences: key approach for winning)",
-    "successFactors": ["3-5 critical success factors for winning bid"],
-    "keyPoints": ["3-5 important points with data"],
-    "complianceRequirements": ["3-5 mandatory requirements"],
-    "riskAreas": ["2-3 major risks"],
-    "actionItems": ["3-5 immediate actions needed"]
+    "projectOverview": "string (2-3 sentences: scope, value, timeline with numbers)",
+    "keyDeadlines": "string (MUST include bid submission deadline from lastSubmissionDate above - format: 'Bid submission deadline: [DATE]'. Add other critical dates if present)",
+    "strategy": "string (1-2 sentences: SPECIFIC approach based on tender requirements)",
+    "successFactors": ["3-5 UNIQUE success factors with numeric thresholds/requirements"],
+    "keyPoints": ["3-5 SPECIFIC points with data - EXCLUDE common/generic items"],
+    "complianceRequirements": ["3-5 UNUSUAL mandatory requirements - EXCLUDE standard docs"],
+    "riskAreas": ["2-3 major risks with numeric impact/thresholds"],
+    "actionItems": ["3-5 SPECIFIC actions with numeric targets/deadlines"]
   },
   "technical": {
     "totalItems": "integer",
@@ -279,91 +355,139 @@ Return ONLY valid JSON with this structure:
     "keySpecifications": [
       {
         "productName": "string",
-        "specification": "string (concise with numbers/standards)"
+        "specification": "string (SPECIFIC numbers/standards/certifications required)"
       }
     ],
-    "criticalRequirements": ["3-5 key technical requirements"],
-    "riskAreas": ["2-3 technical risks"],
-    "actionItems": ["3-5 technical actions"]
+    "criticalRequirements": ["3-5 UNUSUAL technical requirements with specs/numbers - EXCLUDE generic quality standards"],
+    "riskAreas": ["2-3 technical risks with numeric thresholds/penalties"],
+    "actionItems": ["3-5 SPECIFIC technical actions with measurable targets"]
   },
   "commercial": {
-    "estimatedValue": "string",
-    "paymentTerms": "string (concise: e.g., 70-20-10)",
-    "warranties": "string",
-    "penalties": "string (LD details)",
-    "keyTerms": ["3-5 important commercial terms"],
-    "riskAreas": ["2-3 commercial risks"]
+    "estimatedValue": "string (with currency - search ALL alternative names listed above for Estimated Value)",
+    "paymentTerms": "string (SPECIFIC percentages/milestones: e.g., 70-20-10)",
+    "warranties": "string (SPECIFIC duration/terms with numbers)",
+    "penalties": "string (SPECIFIC LD: %/day, max cap)",
+    "keyTerms": ["3-5 UNUSUAL commercial terms with numeric values - EXCLUDE standard payment modes"],
+    "riskAreas": ["2-3 commercial risks with financial impact/percentages"]
   },
   "finance": {
-    "turnoverRequired": "string",
-    "netWorth": "string",
-    "bankGuarantee": "string",
+    "turnoverRequired": "string (SPECIFIC amounts/thresholds)",
+    "netWorth": "string (SPECIFIC amounts/thresholds)",
+    "bankGuarantee": "string (SPECIFIC amounts/percentages/duration)",
     "eligibilityStatus": "string",
-    "financialRequirements": ["3-5 financial requirements"],
-    "riskAreas": ["2-3 financial risks"]
+    "financialRequirements": ["3-5 SPECIFIC financial thresholds/ratios with numbers - EXCLUDE generic 'audited statements'"],
+    "riskAreas": ["2-3 financial risks with numeric thresholds/penalties"]
   },
   "legal": {
     "contractType": "string",
-    "liabilityCap": "string",
+    "liabilityCap": "string (SPECIFIC amounts/percentages if mentioned)",
     "disputeResolution": "string",
-    "requiredDocuments": ["3-5 required legal documents"],
-    "complianceRequirements": ["2-3 legal requirements"],
-    "riskAreas": ["2-3 legal risks"]
+    "requiredDocuments": ["3-5 UNUSUAL required documents - EXCLUDE standard PAN/GST/registrations"],
+    "complianceRequirements": ["2-3 SPECIFIC legal requirements with deadlines/thresholds"],
+    "riskAreas": ["2-3 legal risks with potential penalties/amounts"]
   },
   "scm": {
-    "leadTime": "string",
+    "leadTime": "string (SPECIFIC durations/deadlines)",
     "criticalItems": "integer",
-    "miiRequirement": "string",
+    "miiRequirement": "string (SPECIFIC %/thresholds if mentioned)",
     "riskLevel": "string",
-    "sourcingStrategy": "string (1-2 sentences)",
-    "keyActions": ["3-5 SCM actions needed"]
+    "sourcingStrategy": "string (1-2 sentences with SPECIFIC requirements/constraints)",
+    "keyActions": ["3-5 SPECIFIC SCM actions with numeric targets/deadlines"]
   },
   "productMapping": {
     "sourceType": "string (BOQ or BOM)",
-    "totalItems": "integer",
+    "totalItems": "integer (total count of ALL items found in document)",
     "totalOEMs": {
       "count": "integer",
       "indian": "integer",
       "global": "integer"
     },
-    "productsMapped": "integer",
+    "productsMapped": "integer (must match miiProductStatus array length)",
     "makeInIndiaMapping": {
       "status": "string",
       "mapped": "integer",
       "unmapped": "integer"
     },
     "miiProductStatus": [
+      "ARRAY: List ALL products found in BOQ/BOM/specifications. Do NOT skip items.",
       {
-        "productName": "string",
-        "category": "string",
-        "oem": "string",
-        "miiStatus": "string"
+        "productName": "string (exact product name from document)",
+        "category": "string (product category/type)",
+        "oem": "string (brand/manufacturer if specified, else 'Unspecified')",
+        "miiStatus": "string (MII-Compliant/Non-MII/Requires Review)"
       }
     ]
   }
 }
 
-CRITICAL FOR PRODUCTS:
-- Extract up to 40 products per chunk (prioritize those with OEM mentions)
-- Maximum 150 products in final output
-- Include ALL products with specified OEMs
-- For repetitive commodity items, include representative samples`;
+🚨 CRITICAL FOR PRODUCTS - EXTRACT ALL ITEMS:
+- You MUST extract ALL products/items listed in the BOQ/BOM/specifications
+- Do NOT skip any products - extract EVERY single line item from the document
+- Extract up to 100 products per chunk (prioritize those with OEM/brand mentions first)
+- Maximum 200 products in final output across all chunks
+- MANDATORY: Include ALL products with specified OEMs/brands (do NOT skip these)
+- For repetitive commodity items without OEMs (e.g., "Cable 1m", "Cable 2m", "Cable 3m"), you may include representative samples
+- When in doubt, INCLUDE the product rather than skip it
+
+❌ EXCLUDE THESE GENERIC POINTS (Examples):
+- "Bid amount should be in INR"
+- "Submit original documents"
+- "EMD is refundable to unsuccessful bidders"
+- "Maintain quality standards"
+- "Follow tender timeline"
+- "Provide company registration"
+- "PAN/GST/Aadhaar required"
+- "Bid validity: 90 days" (unless unusual duration)
+- "Standard payment terms apply"
+
+✅ INCLUDE SPECIFIC POINTS (Examples):
+- "Turnover: min ₹50Cr in last 3 years (FY21-23)"
+- "LD: 0.5%/week, max 10% of order value"
+- "Delivery penalty: ₹10,000/day after 120 days"
+- "Performance guarantee: 10% for 24 months"
+- "Response time SLA: <4 hours or ₹5000 penalty/incident"
+- "MII compliance: minimum 60% local content mandatory"
+- "EMD: ₹2.5L (unusually high for ₹50L tender)"
+
+🔥 PRODUCT EXTRACTION MANDATE:
+- If document has 50 items in BOQ → extract ALL 50 items
+- If document has 200 items → extract up to 200 items (prioritize items with OEM mentions)
+- Do NOT summarize products into categories - list each individual item
+- Example: If BOQ lists "Switch 24-port", "Switch 48-port", "Router Cisco" → extract all 3 separately
+
+⚠️ CONSISTENCY CHECK - CRITICAL:
+- projectOverview.lastSubmissionDate = "2023-12-15 15:00:00"
+- bidManagement.keyDeadlines MUST include = "Bid submission deadline: 2023-12-15 15:00:00"
+- These MUST be the SAME date. Do NOT put N/A in keyDeadlines if lastSubmissionDate is found!
+
+🚨 BID VALUE vs ESTIMATED VALUE - DO NOT CONFUSE:
+CORRECT Extraction:
+- Document says "Contract Value: ₹50 Cr" → bidValue: "₹50 Crore" ✓
+- Document says "Estimated Cost: ₹100 Cr" → bidValue: "N/A", estimatedValue: "₹100 Crore" ✓
+- Document has NO Contract/Bid/Tender Value → bidValue: "N/A" ✓
+
+WRONG Extraction (DO NOT DO THIS):
+- Document says "Estimated Cost: ₹50 Cr" → bidValue: "₹50 Crore" ✗ (This is Estimated Value, NOT Bid Value!)
+- Document has no Bid Value → bidValue: "₹50 Crore" ✗ (Do NOT make up values!)
+- Calculating from EMD → bidValue: "₹50 Crore" ✗ (Do NOT infer values!)`;
 };
 
 /**
- * Process large documents with chunking (Gemini only)
+ * Process large documents with chunking (OpenAI and Gemini)
+ * @param {String} documentText - Document text to chunk
+ * @param {String} fileName - File name
+ * @param {String} provider - 'openai' or 'gemini'
  */
-const processLargeDocument = async (documentText, fileName) => {
-    // Implementation similar to geminiService.js processLargeDocument
-    // (Copy the chunking logic from geminiService.js)
-    const chunkSize = 30000;
+const processLargeDocument = async (documentText, fileName, provider = 'gemini') => {
+    // Use different chunk sizes based on provider
+    const chunkSize = provider === 'openai' ? CHUNK_SIZE_OPENAI : CHUNK_SIZE_GEMINI;
     const chunks = [];
 
     for (let i = 0; i < documentText.length; i += chunkSize) {
         chunks.push(documentText.slice(i, i + chunkSize));
     }
 
-    console.log(`Processing large document in ${chunks.length} chunks...`);
+    console.log(`📄 Processing large document with ${provider.toUpperCase()} in ${chunks.length} chunks (${chunkSize} chars each)...`);
 
     const chunkResults = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -373,7 +497,36 @@ const processLargeDocument = async (documentText, fileName) => {
         
         while (retryCount <= 2 && !success) {
             try {
-                const result = await generateDepartmentalSummaries(chunks[i], `${fileName} (Part ${i + 1})`);
+                const systemPrompt = `You are an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
+
+FOCUS: Extract UNIQUE, SPECIFIC information needed to WIN the bid.
+
+OUTPUT RULES:
+- PRIORITIZE data with NUMBERS (amounts, percentages, dates, quantities, thresholds)
+- EXCLUDE common/standard requirements (e.g., "bid in INR", "submit original documents", "EMD refundable")
+- EXCLUDE self-explanatory points that apply to all tenders
+- Include ONLY differentiating factors and unusual requirements
+- Arrays: 3-5 MOST CRITICAL items with numeric/specific data
+- NO generic advice - only document-specific, actionable intelligence
+
+🚨 CRITICAL: Do NOT make up or infer values that are not in the document!
+- If Bid Value not found → Use "N/A"
+- Do NOT confuse Estimated Value with Bid Value
+- Do NOT guess or calculate missing values
+
+🔥 CRITICAL FOR THIS CHUNK: Extract ALL products/items from BOQ/BOM found in this section.
+
+⚠️ CONSISTENCY: projectOverview.lastSubmissionDate MUST match the date in bidManagement.keyDeadlines. Do NOT use N/A if date is found!`;
+
+                const userPrompt = buildUserPrompt(chunks[i], `${fileName} (Part ${i + 1}/${chunks.length})`);
+                
+                let result;
+                if (provider === 'openai' && openai) {
+                    result = await generateWithOpenAI(systemPrompt, userPrompt);
+                } else {
+                    result = await generateWithGemini(systemPrompt, userPrompt, chunks[i], `${fileName} (Part ${i + 1}/${chunks.length})`);
+                }
+                
                 chunkResults.push(result.summaries);
                 success = true;
             } catch (chunkError) {
@@ -406,8 +559,8 @@ const processLargeDocument = async (documentText, fileName) => {
         summaries: finalSummaries,
         chunked: true,
         chunkCount: chunks.length,
-        model: GEMINI_MODEL,
-        provider: 'gemini'
+        model: provider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL,
+        provider: provider
     };
 };
 
@@ -453,7 +606,8 @@ const naiveMergeSummaries = (results) => {
                         const withOEM = allProducts.filter(p => p.oem && p.oem !== 'Unspecified');
                         const withoutOEM = allProducts.filter(p => !p.oem || p.oem === 'Unspecified');
                         
-                        target[key] = [...withOEM, ...withoutOEM].slice(0, 150);
+                        // Increased limit to 200 products to capture more items
+                        target[key] = [...withOEM, ...withoutOEM].slice(0, 200);
                     } else {
                         const existing = new Set(target[key].map(item => JSON.stringify(item)));
                         source[key].forEach(item => {
