@@ -241,6 +241,26 @@ const analyzeRFP = async (req, res, next) => {
                 if (enrichedSummaries.technical.gapsIdentified) {
                     delete enrichedSummaries.technical.gapsIdentified;
                 }
+                
+                // ✅ AUTO-GENERATE KEY SPECIFICATIONS FROM ALL PRODUCTS
+                // Extract ONLY the actual technical specifications from document (not OEM/Model/Category)
+                if (allProducts.length > 0) {
+                    enrichedSummaries.technical.keySpecifications = allProducts
+                        .map(product => {
+                            // Use ONLY the actual specifications field from the document
+                            const specification = product.specifications || '';
+                            
+                            return {
+                                productName: product.productName || 'N/A',
+                                specification: specification.trim() || 'No specifications mentioned in document'
+                            };
+                        })
+                        .filter(item => {
+                            // Keep all items - show "No specifications" if none found
+                            return item.productName && item.productName !== 'N/A';
+                        });
+                    console.log(`✅ Auto-generated keySpecifications for ALL ${allProducts.length} products (using document specifications only)`);
+                }
             }
             
             // ✅ VERIFY OEM VARIETY - Log warning if too many same OEMs

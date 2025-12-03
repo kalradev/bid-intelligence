@@ -13,6 +13,7 @@
  */
 
 const { classifyMIIStatus, getCategoryOEMs, getAllIndianOEMs, getAllGlobalOEMs } = require('../data/miiDatabase');
+const { findModelForOEM, findModelsForMultipleOEMs, getQuickModelFallback } = require('./modelMatchingService');
 
 /**
  * Generate deterministic hash from string (for consistent OEM selection)
@@ -864,9 +865,48 @@ const enrichProducts = async (products) => {
                 
                 // Re-classify MII status with our comprehensive database
                 const miiStatus = classifyMIIStatus(product.oem, product.category || '');
+                
+                // Check if multiple OEMs (contains " / ")
+                const isMultipleOEMs = product.oem.includes(' / ');
+                
+                // Find matching model(s) for this OEM
+                let modelInfo = null;
+                try {
+                    if (isMultipleOEMs) {
+                        // Handle multiple OEMs - find model for each
+                        modelInfo = await findModelsForMultipleOEMs(
+                            product.productName,
+                            product.oem,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    } else {
+                        // Single OEM - find one model
+                        modelInfo = await findModelForOEM(
+                            product.productName,
+                            product.oem,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    }
+                } catch (modelError) {
+                    console.warn(`   ⚠️ Model matching failed, using fallback`);
+                    modelInfo = {
+                        model: getQuickModelFallback(product.productName, product.oem, product.category),
+                        confidence: 60,
+                        source: 'quick-fallback'
+                    };
+                }
+                
                 return {
                     ...product,
                     miiStatus: miiStatus,
+                    model: modelInfo?.model || `${product.oem} Standard Model`,
+                    modelConfidence: modelInfo?.confidence || 60,
+                    modelSource: modelInfo?.source || 'fallback',
+                    bestModel: modelInfo?.bestModel,
+                    bestOEM: modelInfo?.bestOEM,
+                    allModels: modelInfo?.allModels,
                     enriched: true,
                     confidence: 95,
                     source: 'original_document'
@@ -874,7 +914,7 @@ const enrichProducts = async (products) => {
             }
             
             // Search for OEM online
-            console.log(`[${i+1}/${products.length}] Searching OEM for: ${product.productName}`);
+            console.log(`[${i+1}/${products.length}] Searching OEM + Model for: ${product.productName}`);
             const oemInfo = await searchOEMOnline(product.productName, product.category || '');
             
             // ✅ ENSURE OEM IS NEVER EMPTY
@@ -887,11 +927,46 @@ const enrichProducts = async (products) => {
                 ? oemInfo.miiStatus
                 : classifyMIIStatus(finalOEM, product.category || '');
             
+            // ✅ FIND MODEL for searched OEM (check if multiple)
+            const isMultipleOEMs = finalOEM.includes(' / ');
+            let modelInfo = null;
+            try {
+                if (isMultipleOEMs) {
+                    // Handle multiple OEMs - find model for each
+                    modelInfo = await findModelsForMultipleOEMs(
+                        product.productName,
+                        finalOEM,
+                        product.specifications || '',
+                        product.category || 'Other'
+                    );
+                } else {
+                    // Single OEM - find one model
+                    modelInfo = await findModelForOEM(
+                        product.productName,
+                        finalOEM,
+                        product.specifications || '',
+                        product.category || 'Other'
+                    );
+                }
+            } catch (modelError) {
+                modelInfo = {
+                    model: getQuickModelFallback(product.productName, finalOEM, product.category),
+                    confidence: 60,
+                    source: 'quick-fallback'
+                };
+            }
+            
             return {
                 ...product,
                 productName: product.productName,
                 category: product.category || 'Unknown',
                 oem: finalOEM,
+                model: modelInfo?.model || `${finalOEM} Standard Model`,
+                modelConfidence: modelInfo?.confidence || 60,
+                modelSource: modelInfo?.source || 'web-search-matched',
+                bestModel: modelInfo?.bestModel,
+                bestOEM: modelInfo?.bestOEM,
+                allModels: modelInfo?.allModels,
                 miiStatus: finalMiiStatus,
                 enriched: true,
                 confidence: oemInfo.confidence || 35,
@@ -902,11 +977,20 @@ const enrichProducts = async (products) => {
             console.error(`Error enriching product ${product.productName}:`, error);
             // Even on error, provide a fallback OEM (never leave unspecified)
             const fallbackOEM = getCategoryOEMs(product.category || 'Unknown').global[0] || 'Cisco';
+            const fallbackModel = getQuickModelFallback(
+                product.productName || 'Unknown Product',
+                fallbackOEM,
+                product.category || 'Unknown'
+            );
+            
             return {
                 ...product,
                 productName: product.productName || 'Unknown Product',
                 category: product.category || 'Unknown',
                 oem: fallbackOEM,
+                model: fallbackModel,
+                modelConfidence: 50,
+                modelSource: 'error-fallback',
                 miiStatus: classifyMIIStatus(fallbackOEM, product.category || ''),
                 enriched: true,
                 confidence: 25,

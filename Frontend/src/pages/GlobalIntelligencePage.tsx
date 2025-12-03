@@ -6,6 +6,7 @@ import SearchBar from "./GlobalIntelligence/components/SearchBar";
 interface ProductData {
   product: string;
   oem: string;
+  model: string;
   country: string;
   mii: boolean;
 }
@@ -51,6 +52,7 @@ export default function GlobalIntelligencePage() {
             return {
               product: item.productName || "N/A",
               oem: item.oem || "Unspecified",
+              model: item.model || "Standard Model",
               country: country,
               mii: isMII,
             };
@@ -194,7 +196,7 @@ export default function GlobalIntelligencePage() {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead style={{ background: "#f8fafc", color: "#374151", fontWeight: 600 }}>
                 <tr>
-                  {["Product Name", "OEM", "Country", "MII Status"].map((h) => (
+                  {["Product Name", "OEM", "Model", "Country", "MII Status"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: "14px 16px" }}>{h}</th>
                   ))}
                 </tr>
@@ -211,6 +213,7 @@ export default function GlobalIntelligencePage() {
                     >
                       <td style={{ padding: "14px 16px" }}>{item.product}</td>
                       <td style={{ padding: "14px 16px" }}>{item.oem}</td>
+                      <td style={{ padding: "14px 16px", fontSize: 13, color: "#374151" }}>{item.model}</td>
                       <td style={{ padding: "14px 16px" }}>{item.country}</td>
                       <td style={{ padding: "14px 16px", fontWeight: 600, color: item.mii ? "#059669" : "#dc2626" }}>
                         {item.mii ? "✅ MII" : "❌ Not MII"}
@@ -219,7 +222,7 @@ export default function GlobalIntelligencePage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} style={{ padding: "40px 16px", textAlign: "center", color: "#6b7280" }}>
+                    <td colSpan={5} style={{ padding: "40px 16px", textAlign: "center", color: "#6b7280" }}>
                       {data.length === 0
                         ? "No analysis data available. Please upload and analyze a tender document first."
                         : "No products match your search criteria."}

@@ -413,6 +413,9 @@ Return ONLY valid JSON with this structure:
       {
         "productName": "string (exact product name from document)",
         "category": "string (product category/type)",
+        "specifications": "string (CRITICAL: Extract actual technical specifications - e.g., '50,000 EPS perpetual license', '10 KVA online UPS', 'Intel Xeon 64GB RAM'. If no specs, empty string '')",
+        "quantity": "string (quantity if mentioned)",
+        "unit": "string (unit if mentioned)",
         "oem": "string (brand/manufacturer if specified, else 'Unspecified')",
         "miiStatus": "string (MII-Compliant/Non-MII/Requires Review)"
       }

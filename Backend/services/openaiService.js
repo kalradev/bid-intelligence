@@ -134,6 +134,10 @@ Return ONLY a valid JSON object with this EXACT structure:
     \"miiProductStatus\": [
       {
         \"productName\": \"string (BOQ/BOM item name exactly as written in tender)\",
+        \"category\": \"string (e.g., Hardware, Software, Civil, Electrical, etc.)\",
+        \"specifications\": \"string (CRITICAL: Extract actual technical specifications from document - e.g., '50,000 EPS perpetual license', '10 KVA online UPS', 'Intel Xeon 64GB RAM'. If no specs, leave empty '')\",
+        \"quantity\": \"string (quantity if mentioned)\",
+        \"unit\": \"string (unit if mentioned)\",
         \"oem\": \"string (OEM brand name; if multiple allowed, extract recommended one)\",
         \"miiStatus\": \"string (Indian OEM / Global OEM / MII-Compliant 60% / etc.)\"
       }
