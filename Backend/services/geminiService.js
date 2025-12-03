@@ -28,7 +28,7 @@ OUTPUT RULES:
 - Keep descriptions focused and scannable
 - Arrays: 3-5 most important items
 - NO generic advice - only document-specific data
-- Use compact notation for financial data: "EMD: ₹5L (2%)"`;
+- CRITICAL: Extract EXACT financial values - NEVER calculate or add examples`;
 
         const userPrompt = `You are analyzing an RFP/tender document. Extract ALL values into the specified JSON schema below. If a field cannot be found confidently, return "N/A".
 
@@ -40,10 +40,18 @@ ${documentText}
 
 EXTRACTION RULES:
 1. Extract ALL available information but keep descriptions CONCISE.
-2. Preserve currency symbols and units exactly (₹, %, Cr).
+2. Preserve currency symbols and units exactly (₹, %, Cr, Lakhs, Crore).
 3. Use tender wording for legal and commercial text but SUMMARIZE long clauses.
 4. If multiple docs exist (BOQ + Corrigendum + RFP), use the latest corrigendum where contradictory.
 5. Do not hallucinate values — only use what is written in tender.
+
+CRITICAL: FINANCIAL DATA EXTRACTION
+- EMD amount: Extract EXACT value from document (do NOT calculate)
+- Bid value: Extract EXACT value from document (do NOT estimate)
+- If document says "₹15 Crore", write "₹15 Crore" - do NOT convert to "₹5L"
+- If document says "2% of bid value", write "2% of bid value" - do NOT calculate the amount
+- NEVER add parenthetical examples like "(2%)" unless document explicitly states it
+- When in doubt, extract verbatim text from document
 6. Search for BOQ (Bill of Quantities) first; if not found, search for BOM (Bill of Materials) instead.
 7. Extract product/material items from whichever source (BOQ or BOM) is available in the document.
 8. INFER "category" based on the item type (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security).
@@ -100,7 +108,7 @@ EXTRACTION RULES:
 13. Extract thoroughly but efficiently. Focus on BIDDING INTELLIGENCE.
 14. **EXTRACTION RULES:**
     - Include ALL critical data (amounts, dates, percentages)
-    - Use compact notation: "EMD: ₹5L (2%)" for financial data
+    - Extract EXACT financial values from document - do NOT calculate or add examples
     - Arrays: 3-5 most important items
     - Descriptions: Keep concise but informative (1-2 sentences)
     - NO generic advice - extract document-specific data only
@@ -113,8 +121,8 @@ Return ONLY a valid JSON object with this EXACT structure:
     "projectName": "string (exact project name from tender)",
     "client": "string (client/purchaser organization name)",
     "tenderId": "string (RFP/tender reference number)",
-    "bidValue": "string (SEARCH ENTIRE DOCUMENT for: Estimated Value, Estimated Cost, Project Cost Estimate, Approximate Value, Budgetary Estimate, Cost Projection, Engineer's Estimate, Pre-Tender Estimate, Probable Cost of Construction, BOQ Estimated Value, Tender Value, Contract Value. Extract amount with currency, e.g., ₹450 Cr)",
-    "emd": "string (EMD amount with currency)",
+    "bidValue": "string (SEARCH ENTIRE DOCUMENT for: Estimated Value, Estimated Cost, Project Cost Estimate, Approximate Value, Budgetary Estimate, Cost Projection, Engineer's Estimate, Pre-Tender Estimate, Probable Cost of Construction, BOQ Estimated Value, Tender Value, Contract Value. Extract EXACT amount with currency as written, e.g., ₹450 Cr)",
+    "emd": "string (CRITICAL: Extract EXACT EMD amount from document with currency. Do NOT calculate. Do NOT add percentage unless document shows both. If document says '₹15 Crore', write '₹15 Crore' NOT '₹5L (2%)')",
     "completionPeriod": "string (project duration in weeks/months)",
     "lastSubmissionDate": "string (bid submission deadline with time)"
   },
@@ -123,7 +131,7 @@ Return ONLY a valid JSON object with this EXACT structure:
     "keyDeadlines": "string (critical dates with times)",
     "strategy": "string (1-2 sentences: key approach for winning)",
     "successFactors": ["3-5 critical success factors for winning bid"],
-    "keyPoints": ["3-5 important points with data"],
+    "keyPoints": ["3-5 important points with EXACT data from document - NO calculations, NO examples"],
     "complianceRequirements": ["3-5 mandatory requirements"],
     "riskAreas": ["2-3 major risks"],
     "actionItems": ["3-5 immediate actions needed"]
@@ -444,7 +452,7 @@ ${JSON.stringify(chunkResults, null, 2)}
 
 **CRITICAL:**
 - Merge and synthesize information intelligently
-- Use compact notation: "EMD: ₹5L (2%)"
+- Extract EXACT financial values - do NOT calculate or make up numbers
 - Arrays: 3-5 most important items
 - Keep descriptions concise but complete
 - Include ALL essential bidding intelligence
@@ -539,7 +547,7 @@ Return ONLY a valid JSON object with this EXACT structure:
 IMPORTANT: 
 - Return ONLY JSON
 - Be thorough but concise
-- Use compact notation for financial data: "EMD: ₹5L (2%)"
+- Extract EXACT financial data from document - do NOT calculate or add examples
 - Merge products (max 150), dedupe by productName
 - Arrays: 3-5 most important items
 - Include strategy, success factors, risks, actions
