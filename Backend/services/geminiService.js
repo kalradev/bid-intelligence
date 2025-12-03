@@ -200,6 +200,9 @@ Return ONLY a valid JSON object with this EXACT structure:
       {
         "productName": "string (BOQ/BOM item name exactly as written in tender - MUST be a real product name, NEVER 'N/A' or 'Not Applicable' or 'Miscellaneous')",
         "category": "string (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking - NEVER 'N/A')",
+        "specifications": "string (CRITICAL: Extract actual technical specifications from document - e.g., '50,000 EPS perpetual license', '10 KVA online UPS 99% efficiency', 'Intel Xeon 64GB RAM RAID 5'. If no specs found, leave empty string '')",
+        "quantity": "string (quantity if mentioned, e.g., '1', '10', 'Lumpsum')",
+        "unit": "string (unit if mentioned, e.g., 'Nos', 'Set', 'LS')",
         "oem": "string (OEM brand name if found in document. Examples: 'Dell', 'Siemens', 'Polycab'. If not mentioned, use 'Unspecified' - backend will provide 2-3 options)",
         "miiStatus": "string (Classification: 'Indian OEM', 'Global OEM', 'MII-Compliant', 'Likely Indian', 'Requires Review')"
       }
@@ -537,6 +540,9 @@ Return ONLY a valid JSON object with this EXACT structure:
       {
         "productName": "string",
         "category": "string",
+        "specifications": "string",
+        "quantity": "string",
+        "unit": "string",
         "oem": "string",
         "miiStatus": "string"
       }

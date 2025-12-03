@@ -221,6 +221,7 @@ export default function ProductMappingPage() {
                     <th style={{ padding: 10, textAlign: "left" }}>Product Name</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Category</th>
                     <th style={{ padding: 10, textAlign: "left" }}>OEM</th>
+                    <th style={{ padding: 10, textAlign: "left" }}>Model</th>
                     <th style={{ padding: 10, textAlign: "left" }}>MII Status</th>
                   </tr>
                 </thead>
@@ -232,6 +233,13 @@ export default function ProductMappingPage() {
                         <td style={{ padding: 10 }}>{item.productName || "N/A"}</td>
                         <td style={{ padding: 10 }}>{item.category || "N/A"}</td>
                         <td style={{ padding: 10 }}>{item.oem || "N/A"}</td>
+                        <td style={{ 
+                          padding: 10,
+                          fontSize: 13,
+                          color: "#374151"
+                        }}>
+                          {item.model || "N/A"}
+                        </td>
                         <td style={{
                           padding: 10,
                           color: item.miiStatus === "Mapped" ? "#059669" : "#dc2626",
@@ -243,7 +251,7 @@ export default function ProductMappingPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={4} style={{ padding: 20, textAlign: "center" }}>
+                      <td colSpan={5} style={{ padding: 20, textAlign: "center" }}>
                         No product mapping data available.
                       </td>
                     </tr>
