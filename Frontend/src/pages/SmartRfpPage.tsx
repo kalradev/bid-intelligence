@@ -1,4 +1,4 @@
-import { Copy } from "lucide-react";
+import { Copy, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -6,6 +6,7 @@ export default function SmartRfpPage() {
   const navigate = useNavigate();
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [animate, setAnimate] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
@@ -14,6 +15,15 @@ export default function SmartRfpPage() {
       setAnalysisData(parsed);
     }
     setTimeout(() => setAnimate(true), 80);
+  }, []);
+
+  // Real-time countdown - updates every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
   }, []);
 
   if (!analysisData) {
@@ -25,6 +35,41 @@ export default function SmartRfpPage() {
   }
 
   const projectOverview = analysisData?.data?.departmentalSummaries?.projectOverview || {};
+
+  // Helper function to calculate days remaining until deadline
+  const calculateDaysRemaining = (dateString: string) => {
+    if (!dateString || dateString === "N/A") return null;
+    
+    try {
+      // Try to parse the date string
+      const deadline = new Date(dateString);
+      
+      // Check if date is valid
+      if (isNaN(deadline.getTime())) {
+        // Try alternative parsing for formats like "2024-07-10 15:00:00"
+        const cleanedDate = dateString.replace(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/, '$1T$2');
+        const alternativeDeadline = new Date(cleanedDate);
+        
+        if (isNaN(alternativeDeadline.getTime())) {
+          return null;
+        }
+        
+        const diffTime = alternativeDeadline.getTime() - currentTime.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        return { days: diffDays, isPassed: diffDays < 0 };
+      }
+      
+      const diffTime = deadline.getTime() - currentTime.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      return { days: diffDays, isPassed: diffDays < 0 };
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const daysRemaining = calculateDaysRemaining(projectOverview.lastSubmissionDate);
 
   const projectDetails = [
     {
@@ -243,17 +288,50 @@ export default function SmartRfpPage() {
                       {item.label}
                     </p>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <p style={{ fontSize: 16, fontWeight: 600, color: item.color || "#111" }}>
-                        {item.value}
-                      </p>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <p style={{ fontSize: 16, fontWeight: 600, color: item.color || "#111" }}>
+                          {item.value}
+                        </p>
 
-                      {item.copy && (
-                        <Copy
-                          size={18}
-                          style={{ cursor: "pointer", color: "#2563eb" }}
-                          onClick={() => copyToClipboard(item.value)}
-                        />
+                        {item.copy && (
+                          <Copy
+                            size={18}
+                            style={{ cursor: "pointer", color: "#2563eb" }}
+                            onClick={() => copyToClipboard(item.value)}
+                          />
+                        )}
+                      </div>
+
+                      {/* Countdown Badge for Last Date of Submission */}
+                      {item.label === "Last Date of Submission" && daysRemaining && (
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            padding: "6px 12px",
+                            borderRadius: 20,
+                            background: daysRemaining.isPassed 
+                              ? "linear-gradient(135deg, #ef4444, #dc2626)" 
+                              : daysRemaining.days <= 7
+                              ? "linear-gradient(135deg, #f59e0b, #d97706)"
+                              : "linear-gradient(135deg, #10b981, #059669)",
+                            color: "white",
+                            fontSize: 13,
+                            fontWeight: 700,
+                            width: "fit-content",
+                            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                            animation: daysRemaining.isPassed || daysRemaining.days <= 3 ? "pulse 2s infinite" : "none",
+                          }}
+                        >
+                          <Clock size={14} />
+                          <span>
+                            {daysRemaining.isPassed 
+                              ? "Deadline Passed" 
+                              : `${Math.abs(daysRemaining.days)} day${Math.abs(daysRemaining.days) !== 1 ? 's' : ''} left`}
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

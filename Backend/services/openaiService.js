@@ -107,15 +107,19 @@ Return ONLY a valid JSON object with this EXACT structure:
     \"actionItems\": [\"array of legal preparation actions\"]
   },
   \"scm\": {
-    \"leadTime\": \"string (expected procurement and delivery lead time)\",
-    \"criticalItemsCount\": \"integer or string (number of critical/long-lead items)\",
-    \"riskLevel\": \"string (Low, Medium, High)\",
-    \"sourcingStrategy\": \"string (domestic vs import share / Make in India %)\",
-    \"keyPoints\": [\"array of 5-10 key SCM points\"],
-    \"criticalDates\": [{\"date\": \"YYYY-MM-DD\", \"description\": \"delivery/SCM milestone\"}],
-    \"complianceRequirements\": [\"array of SCM compliance items\"],
-    \"riskAreas\": [\"array of supply chain risks\"],
-    \"actionItems\": [\"array of SCM preparation actions\"]
+    \"leadTime\": \"string (EXTRACT: Overall delivery timeline, installation period, commissioning time)\",
+    \"criticalItems\": \"integer or string (Count of time-critical or long lead-time items)\",
+    \"miiRequirement\": \"string (EXTRACT: MII compliance %, local content requirements, Class-I/II supplier requirements)\",
+    \"riskLevel\": \"string (High/Medium/Low based on delivery constraints, supplier availability, import dependencies)\",
+    \"sourcingStrategy\": \"string (DETAILED: Primary sourcing approach - local vs import, preferred vendors, backup strategies, 3-5 sentences)\",
+    \"deliverySchedule\": \"string (EXTRACT: Phased delivery milestones, staggered shipments, installation timelines)\",
+    \"warehousingNeeds\": \"string (Storage requirements, site logistics, handling specifications)\",
+    \"qualityControl\": \"string (Inspection protocols, testing requirements, acceptance criteria)\",
+    \"supplierRequirements\": [\"Array of supplier eligibility: certifications needed, experience, turnover, registration requirements\"],
+    \"logisticsConstraints\": [\"Array of logistical challenges: site access, transportation modes, customs/import clearance\"],
+    \"inventoryManagement\": \"string (Stock planning, buffer inventory, just-in-time delivery requirements)\",
+    \"riskMitigation\": [\"Array of SCM risks and mitigation: supplier defaults, delays, quality issues, import restrictions\"],
+    \"keyActions\": [\"5-8 DETAILED SCM actions: sourcing, vendor selection, logistics planning, quality checks, compliance verification\"]
   },
   \"productMapping\": {
     \"sourceType\": \"string (BOQ or BOM - indicate which source was used for product mapping)\",
@@ -135,10 +139,10 @@ Return ONLY a valid JSON object with this EXACT structure:
       {
         \"productName\": \"string (BOQ/BOM item name exactly as written in tender)\",
         \"category\": \"string (e.g., Hardware, Software, Civil, Electrical, etc.)\",
-        \"specifications\": \"string (CRITICAL: Extract actual technical specifications from document - e.g., '50,000 EPS perpetual license', '10 KVA online UPS', 'Intel Xeon 64GB RAM'. If no specs, leave empty '')\",
+        \"specifications\": \"string (CRITICAL: Provide DETAILED, COMPREHENSIVE specifications (150-200 characters). If in document → extract. If NOT in document → GENERATE detailed specs based on product type. NEVER use 'N/A' or leave empty. Examples: 'USB 3.1 Gen 2, 10Gbps transfer, gold-plated connectors, 6ft length, braided nylon, reversible design' OR 'REST API integration, 10K tickets/day capacity, ITIL compliant, SLA tracking, multi-tenant architecture, reporting dashboard' OR 'SAML 2.0/OIDC support, multi-factor authentication, role-based access control, 100+ device onboarding, audit logging'. ALWAYS provide 3-5 technical details per product)\",
         \"quantity\": \"string (quantity if mentioned)\",
         \"unit\": \"string (unit if mentioned)\",
-        \"oem\": \"string (OEM brand name; if multiple allowed, extract recommended one)\",
+        \"oem\": \"string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')\",
         \"miiStatus\": \"string (Indian OEM / Global OEM / MII-Compliant 60% / etc.)\"
       }
     ]

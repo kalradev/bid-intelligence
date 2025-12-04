@@ -65,23 +65,49 @@ CRITICAL: FINANCIAL DATA EXTRACTION
    - **INVALID PRODUCT NAMES**: Do NOT extract products named: "N/A", "Not Applicable", "TBD", "To Be Decided", "Miscellaneous", "Others", "Various"
    - **REAL NAMES ONLY**: Each product must have a specific, identifiable name from the document
 
-10. **CRITICAL: OEM (Original Equipment Manufacturer) EXTRACTION**
-   - **AGGRESSIVELY SEARCH** for brand names. They are often listed in:
-     - The product description itself (e.g., "Supply of Dell Server").
-     - A separate "Approved Makes", "Preferred Brands", or "List of Makes" section/annexure.
-     - Technical specifications columns.
-   - **LOOK AROUND**: If the text is from a table, the OEM might be in a column to the left or right of the description.
-   - **KEYWORDS**: Look for "Make:", "Brand:", "Mfr:", "Model:", "or equivalent".
-   - **MULTIPLE OPTIONS**: If multiple brands are listed (e.g., "Havells / Polycab / Anchor"), extract the **FIRST ONE** as the primary OEM.
-   - **UNSPECIFIED**: Only return "Unspecified" if you have searched the ENTIRE document and found NO mention of brands for that item or a general approved list.
+10. **CRITICAL: OEM (Original Equipment Manufacturer) EXTRACTION & INTELLIGENT SUGGESTION**
+   - **STEP 1: AGGRESSIVELY SEARCH** for brand names in document:
+     - The product description itself (e.g., "Supply of Dell Server")
+     - A separate "Approved Makes", "Preferred Brands", or "List of Makes" section/annexure
+     - Technical specifications columns
+     - Look for "Make:", "Brand:", "Mfr:", "Model:", "or equivalent"
+   - **STEP 2: IF OEM FOUND** → Extract it (if multiple brands listed like "Havells / Polycab / Anchor", extract the **FIRST ONE**)
+   - **STEP 3: IF OEM NOT FOUND** → SUGGEST UNIQUE, PRODUCT-SPECIFIC OEM based on EXACT product type:
    
-   **CRITICAL: OEM VARIETY RULE**
-   - DO NOT assign the same OEM to all products
-   - If document doesn't specify OEMs, leave as "Unspecified" - backend will assign variety
-   - DO NOT default all products to one company (like HCL, IBM, etc.)
-   - Each product should have its own OEM based on what's in the document
-   - Example BAD: All 20 products → "HCL Technologies" ❌
-   - Example GOOD: Mix of actual OEMs from document or "Unspecified" for variety ✅
+   **CRITICAL: MATCH OEM TO PRODUCT CATEGORY - DO NOT USE GENERIC OEMS**
+   
+   **Cables & Accessories:**
+   - USB Cables → "Anker", "Belkin", "Cable Matters", "AmazonBasics", "Monoprice"
+   - SATA Cables → "StarTech", "Cable Matters", "Monoprice", "Sabrent"
+   - HDMI Cables → "Belkin", "AmazonBasics", "Cable Matters", "Monoprice"
+   - Network Cables → "Monoprice", "Cable Matters", "Belkin", "StarTech"
+   - Adapters → "Anker", "TP-Link", "ASUS", "Belkin", "StarTech"
+   
+   **Software/Platforms:**
+   - Ticket Management → "ServiceNow", "Jira Service Management", "Freshservice", "Zendesk"
+   - Identity Management → "Okta", "Microsoft Entra ID", "SailPoint", "ForgeRock", "Ping Identity"
+   - SIEM → "Splunk Enterprise", "IBM QRadar", "LogRhythm", "ArcSight", "Elastic Security"
+   - Forensics → "EnCase Forensic", "FTK (Forensic Toolkit)", "X-Ways Forensics", "Autopsy"
+   - Cloud Security → "Palo Alto Prisma Cloud", "Wiz", "Orca Security", "Lacework"
+   
+   **Hardware:**
+   - Servers → "Dell PowerEdge", "HP ProLiant", "Lenovo ThinkSystem", "Cisco UCS"
+   - Firewalls → "Fortinet FortiGate", "Palo Alto PA-Series", "Cisco Firepower", "Check Point"
+   - Network Switches → "Cisco Catalyst", "HPE Aruba", "Juniper EX Series", "Dell Networking"
+   - Storage → "NetApp FAS", "Dell EMC PowerStore", "HPE Nimble", "Pure Storage"
+   
+   **Peripherals:**
+   - DVD Writers → "ASUS", "LG", "Samsung", "Pioneer"
+   - Hard Disk Docking → "StarTech", "Sabrent", "UGREEN", "Thermaltake"
+   - WiFi Adapters → "TP-Link", "ASUS", "Netgear", "Intel"
+   - Bluetooth Adapters → "TP-Link", "ASUS", "Intel", "Plugable"
+   
+   - **MANDATORY RULES**:
+     * NEVER use "Microsoft / IBM / Oracle" for cables/accessories
+     * NEVER assign same OEM to multiple products
+     * Match OEM to product category EXACTLY
+     * Each product gets a UNIQUE, relevant OEM
+     * NEVER use: "Unspecified", "N/A", "TBD", "Generic"
 
 11. **CRITICAL: MII (Make In India) STATUS DETERMINATION**
    - **Indian OEMs (Mark as "Indian OEM"):** ${getAllIndianOEMs().join(', ')}
@@ -105,14 +131,29 @@ CRITICAL: FINANCIAL DATA EXTRACTION
    - Check: Project Overview section, Commercial section, BOQ total, Cost breakdown
    - If found, use for BOTH projectOverview.bidValue AND commercial.estimatedValue
 
-13. Extract thoroughly but efficiently. Focus on BIDDING INTELLIGENCE.
-14. **EXTRACTION RULES:**
+13. **CRITICAL: SUPPLY CHAIN MANAGEMENT (SCM) EXTRACTION**
+   - **SEARCH ENTIRE DOCUMENT** for SCM-related information in sections like:
+     * Delivery Schedule / Timeline
+     * Installation & Commissioning clauses
+     * Quality Control / Testing procedures
+     * Supplier eligibility criteria
+     * Logistics and Transportation requirements
+     * Warehousing / Site storage needs
+     * Import/Export requirements
+     * Local content / MII requirements
+     * Acceptance testing procedures
+   - **BE DETAILED**: Extract 3-5 sentences for sourcing strategy
+   - **EXTRACT ALL**: Delivery milestones, supplier requirements, logistics constraints, quality protocols
+   - **FOCUS**: This is a CRITICAL section - extract as much detail as available in document
+
+14. Extract thoroughly but efficiently. Focus on BIDDING INTELLIGENCE.
+15. **EXTRACTION RULES:**
     - Include ALL critical data (amounts, dates, percentages)
     - Extract EXACT financial values from document - do NOT calculate or add examples
-    - Arrays: 3-5 most important items
-    - Descriptions: Keep concise but informative (1-2 sentences)
+    - Arrays: 3-5 most important items (5-8 for SCM keyActions)
+    - Descriptions: Keep concise but informative (1-2 sentences, 3-5 for SCM)
     - NO generic advice - extract document-specific data only
-15. **FOCUS**: Products (ONLY those in document) > Bidding requirements > Success factors > Risks.
+16. **FOCUS**: Products (ONLY those in document) > SCM Details > Bidding requirements > Success factors > Risks.
 
 Return ONLY a valid JSON object with this EXACT structure:
 
@@ -175,12 +216,19 @@ Return ONLY a valid JSON object with this EXACT structure:
     "riskAreas": ["2-3 legal risks"]
   },
   "scm": {
-    "leadTime": "string",
-    "criticalItems": "integer",
-    "miiRequirement": "string",
-    "riskLevel": "string",
-    "sourcingStrategy": "string (1-2 sentences)",
-    "keyActions": ["3-5 SCM actions needed"]
+    "leadTime": "string (EXTRACT: Overall delivery timeline, installation period, commissioning time)",
+    "criticalItems": "integer (Count of time-critical or long lead-time items)",
+    "miiRequirement": "string (EXTRACT: MII compliance %, local content requirements, Class-I/II supplier requirements)",
+    "riskLevel": "string (High/Medium/Low based on delivery constraints, supplier availability, import dependencies)",
+    "sourcingStrategy": "string (DETAILED: Primary sourcing approach - local vs import, preferred vendors, backup strategies, 3-5 sentences)",
+    "deliverySchedule": "string (EXTRACT: Phased delivery milestones, staggered shipments, installation timelines)",
+    "warehousingNeeds": "string (Storage requirements, site logistics, handling specifications)",
+    "qualityControl": "string (Inspection protocols, testing requirements, acceptance criteria)",
+    "supplierRequirements": ["Array of supplier eligibility: certifications needed, experience, turnover, registration requirements"],
+    "logisticsConstraints": ["Array of logistical challenges: site access, transportation modes, customs/import clearance"],
+    "inventoryManagement": "string (Stock planning, buffer inventory, just-in-time delivery requirements)",
+    "riskMitigation": ["Array of SCM risks and mitigation: supplier defaults, delays, quality issues, import restrictions"],
+    "keyActions": ["5-8 DETAILED SCM actions: sourcing, vendor selection, logistics planning, quality checks, compliance verification"]
   },
   "productMapping": {
     "sourceType": "string (BOQ or BOM - indicate which source was used for product mapping)",
@@ -200,10 +248,10 @@ Return ONLY a valid JSON object with this EXACT structure:
       {
         "productName": "string (BOQ/BOM item name exactly as written in tender - MUST be a real product name, NEVER 'N/A' or 'Not Applicable' or 'Miscellaneous')",
         "category": "string (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking - NEVER 'N/A')",
-        "specifications": "string (CRITICAL: Extract actual technical specifications from document - e.g., '50,000 EPS perpetual license', '10 KVA online UPS 99% efficiency', 'Intel Xeon 64GB RAM RAID 5'. If no specs found, leave empty string '')",
+        "specifications": "string (CRITICAL: Provide DETAILED, COMPREHENSIVE specifications (150-200 characters). If in document → extract. If NOT in document → GENERATE detailed specs based on product type. NEVER use 'N/A' or leave empty. Examples: 'USB 3.1 Gen 2, 10Gbps transfer, gold-plated connectors, 6ft length, braided nylon, reversible design' OR 'REST API integration, 10K tickets/day capacity, ITIL compliant, SLA tracking, multi-tenant architecture, reporting dashboard' OR 'SAML 2.0/OIDC support, multi-factor authentication, role-based access control, 100+ device onboarding, audit logging'. ALWAYS provide 3-5 technical details per product)",
         "quantity": "string (quantity if mentioned, e.g., '1', '10', 'Lumpsum')",
         "unit": "string (unit if mentioned, e.g., 'Nos', 'Set', 'LS')",
-        "oem": "string (OEM brand name if found in document. Examples: 'Dell', 'Siemens', 'Polycab'. If not mentioned, use 'Unspecified' - backend will provide 2-3 options)",
+        "oem": "string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')",
         "miiStatus": "string (Classification: 'Indian OEM', 'Global OEM', 'MII-Compliant', 'Likely Indian', 'Requires Review')"
       }
     ]
@@ -238,12 +286,23 @@ CRITICAL INSTRUCTIONS FOR PRODUCT MAPPING:
 - For repetitive items (e.g., 50 types of cables), include 2-3 representative samples only.
 
 CRITICAL INSTRUCTIONS FOR KEY SPECIFICATIONS:
-- For the technical.keySpecifications field, extract ONLY the most critical specifications from BOQ/BOM items.
+- For the technical.keySpecifications field, provide DETAILED, INTELLIGENT specifications for the most IMPORTANT products from BOQ/BOM.
 - Each specification should be an object with "productName" and "specification" fields.
-- Include specifications like: technical requirements, performance criteria, standards compliance, quality parameters.
-- Example: {"productName": "Server", "specification": "Intel Xeon processor, 64GB RAM, RAID 5"}
-- Example: {"productName": "UPS System", "specification": "10 KVA online double conversion, 99% efficiency"}
-- **STRICT LIMIT: Maximum 3-5 specifications** to save tokens for product extraction.
+- **INTELLIGENT GENERATION**: 
+  * If specifications ARE in document → Extract them
+  * If specifications NOT in document → GENERATE detailed industry-standard specifications based on product name/type
+  * NEVER write "No specifications mentioned in document", "N/A", or leave empty - ALWAYS provide meaningful specs
+- **BE DETAILED**: Provide 3-5 technical details per product (150-200 characters)
+- Include: capacity/size, performance metrics, key features, connectivity, standards, compatibility
+- **EXAMPLES (Extract from doc OR Generate if not found)**:
+  * {"productName": "USB Type-C Cable", "specification": "USB 3.1 Gen 2, 10Gbps data transfer, 100W power delivery, gold-plated connectors, 6ft braided nylon cable, reversible design"}
+  * {"productName": "Bluetooth 5.0 Adapter", "specification": "Bluetooth 5.0, 20m range, Windows/Linux/macOS compatible, low latency, dual-mode support, plug-and-play USB dongle"}
+  * {"productName": "SATA Cables", "specification": "SATA III 6Gbps, 18-inch length, right-angle connectors, latching mechanism, supports SSD/HDD, 7-pin data interface"}
+  * {"productName": "Ticket Management Platform", "specification": "REST API integration, 4000 users capacity, scalable to 500, ITIL compliant, SLA tracking, multi-tenant, automated workflows, reporting dashboard"}
+  * {"productName": "Identity Management (PIM/PAM)", "specification": "SAML 2.0/OIDC, multi-factor authentication, role-based access control, 100+ device onboarding, session recording, audit logging, privileged access"}
+  * {"productName": "Forensic Disk Imager", "specification": "Hardware write blocker, live disk imaging, hash verification (MD5/SHA256), supports multiple interfaces, forensic-grade acquisition"}
+  * {"productName": "NGFW Appliance", "specification": "20 physical cores, 64GB RAM, minimum throughput 2Gbps, IPS/IDS, SSL inspection, application control, HA/DR support"}
+- **EXTRACT OR GENERATE 10-15 DETAILED product specifications** with 3-5 technical details each.
 
 
 EXAMPLES OF GOOD EXTRACTION:
@@ -520,6 +579,13 @@ Return ONLY a valid JSON object with this EXACT structure:
     "miiRequirement": "string",
     "riskLevel": "string",
     "sourcingStrategy": "string",
+    "deliverySchedule": "string",
+    "warehousingNeeds": "string",
+    "qualityControl": "string",
+    "supplierRequirements": ["array"],
+    "logisticsConstraints": ["array"],
+    "inventoryManagement": "string",
+    "riskMitigation": ["array"],
     "keyActions": ["array"]
   },
   "productMapping": {

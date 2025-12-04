@@ -425,6 +425,118 @@ const getQuickModelFallback = (productName, oem, category) => {
     const categoryLower = (category || '').toLowerCase();
     
     // ============================================
+    // CABLES & ACCESSORIES (HANDLE FIRST)
+    // ============================================
+    
+    // ANKER
+    if (oemLower.includes('anker')) {
+        if (productLower.includes('usb') && productLower.includes('type-c')) return 'Anker PowerLine III USB-C to USB-C';
+        if (productLower.includes('usb') && productLower.includes('3.0')) return 'Anker PowerLine USB 3.0';
+        if (productLower.includes('usb') && productLower.includes('2.0')) return 'Anker PowerLine USB 2.0';
+        if (productLower.includes('hdmi')) return 'Anker High-Speed HDMI 2.0';
+        return 'Anker PowerLine Cable';
+    }
+    
+    // BELKIN
+    if (oemLower.includes('belkin')) {
+        if (productLower.includes('usb') && productLower.includes('type-c')) return 'Belkin BoostCharge USB-C Cable';
+        if (productLower.includes('usb') && productLower.includes('3.0')) return 'Belkin USB 3.0 Cable';
+        if (productLower.includes('hdmi')) return 'Belkin Ultra HD HDMI Cable';
+        if (productLower.includes('network') || productLower.includes('ethernet')) return 'Belkin Cat6 Ethernet Cable';
+        return 'Belkin Cable';
+    }
+    
+    // CABLE MATTERS
+    if (oemLower.includes('cable matters')) {
+        if (productLower.includes('usb')) return 'Cable Matters USB Cable';
+        if (productLower.includes('hdmi')) return 'Cable Matters HDMI 2.0 Cable';
+        if (productLower.includes('displayport')) return 'Cable Matters DisplayPort Cable';
+        if (productLower.includes('ethernet')) return 'Cable Matters Cat6 Cable';
+        return 'Cable Matters Cable';
+    }
+    
+    // STARTECH
+    if (oemLower.includes('startech')) {
+        if (productLower.includes('sata')) return 'StarTech SATA III 6Gbps Cable';
+        if (productLower.includes('usb') && productLower.includes('hub')) return 'StarTech 4-Port USB 3.0 Hub';
+        if (productLower.includes('docking')) return 'StarTech USB 3.0 Docking Station';
+        if (productLower.includes('adapter')) return 'StarTech Adapter';
+        return 'StarTech Cable/Accessory';
+    }
+    
+    // SABRENT
+    if (oemLower.includes('sabrent')) {
+        if (productLower.includes('sata')) return 'Sabrent SATA Cable';
+        if (productLower.includes('docking')) return 'Sabrent USB 3.0 to SATA Docking Station';
+        if (productLower.includes('hub')) return 'Sabrent USB Hub';
+        return 'Sabrent Accessory';
+    }
+    
+    // TP-LINK
+    if (oemLower.includes('tp-link') || oemLower.includes('tplink')) {
+        if (productLower.includes('wifi') || productLower.includes('wireless')) return 'TP-Link USB WiFi Adapter AC1300';
+        if (productLower.includes('bluetooth')) return 'TP-Link UB500 Bluetooth 5.0 Adapter';
+        if (productLower.includes('switch')) return 'TP-Link TL-SG108 Switch';
+        if (productLower.includes('router')) return 'TP-Link Archer Router';
+        return 'TP-Link Adapter';
+    }
+    
+    // ASUS
+    if (oemLower.includes('asus')) {
+        if (productLower.includes('wifi') || productLower.includes('wireless')) return 'ASUS USB-AC68 WiFi Adapter';
+        if (productLower.includes('bluetooth')) return 'ASUS USB-BT500 Bluetooth 5.0';
+        if (productLower.includes('dvd') || productLower.includes('writer')) return 'ASUS ZenDrive External DVD Writer';
+        if (productLower.includes('router')) return 'ASUS RT-AX Router';
+        if (productLower.includes('monitor')) return 'ASUS ProArt Display';
+        if (productLower.includes('laptop')) return 'ASUS ZenBook';
+        return 'ASUS Adapter';
+    }
+    
+    // LG
+    if (oemLower.includes('lg')) {
+        if (productLower.includes('dvd') || productLower.includes('writer')) return 'LG GP65NB60 External DVD Writer';
+        if (productLower.includes('monitor')) return 'LG UltraFine Monitor';
+        return 'LG DVD Writer';
+    }
+    
+    // SAMSUNG
+    if (oemLower.includes('samsung')) {
+        if (productLower.includes('dvd')) return 'Samsung SE-218 External DVD Writer';
+        if (productLower.includes('monitor')) return 'Samsung Business Monitor';
+        if (productLower.includes('ssd')) return 'Samsung 870 EVO SSD';
+        return 'Samsung Device';
+    }
+    
+    // MONOPRICE
+    if (oemLower.includes('monoprice')) {
+        if (productLower.includes('hdmi')) return 'Monoprice Select Series HDMI Cable';
+        if (productLower.includes('usb')) return 'Monoprice USB Cable';
+        if (productLower.includes('network')) return 'Monoprice Cat6 Cable';
+        return 'Monoprice Cable';
+    }
+    
+    // AMAZONBASICS
+    if (oemLower.includes('amazon') || oemLower.includes('basics')) {
+        if (productLower.includes('hdmi')) return 'AmazonBasics High-Speed HDMI Cable';
+        if (productLower.includes('usb')) return 'AmazonBasics USB Cable';
+        if (productLower.includes('ethernet')) return 'AmazonBasics Cat6 Ethernet Cable';
+        return 'AmazonBasics Cable';
+    }
+    
+    // UGREEN
+    if (oemLower.includes('ugreen')) {
+        if (productLower.includes('usb') && productLower.includes('hub')) return 'UGREEN USB 3.0 Hub';
+        if (productLower.includes('docking')) return 'UGREEN Hard Drive Docking Station';
+        return 'UGREEN Accessory';
+    }
+    
+    // THERMALTAKE
+    if (oemLower.includes('thermaltake')) {
+        if (productLower.includes('docking')) return 'Thermaltake BlacX Duet Hard Drive Docking';
+        return 'Thermaltake Docking Station';
+    }
+    
+    // ============================================
     // HARDWARE VENDORS
     // ============================================
     

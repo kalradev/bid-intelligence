@@ -387,12 +387,19 @@ Return ONLY valid JSON with this structure:
     "riskAreas": ["2-3 legal risks with potential penalties/amounts"]
   },
   "scm": {
-    "leadTime": "string (SPECIFIC durations/deadlines)",
-    "criticalItems": "integer",
-    "miiRequirement": "string (SPECIFIC %/thresholds if mentioned)",
-    "riskLevel": "string",
-    "sourcingStrategy": "string (1-2 sentences with SPECIFIC requirements/constraints)",
-    "keyActions": ["3-5 SPECIFIC SCM actions with numeric targets/deadlines"]
+    "leadTime": "string (EXTRACT: Overall delivery timeline, installation period, commissioning time - SPECIFIC durations/deadlines)",
+    "criticalItems": "integer (Count of time-critical or long lead-time items)",
+    "miiRequirement": "string (EXTRACT: MII compliance %, local content requirements, Class-I/II supplier requirements - SPECIFIC %/thresholds)",
+    "riskLevel": "string (High/Medium/Low based on delivery constraints, supplier availability, import dependencies)",
+    "sourcingStrategy": "string (DETAILED: Primary sourcing approach - local vs import, preferred vendors, backup strategies, 3-5 sentences with SPECIFIC requirements/constraints)",
+    "deliverySchedule": "string (EXTRACT: Phased delivery milestones, staggered shipments, installation timelines)",
+    "warehousingNeeds": "string (Storage requirements, site logistics, handling specifications)",
+    "qualityControl": "string (Inspection protocols, testing requirements, acceptance criteria)",
+    "supplierRequirements": ["Array of supplier eligibility: certifications needed, experience, turnover, registration requirements"],
+    "logisticsConstraints": ["Array of logistical challenges: site access, transportation modes, customs/import clearance"],
+    "inventoryManagement": "string (Stock planning, buffer inventory, just-in-time delivery requirements)",
+    "riskMitigation": ["Array of SCM risks and mitigation: supplier defaults, delays, quality issues, import restrictions"],
+    "keyActions": ["5-8 DETAILED SCM actions: sourcing, vendor selection, logistics planning, quality checks, compliance verification with numeric targets/deadlines"]
   },
   "productMapping": {
     "sourceType": "string (BOQ or BOM)",
@@ -413,10 +420,10 @@ Return ONLY valid JSON with this structure:
       {
         "productName": "string (exact product name from document)",
         "category": "string (product category/type)",
-        "specifications": "string (CRITICAL: Extract actual technical specifications - e.g., '50,000 EPS perpetual license', '10 KVA online UPS', 'Intel Xeon 64GB RAM'. If no specs, empty string '')",
+        "specifications": "string (CRITICAL: Provide DETAILED, COMPREHENSIVE specifications (150-200 characters). If in document → extract. If NOT in document → GENERATE detailed specs based on product type. NEVER use 'N/A' or leave empty. Examples: 'USB 3.1 Gen 2, 10Gbps transfer, gold-plated connectors, 6ft length, braided nylon, reversible design' OR 'REST API integration, 10K tickets/day capacity, ITIL compliant, SLA tracking, multi-tenant architecture, reporting dashboard' OR 'SAML 2.0/OIDC support, multi-factor authentication, role-based access control, 100+ device onboarding, audit logging'. ALWAYS provide 3-5 technical details per product)",
         "quantity": "string (quantity if mentioned)",
         "unit": "string (unit if mentioned)",
-        "oem": "string (brand/manufacturer if specified, else 'Unspecified')",
+        "oem": "string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')",
         "miiStatus": "string (MII-Compliant/Non-MII/Requires Review)"
       }
     ]
