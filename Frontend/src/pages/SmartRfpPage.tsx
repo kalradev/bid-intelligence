@@ -71,6 +71,7 @@ export default function SmartRfpPage() {
 
   const daysRemaining = calculateDaysRemaining(projectOverview.lastSubmissionDate);
 
+  // Filter out EMD if it's "N/A" or not present
   const projectDetails = [
     {
       label: "Project Name",
@@ -90,11 +91,12 @@ export default function SmartRfpPage() {
       value: projectOverview.bidValue || "N/A",
       color: "#059669",
     },
-    {
+    // Only include EMD if it's present and not "N/A"
+    ...(projectOverview.emd && projectOverview.emd !== "N/A" ? [{
       label: "EMD",
-      value: projectOverview.emd || "N/A",
+      value: projectOverview.emd,
       color: "#D97706",
-    },
+    }] : []),
     {
       label: "Completion Period",
       value: projectOverview.completionPeriod || "N/A",

@@ -42,9 +42,9 @@ const TEMPERATURE = 0.3;
 const MAX_TOKENS_OPENAI = 16384;
 const MAX_TOKENS_GEMINI = 8192;
 
-// Chunking configuration
-const CHUNK_SIZE_OPENAI = 100000; // ~80k tokens per chunk for OpenAI
-const CHUNK_SIZE_GEMINI = 30000; // ~7.5k tokens per chunk for Gemini
+// Chunking configuration - Increased for faster processing
+const CHUNK_SIZE_OPENAI = 150000; // ~37.5k tokens per chunk for OpenAI (128k context window supports this)
+const CHUNK_SIZE_GEMINI = 120000; // ~30k tokens per chunk for Gemini (1M context window supports this)
 const MAX_CONTEXT_OPENAI = 100000; // ~25k tokens, safe limit for input (128k total - output buffer)
 
 /**
@@ -69,7 +69,15 @@ OUTPUT RULES:
 🚨 CRITICAL: Do NOT make up or infer values that are not in the document!
 - If Bid Value not found → Use "N/A"
 - Do NOT confuse Estimated Value with Bid Value
-- Do NOT guess or calculate missing values`;
+- Do NOT guess or calculate missing values
+
+CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS
+- Organize successFactors, keyPoints, complianceRequirements, and riskAreas by logical categories
+- Use subheadings like: "Financial", "Technical", "Operational", "Legal", "Timeline", "Quality", "Compliance", etc.
+- Group related items together under appropriate subheadings
+- Example structure: {"Financial": ["item1", "item2"], "Technical": ["item3", "item4"]}
+- If an item doesn't fit a category, use "General" or "Other"
+- MANDATORY: Use object structure with subheadings, NOT flat arrays`;
 
     const userPrompt = buildUserPrompt(documentText, fileName);
     
@@ -262,6 +270,24 @@ EXTRACTION RULES:
 9. **CONSISTENCY MANDATE**: The lastSubmissionDate in projectOverview MUST be the same date used in bidManagement.keyDeadlines
 10. **BID VALUE MANDATE**: ONLY extract Bid Value if explicitly found. Do NOT use Estimated Value as Bid Value!
 
+**TENDER ID EXTRACTION (CRITICAL - Search for ALL alternative names):**
+🚨 MANDATORY: Search ENTIRE document for Tender ID using ALL these alternative names:
+- Tender Reference Number, Tender Ref No., Bid ID, Bid Reference Number
+- RFP Number, RFP ID, RFQ Number, EOI Number
+- Procurement Reference Number, Procurement ID
+- Notice Number, NIT Number (Notice Inviting Tender Number), NIT ID
+- Project ID, Work ID, Work Reference Number
+- Document Number, Contract ID
+- Solicitation Number (US/International)
+- Enquiry Number, Quotation Number, Notice ID
+
+⚠️ STRICT RULES:
+1. Search for ALL the above terms in the document
+2. Extract the EXACT value/number found (e.g., "RFP-2024-001", "NIT-123/2024", "Tender No. ABC/XYZ/2024")
+3. Do NOT use the filename (e.g., "RFP-Volume2_merged.pdf") unless NO tender ID is found anywhere in the document
+4. If multiple tender IDs found, use the MOST PROMINENT one (usually in header/first page/title)
+5. If NONE found after searching all terms → Use filename as last resort only
+
 **PRODUCT EXTRACTION (HIGHEST PRIORITY):**
 - Scan ENTIRE document for: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, Technical Specifications
 - Extract EVERY product/item listed - do NOT skip any entries
@@ -280,6 +306,38 @@ EXTRACTION RULES:
 - Global OEMs: ${getAllGlobalOEMs().join(', ')}
 - If mentions "Make in India", "MII compliant", "Class-I Local" → mark as "MII-Compliant"
 - If uncertain, use "Requires Review"
+
+**TENDER ID EXTRACTION (Search for ALL alternative names):**
+🚨 CRITICAL: Search ENTIRE document for Tender ID using ALL these alternative names:
+- Tender Reference Number
+- Tender Ref No.
+- Bid ID
+- Bid Reference Number
+- RFP Number
+- RFP ID
+- RFQ Number
+- EOI Number
+- Procurement Reference Number
+- Procurement ID
+- Notice Number
+- NIT Number (Notice Inviting Tender Number)
+- NIT ID
+- Project ID
+- Work ID
+- Work Reference Number
+- Document Number
+- Contract ID
+- Solicitation Number (US/International)
+- Enquiry Number
+- Quotation Number
+- Notice ID
+
+⚠️ STRICT RULES FOR TENDER ID:
+1. Search for ALL the above terms in the document
+2. Extract the EXACT value/number found (e.g., "RFP-2024-001", "NIT-123/2024", "Tender No. ABC/XYZ/2024")
+3. Do NOT use the filename (e.g., "RFP-Volume2_merged.pdf") unless NO tender ID is found in the document
+4. If multiple tender IDs found, use the MOST PROMINENT one (usually in header/first page)
+5. If NONE found → Use filename as last resort
 
 **BID VALUE EXTRACTION (Search for ALL alternative names):**
 🚨 CRITICAL: Only extract if EXPLICITLY mentioned in the document!
@@ -333,7 +391,7 @@ Return ONLY valid JSON with this structure:
   "projectOverview": {
     "projectName": "string",
     "client": "string",
-    "tenderId": "string",
+    "tenderId": "string (CRITICAL: Search ENTIRE document for Tender ID using ALL these alternative names: Tender Reference Number, Tender Ref No., Bid ID, Bid Reference Number, RFP Number, RFP ID, RFQ Number, EOI Number, Procurement Reference Number, Procurement ID, Notice Number, NIT Number, NIT ID, Project ID, Work ID, Work Reference Number, Document Number, Contract ID, Solicitation Number, Enquiry Number, Quotation Number, Notice ID. Extract the EXACT value found. If NOT found, use filename as fallback, but ONLY if no tender ID is found in document)",
     "bidValue": "string (ONLY if EXPLICITLY found using alternative names above. Do NOT use Estimated Value. If not found, use 'N/A')",
     "emd": "string (Earnest Money Deposit with currency. Typically 1-5% of bid value)",
     "completionPeriod": "string (duration)",
@@ -343,10 +401,32 @@ Return ONLY valid JSON with this structure:
     "projectOverview": "string (2-3 sentences: scope, value, timeline with numbers)",
     "keyDeadlines": "string (MUST include bid submission deadline from lastSubmissionDate above - format: 'Bid submission deadline: [DATE]'. Add other critical dates if present)",
     "strategy": "string (1-2 sentences: SPECIFIC approach based on tender requirements)",
-    "successFactors": ["3-5 UNIQUE success factors with numeric thresholds/requirements"],
-    "keyPoints": ["3-5 SPECIFIC points with data - EXCLUDE common/generic items"],
-    "complianceRequirements": ["3-5 UNUSUAL mandatory requirements - EXCLUDE standard docs"],
-    "riskAreas": ["2-3 major risks with numeric impact/thresholds"],
+    "successFactors": {
+      "Financial": ["financial success factors - consolidate duplicates"],
+      "Technical": ["technical success factors"],
+      "Operational": ["operational success factors"],
+      "Compliance": ["compliance-related success factors"],
+      "Timeline": ["timeline-related success factors"]
+    },
+    "keyPoints": {
+      "Deadlines": ["deadline-related points - consolidate duplicates"],
+      "Requirements": ["requirement-related points"],
+      "Specifications": ["specification-related points"],
+      "Financial": ["financial points - consolidate duplicates"],
+      "Compliance": ["compliance-related points"]
+    },
+    "complianceRequirements": {
+      "Financial": ["financial compliance requirements"],
+      "Technical": ["technical compliance requirements"],
+      "Documentation": ["documentation requirements"],
+      "Legal": ["legal compliance requirements"]
+    },
+    "riskAreas": {
+      "Financial": ["financial risks"],
+      "Technical": ["technical risks"],
+      "Operational": ["operational risks"],
+      "Timeline": ["timeline-related risks"]
+    },
     "actionItems": ["3-5 SPECIFIC actions with numeric targets/deadlines"]
   },
   "technical": {
@@ -358,8 +438,18 @@ Return ONLY valid JSON with this structure:
         "specification": "string (SPECIFIC numbers/standards/certifications required)"
       }
     ],
-    "criticalRequirements": ["3-5 UNUSUAL technical requirements with specs/numbers - EXCLUDE generic quality standards"],
-    "riskAreas": ["2-3 technical risks with numeric thresholds/penalties"],
+    "criticalRequirements": {
+      "Performance": ["performance-related requirements"],
+      "Standards": ["standards and certifications required"],
+      "Compatibility": ["compatibility requirements"],
+      "Quality": ["quality-related requirements"]
+    },
+    "riskAreas": {
+      "Technical": ["technical implementation risks"],
+      "Compatibility": ["compatibility risks"],
+      "Performance": ["performance-related risks"],
+      "Standards": ["standards compliance risks"]
+    },
     "actionItems": ["3-5 SPECIFIC technical actions with measurable targets"]
   },
   "commercial": {
@@ -367,24 +457,54 @@ Return ONLY valid JSON with this structure:
     "paymentTerms": "string (SPECIFIC percentages/milestones: e.g., 70-20-10)",
     "warranties": "string (SPECIFIC duration/terms with numbers)",
     "penalties": "string (SPECIFIC LD: %/day, max cap)",
-    "keyTerms": ["3-5 UNUSUAL commercial terms with numeric values - EXCLUDE standard payment modes"],
-    "riskAreas": ["2-3 commercial risks with financial impact/percentages"]
+    "keyTerms": {
+      "Payment": ["payment-related terms"],
+      "Warranty": ["warranty-related terms"],
+      "Penalties": ["penalty and LD terms"],
+      "Contract": ["contract-related terms"]
+    },
+    "riskAreas": {
+      "Financial": ["financial/commercial risks"],
+      "Payment": ["payment-related risks"],
+      "Penalties": ["penalty-related risks"],
+      "Contract": ["contract-related risks"]
+    }
   },
   "finance": {
-    "turnoverRequired": "string (SPECIFIC amounts/thresholds)",
+    "turnoverRequired": "string (CONSOLIDATE: If multiple turnover values mentioned, use the HIGHEST/MOST STRINGENT one and note the period clearly, e.g., 'Minimum ₹300 Crore in last 3 years (FY21-23)')",
     "netWorth": "string (SPECIFIC amounts/thresholds)",
     "bankGuarantee": "string (SPECIFIC amounts/percentages/duration)",
     "eligibilityStatus": "string",
-    "financialRequirements": ["3-5 SPECIFIC financial thresholds/ratios with numbers - EXCLUDE generic 'audited statements'"],
-    "riskAreas": ["2-3 financial risks with numeric thresholds/penalties"]
+    "financialRequirements": {
+      "Turnover": ["turnover requirements - consolidate duplicates into single clear statement"],
+      "Net Worth": ["net worth requirements"],
+      "Bank Guarantee": ["bank guarantee requirements"],
+      "Eligibility": ["eligibility criteria"]
+    },
+    "riskAreas": {
+      "Financial": ["financial risks"],
+      "Eligibility": ["eligibility-related risks"],
+      "Cash Flow": ["cash flow risks"],
+      "Guarantees": ["guarantee-related risks"]
+    }
   },
   "legal": {
     "contractType": "string",
     "liabilityCap": "string (SPECIFIC amounts/percentages if mentioned)",
     "disputeResolution": "string",
-    "requiredDocuments": ["3-5 UNUSUAL required documents - EXCLUDE standard PAN/GST/registrations"],
-    "complianceRequirements": ["2-3 SPECIFIC legal requirements with deadlines/thresholds"],
-    "riskAreas": ["2-3 legal risks with potential penalties/amounts"]
+    "requiredDocuments": ["CRITICAL: Extract ALL compliance documents mentioned in document. If NONE mentioned, infer based on project type: ISO 9001, ISO 14001, ISO 27001 (for IT projects), GST Certificate, PAN, Company Registration, MII Certificate, BIS Certification, RoHS Compliance, Fire Safety Certificate, Pollution Control Certificate, etc. Return 5-8 typical documents for this project type"],
+    "complianceRequirements": {
+      "Legal": ["legal compliance requirements"],
+      "Regulatory": ["regulatory compliance requirements"],
+      "Documentation": ["documentation requirements"],
+      "Certifications": ["certification requirements"]
+    },
+    "riskAreas": {
+      "Legal": ["legal risks"],
+      "Liability": ["liability-related risks"],
+      "Disputes": ["dispute resolution risks"],
+      "Compliance": ["compliance-related risks"]
+    }
   },
   "scm": {
     "leadTime": "string (EXTRACT: Overall delivery timeline, installation period, commissioning time - SPECIFIC durations/deadlines)",
@@ -523,6 +643,14 @@ OUTPUT RULES:
 - If Bid Value not found → Use "N/A"
 - Do NOT confuse Estimated Value with Bid Value
 - Do NOT guess or calculate missing values
+
+CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS
+- Organize successFactors, keyPoints, complianceRequirements, and riskAreas by logical categories
+- Use subheadings like: "Financial", "Technical", "Operational", "Legal", "Timeline", "Quality", "Compliance", etc.
+- Group related items together under appropriate subheadings
+- Example structure: {"Financial": ["item1", "item2"], "Technical": ["item3", "item4"]}
+- If an item doesn't fit a category, use "General" or "Other"
+- MANDATORY: Use object structure with subheadings, NOT flat arrays
 
 🔥 CRITICAL FOR THIS CHUNK: Extract ALL products/items from BOQ/BOM found in this section.
 
