@@ -22,7 +22,7 @@ const findModelForOEM = async (productName, oem, specifications, category) => {
         console.log(`   🔍 Finding model for: ${productName} (OEM: ${oem})`);
         
         const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash',
             generationConfig: {
                 temperature: 0.0, // Deterministic matching
                 topP: 1.0,
@@ -194,7 +194,7 @@ const searchOEMAndModel = async (productName, specifications, category) => {
         console.log(`   🌐 Web searching OEM + Model for: ${productName}`);
         
         const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash',
             generationConfig: {
                 temperature: 0.0,
                 topP: 1.0,

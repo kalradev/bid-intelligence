@@ -27,7 +27,7 @@ const mapRowToProduct = async (row, headers = [], documentContext = '') => {
             : row.join(' | ');
         
         const model = genAI.getGenerativeModel({ 
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.5-flash', // Updated to 2.5-flash (1.5-flash is deprecated)
             generationConfig: {
                 temperature: 0.0, // ZERO temperature for 100% deterministic output
                 topP: 1.0,

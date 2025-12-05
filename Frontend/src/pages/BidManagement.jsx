@@ -90,27 +90,63 @@ const BidManagement = () => {
                     Success Factors
                 </h3>
 
-                <ul style={{ listStyle: "none", paddingLeft: 0 }}>
-                    {data.successFactors && data.successFactors.length > 0 ? (
-                        data.successFactors.map((factor, idx) => (
+                {data.successFactors && typeof data.successFactors === 'object' && !Array.isArray(data.successFactors) ? (
+                    // New organized structure with subheadings
+                    Object.entries(data.successFactors).map(([category, items]) => (
+                        items && items.length > 0 && (
+                            <div key={category} style={{ marginBottom: "16px" }}>
+                                <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
+                                    {category}
+                                </h4>
+                                <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+                                    {items.map((factor, idx) => (
+                                        <li key={idx} style={{ marginBottom: "6px" }}>✔ {factor}</li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )
+                    ))
+                ) : data.successFactors && Array.isArray(data.successFactors) ? (
+                    // Fallback for old array structure
+                    <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+                        {data.successFactors.map((factor, idx) => (
                             <li key={idx} style={{ marginBottom: "6px" }}>✔ {factor}</li>
-                        ))
-                    ) : (
-                        <li>No success factors available</li>
-                    )}
-                </ul>
+                        ))}
+                    </ul>
+                ) : (
+                    <p>No success factors available</p>
+                )}
 
                 {/* Key Points */}
-                {data.keyPoints && data.keyPoints.length > 0 && (
+                {data.keyPoints && (
                     <>
                         <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
                             Key Points
                         </h3>
-                        <ul style={{ paddingLeft: "20px" }}>
-                            {data.keyPoints.map((point, idx) => (
-                                <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
-                            ))}
-                        </ul>
+                        {typeof data.keyPoints === 'object' && !Array.isArray(data.keyPoints) ? (
+                            // New organized structure with subheadings
+                            Object.entries(data.keyPoints).map(([category, items]) => (
+                                items && items.length > 0 && (
+                                    <div key={category} style={{ marginBottom: "16px" }}>
+                                        <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
+                                            {category}
+                                        </h4>
+                                        <ul style={{ paddingLeft: "20px" }}>
+                                            {items.map((point, idx) => (
+                                                <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )
+                            ))
+                        ) : Array.isArray(data.keyPoints) && data.keyPoints.length > 0 ? (
+                            // Fallback for old array structure
+                            <ul style={{ paddingLeft: "20px" }}>
+                                {data.keyPoints.map((point, idx) => (
+                                    <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                                ))}
+                            </ul>
+                        ) : null}
                     </>
                 )}
 
@@ -131,30 +167,68 @@ const BidManagement = () => {
                 )}
 
                 {/* Compliance Requirements */}
-                {data.complianceRequirements && data.complianceRequirements.length > 0 && (
+                {data.complianceRequirements && (
                     <>
                         <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
                             Compliance Requirements
                         </h3>
-                        <ul style={{ paddingLeft: "20px" }}>
-                            {data.complianceRequirements.map((req, idx) => (
-                                <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
-                            ))}
-                        </ul>
+                        {typeof data.complianceRequirements === 'object' && !Array.isArray(data.complianceRequirements) ? (
+                            // New organized structure with subheadings
+                            Object.entries(data.complianceRequirements).map(([category, items]) => (
+                                items && items.length > 0 && (
+                                    <div key={category} style={{ marginBottom: "16px" }}>
+                                        <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
+                                            {category}
+                                        </h4>
+                                        <ul style={{ paddingLeft: "20px" }}>
+                                            {items.map((req, idx) => (
+                                                <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )
+                            ))
+                        ) : Array.isArray(data.complianceRequirements) && data.complianceRequirements.length > 0 ? (
+                            // Fallback for old array structure
+                            <ul style={{ paddingLeft: "20px" }}>
+                                {data.complianceRequirements.map((req, idx) => (
+                                    <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                                ))}
+                            </ul>
+                        ) : null}
                     </>
                 )}
 
                 {/* Risk Areas */}
-                {data.riskAreas && data.riskAreas.length > 0 && (
+                {data.riskAreas && (
                     <>
                         <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px", color: "#dc2626" }}>
                             Risk Areas
                         </h3>
-                        <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                            {data.riskAreas.map((risk, idx) => (
-                                <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
-                            ))}
-                        </ul>
+                        {typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
+                            // New organized structure with subheadings
+                            Object.entries(data.riskAreas).map(([category, items]) => (
+                                items && items.length > 0 && (
+                                    <div key={category} style={{ marginBottom: "16px" }}>
+                                        <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
+                                            {category}
+                                        </h4>
+                                        <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                                            {items.map((risk, idx) => (
+                                                <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )
+                            ))
+                        ) : Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
+                            // Fallback for old array structure
+                            <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                                {data.riskAreas.map((risk, idx) => (
+                                    <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                                ))}
+                            </ul>
+                        ) : null}
                     </>
                 )}
 

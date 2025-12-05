@@ -46,12 +46,18 @@ EXTRACTION RULES:
 5. Do not hallucinate values — only use what is written in tender.
 
 CRITICAL: FINANCIAL DATA EXTRACTION
-- EMD amount: Extract EXACT value from document (do NOT calculate)
+- EMD amount: Extract EXACT value from document ONLY IF PRESENT. If NOT mentioned in document, return "N/A" (do NOT calculate or estimate)
 - Bid value: Extract EXACT value from document (do NOT estimate)
 - If document says "₹15 Crore", write "₹15 Crore" - do NOT convert to "₹5L"
 - If document says "2% of bid value", write "2% of bid value" - do NOT calculate the amount
 - NEVER add parenthetical examples like "(2%)" unless document explicitly states it
 - When in doubt, extract verbatim text from document
+
+CRITICAL: DEDUPLICATION & CONSOLIDATION
+- **REMOVE DUPLICATES**: If same information appears multiple times (e.g., "Turnover: min ₹50Cr" and "Minimum annual turnover of ₹300 Crore"), consolidate into ONE clear statement
+- **RESOLVE CONFLICTS**: If conflicting values appear, use the MOST SPECIFIC or MOST RECENT (from corrigendum) value
+- **CONSOLIDATE SIMILAR ITEMS**: Group similar requirements together (e.g., multiple turnover requirements → single consolidated statement)
+- **NO REPETITION**: Each unique piece of information should appear only ONCE in the summary
 6. Search for BOQ (Bill of Quantities) first; if not found, search for BOM (Bill of Materials) instead.
 7. Extract product/material items from whichever source (BOQ or BOM) is available in the document.
 8. INFER "category" based on the item type (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security).
@@ -155,15 +161,33 @@ CRITICAL: FINANCIAL DATA EXTRACTION
     - NO generic advice - extract document-specific data only
 16. **FOCUS**: Products (ONLY those in document) > SCM Details > Bidding requirements > Success factors > Risks.
 
+17. **CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS**
+    - Organize successFactors, keyPoints, complianceRequirements, and riskAreas by logical categories
+    - Use subheadings like: "Financial", "Technical", "Operational", "Legal", "Timeline", "Quality", "Compliance", etc.
+    - Group related items together under appropriate subheadings
+    - Example structure: {"Financial": ["item1", "item2"], "Technical": ["item3", "item4"]}
+    - If an item doesn't fit a category, use "General" or "Other"
+
+18. **CRITICAL: LEGAL COMPLIANCE DOCUMENTS**
+    - **STEP 1**: Search document for explicitly mentioned compliance documents/certificates
+    - **STEP 2**: If documents are mentioned → Extract them exactly as stated
+    - **STEP 3**: If NO documents mentioned → Infer required documents based on:
+      * Project type (IT/Infrastructure/Civil/Electrical)
+      * Industry standards (ISO certifications, BIS, RoHS, etc.)
+      * Government requirements (MII certificates, GST registration, etc.)
+      * Contract value (higher value = more compliance requirements)
+    - **COMMON DOCUMENTS**: ISO 9001, ISO 14001, ISO 27001, GST Certificate, PAN, Company Registration, MII Certificate, BIS Certification, RoHS Compliance, etc.
+    - Return array of documents that would typically be required for this type of project
+
 Return ONLY a valid JSON object with this EXACT structure:
 
 {
   "projectOverview": {
     "projectName": "string (exact project name from tender)",
     "client": "string (client/purchaser organization name)",
-    "tenderId": "string (RFP/tender reference number)",
+    "tenderId": "string (CRITICAL: Search ENTIRE document for Tender ID using ALL these alternative names: Tender Reference Number, Tender Ref No., Bid ID, Bid Reference Number, RFP Number, RFP ID, RFQ Number, EOI Number, Procurement Reference Number, Procurement ID, Notice Number, NIT Number, NIT ID, Project ID, Work ID, Work Reference Number, Document Number, Contract ID, Solicitation Number, Enquiry Number, Quotation Number, Notice ID. Extract the EXACT value found. If NOT found, use filename as fallback, but ONLY if no tender ID is found in document)",
     "bidValue": "string (SEARCH ENTIRE DOCUMENT for: Estimated Value, Estimated Cost, Project Cost Estimate, Approximate Value, Budgetary Estimate, Cost Projection, Engineer's Estimate, Pre-Tender Estimate, Probable Cost of Construction, BOQ Estimated Value, Tender Value, Contract Value. Extract EXACT amount with currency as written, e.g., ₹450 Cr)",
-    "emd": "string (CRITICAL: Extract EXACT EMD amount from document with currency. Do NOT calculate. Do NOT add percentage unless document shows both. If document says '₹15 Crore', write '₹15 Crore' NOT '₹5L (2%)')",
+    "emd": "string (CRITICAL: Extract EXACT EMD amount from document ONLY IF PRESENT. If NOT mentioned in document, return 'N/A'. Do NOT calculate. Do NOT add percentage unless document shows both. If document says '₹15 Crore', write '₹15 Crore' NOT '₹5L (2%)')",
     "completionPeriod": "string (project duration in weeks/months)",
     "lastSubmissionDate": "string (bid submission deadline with time)"
   },
@@ -171,10 +195,30 @@ Return ONLY a valid JSON object with this EXACT structure:
     "projectOverview": "string (2-3 sentences: scope, value, timeline)",
     "keyDeadlines": "string (critical dates with times)",
     "strategy": "string (1-2 sentences: key approach for winning)",
-    "successFactors": ["3-5 critical success factors for winning bid"],
-    "keyPoints": ["3-5 important points with EXACT data from document - NO calculations, NO examples"],
-    "complianceRequirements": ["3-5 mandatory requirements"],
-    "riskAreas": ["2-3 major risks"],
+    "successFactors": {
+      "Financial": ["financial success factors - consolidate duplicates"],
+      "Technical": ["technical success factors"],
+      "Operational": ["operational success factors"],
+      "Compliance": ["compliance-related success factors"]
+    },
+    "keyPoints": {
+      "Deadlines": ["deadline-related points - consolidate duplicates"],
+      "Requirements": ["requirement-related points"],
+      "Specifications": ["specification-related points"],
+      "Financial": ["financial points - consolidate duplicates"]
+    },
+    "complianceRequirements": {
+      "Financial": ["financial compliance requirements"],
+      "Technical": ["technical compliance requirements"],
+      "Documentation": ["documentation requirements"],
+      "Legal": ["legal compliance requirements"]
+    },
+    "riskAreas": {
+      "Financial": ["financial risks"],
+      "Technical": ["technical risks"],
+      "Operational": ["operational risks"],
+      "Timeline": ["timeline-related risks"]
+    },
     "actionItems": ["3-5 immediate actions needed"]
   },
   "technical": {
@@ -185,8 +229,18 @@ Return ONLY a valid JSON object with this EXACT structure:
         "specification": "string (concise with numbers/standards)"
       }
     ],
-    "criticalRequirements": ["3-5 key technical requirements"],
-    "riskAreas": ["2-3 technical risks"],
+    "criticalRequirements": {
+      "Performance": ["performance-related requirements"],
+      "Standards": ["standards and certifications required"],
+      "Compatibility": ["compatibility requirements"],
+      "Quality": ["quality-related requirements"]
+    },
+    "riskAreas": {
+      "Technical": ["technical implementation risks"],
+      "Compatibility": ["compatibility risks"],
+      "Performance": ["performance-related risks"],
+      "Standards": ["standards compliance risks"]
+    },
     "actionItems": ["3-5 technical actions"]
     
     NOTE: DO NOT include compliancePercent, gapsIdentified, or complianceRequirements fields
@@ -196,24 +250,54 @@ Return ONLY a valid JSON object with this EXACT structure:
     "paymentTerms": "string (concise: e.g., 70-20-10)",
     "warranties": "string",
     "penalties": "string (LD details)",
-    "keyTerms": ["3-5 important commercial terms"],
-    "riskAreas": ["2-3 commercial risks"]
+    "keyTerms": {
+      "Payment": ["payment-related terms"],
+      "Warranty": ["warranty-related terms"],
+      "Penalties": ["penalty and LD terms"],
+      "Contract": ["contract-related terms"]
+    },
+    "riskAreas": {
+      "Financial": ["financial/commercial risks"],
+      "Payment": ["payment-related risks"],
+      "Penalties": ["penalty-related risks"],
+      "Contract": ["contract-related risks"]
+    }
   },
   "finance": {
-    "turnoverRequired": "string",
+    "turnoverRequired": "string (CONSOLIDATE: If multiple turnover values mentioned, use the HIGHEST/MOST STRINGENT one and note the period clearly, e.g., 'Minimum ₹300 Crore in last 3 years (FY21-23)')",
     "netWorth": "string",
     "bankGuarantee": "string",
     "eligibilityStatus": "string",
-    "financialRequirements": ["3-5 financial requirements"],
-    "riskAreas": ["2-3 financial risks"]
+    "financialRequirements": {
+      "Turnover": ["turnover requirements - consolidate duplicates into single clear statement"],
+      "Net Worth": ["net worth requirements"],
+      "Bank Guarantee": ["bank guarantee requirements"],
+      "Eligibility": ["eligibility criteria"]
+    },
+    "riskAreas": {
+      "Financial": ["financial risks"],
+      "Eligibility": ["eligibility-related risks"],
+      "Cash Flow": ["cash flow risks"],
+      "Guarantees": ["guarantee-related risks"]
+    }
   },
   "legal": {
     "contractType": "string",
     "liabilityCap": "string",
     "disputeResolution": "string",
-    "requiredDocuments": ["3-5 required legal documents"],
-    "complianceRequirements": ["2-3 legal requirements"],
-    "riskAreas": ["2-3 legal risks"]
+    "requiredDocuments": ["CRITICAL: Extract ALL compliance documents mentioned in document. If NONE mentioned, infer based on project type: ISO 9001, ISO 14001, ISO 27001 (for IT projects), GST Certificate, PAN, Company Registration, MII Certificate, BIS Certification, RoHS Compliance, Fire Safety Certificate, Pollution Control Certificate, etc. Return 5-8 typical documents for this project type"],
+    "complianceRequirements": {
+      "Legal": ["legal compliance requirements"],
+      "Regulatory": ["regulatory compliance requirements"],
+      "Documentation": ["documentation requirements"],
+      "Certifications": ["certification requirements"]
+    },
+    "riskAreas": {
+      "Legal": ["legal risks"],
+      "Liability": ["liability-related risks"],
+      "Disputes": ["dispute resolution risks"],
+      "Compliance": ["compliance-related risks"]
+    }
   },
   "scm": {
     "leadTime": "string (EXTRACT: Overall delivery timeline, installation period, commissioning time)",
@@ -429,7 +513,8 @@ IMPORTANT:
  */
 const processLargeDocument = async (documentText, fileName) => {
     // ✅ Larger chunks = fewer API calls = faster processing
-    const chunkSize = 50000; // Increased from 30k to 50k characters
+    // Gemini 2.5 Flash supports 1M token context window, so we can use larger chunks
+    const chunkSize = 120000; // Increased to 120k characters (~30k tokens) for faster processing
     const chunks = [];
 
     for (let i = 0; i < documentText.length; i += chunkSize) {
