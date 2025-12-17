@@ -73,6 +73,8 @@ const extractTableWithPython = async (buffer) => {
                     
                     if (result.success) {
                         console.log(`✅ Python extracted ${result.rowCount} rows deterministically`);
+                        console.log(`   Headers: ${result.headers ? result.headers.join(', ') : 'None'}`);
+                        console.log(`   First row sample: ${result.rows && result.rows[0] ? result.rows[0].slice(0, 3).join(' | ') : 'None'}`);
                     } else {
                         console.log('⚠️ Python extraction failed:', result.error);
                     }

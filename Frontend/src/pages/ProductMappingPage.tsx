@@ -10,16 +10,40 @@ export default function ProductMappingPage() {
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
-      const parsed = JSON.parse(storedData);
-      setAnalysisData(parsed);
+      try {
+        const parsed = JSON.parse(storedData);
+        console.log("📊 Analysis Data Loaded:", parsed);
+        console.log("📦 Product Mapping:", parsed?.data?.departmentalSummaries?.productMapping);
+        setAnalysisData(parsed);
+      } catch (error) {
+        console.error("❌ Error parsing analysis data:", error);
+      }
+    } else {
+      console.warn("⚠️ No analysis data found in localStorage");
+      console.log("💡 Please upload a document first to see product mapping data");
     }
     setTimeout(() => setAnimate(true), 60);
   }, []);
 
   if (!analysisData) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p>Loading...</p>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+        <p style={{ fontSize: 18, color: "#666" }}>No analysis data found</p>
+        <button
+          onClick={() => navigate("/upload")}
+          style={{
+            background: "#06b6d4",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: 8,
+            border: "none",
+            cursor: "pointer",
+            fontSize: 16,
+            fontWeight: 600
+          }}
+        >
+          Upload Document
+        </button>
       </div>
     );
   }
@@ -35,12 +59,18 @@ export default function ProductMappingPage() {
   const miiUnmapped = parseInt(productMapping.makeInIndiaMapping?.unmapped) || 0;
   const miiProductStatus = productMapping.miiProductStatus || [];
 
-  // Calculate MII compliance percentage - CORRECT calculation
+  // ✅ Calculate MII compliance percentage - CORRECT calculation
+  // Percentage = (Indian OEM products / Total products) * 100
   let miiCompliance = "0%";
-  if (totalItems > 0 && typeof miiMapped === 'number') {
+  if (totalItems > 0 && typeof miiMapped === 'number' && miiMapped >= 0) {
     // Ensure percentage is between 0-100%
     const percentage = Math.min(100, Math.max(0, Math.round((miiMapped / totalItems) * 100)));
     miiCompliance = `${percentage}%`;
+    
+    // Validate calculation
+    if (miiMapped + miiUnmapped !== totalItems) {
+      console.warn(`⚠️ Frontend validation: MII mapping mismatch! ${miiMapped} + ${miiUnmapped} !== ${totalItems}`);
+    }
   }
 
   const fadeInStyle = {
@@ -238,7 +268,7 @@ export default function ProductMappingPage() {
                           fontSize: 13,
                           color: "#374151"
                         }}>
-                          {item.model || "N/A"}
+                          {item.model || item.productName || "Standard Model"}
                         </td>
                         <td style={{
                           padding: 10,

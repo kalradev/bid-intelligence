@@ -5,6 +5,7 @@ const { extractBOQDeterministic } = require('../services/deterministicBOQService
 const FileCache = require('../models/fileCache');
 const { computeFileHash } = require('../utils/hashUtils');
 const { PROCESSING_VERSION } = require('../config/version');
+const { storeFile } = require('../utils/fileStorage');
 
 /**
  * Analyze RFP document
@@ -19,7 +20,7 @@ const analyzeRFP = async (req, res, next) => {
             return res.status(400).json({
                 success: false,
                 error: 'No file uploaded',
-                message: 'Please upload a PDF, DOC, or DOCX file'
+                message: 'Please upload a PDF, DOC, DOCX, XLS, XLSX, or image file (PNG, JPG, etc.)'
             });
         }
 
@@ -38,13 +39,55 @@ const analyzeRFP = async (req, res, next) => {
             const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
             console.log(`✅ Cache HIT! Returning cached results for: ${originalname}`);
             
+            // ✅ RECALCULATE STATISTICS to ensure they're always correct
+            // This fixes any issues with old cached data that had incorrect calculations
+            let correctedSummaries = cachedResult.departmental_summaries;
+            
+            // Recalculate product mapping statistics if products exist
+            if (correctedSummaries?.productMapping?.miiProductStatus && 
+                Array.isArray(correctedSummaries.productMapping.miiProductStatus) &&
+                correctedSummaries.productMapping.miiProductStatus.length > 0) {
+                
+                console.log('🔄 Recalculating statistics from cached data...');
+                const allProducts = correctedSummaries.productMapping.miiProductStatus;
+                const stats = getEnrichmentStats(allProducts);
+                
+                // Update with CORRECT calculations
+                correctedSummaries.productMapping.totalOEMs = {
+                    count: stats.uniqueOEMCount,
+                    indian: stats.uniqueIndianCount,
+                    global: stats.uniqueGlobalCount
+                };
+                
+                correctedSummaries.productMapping.productsMapped = stats.enriched;
+                correctedSummaries.productMapping.totalItems = stats.total;
+                
+                // ✅ CORRECT CALCULATION: unmapped = total - mapped (Indian products)
+                const mapped = stats.indianOEMs;
+                const unmapped = stats.total - mapped;
+                
+                correctedSummaries.productMapping.makeInIndiaMapping = {
+                    status: stats.miiCompliance,
+                    mapped: mapped,
+                    unmapped: unmapped
+                };
+                
+                // Validate the calculation
+                if (mapped + unmapped !== stats.total) {
+                    console.warn(`⚠️ WARNING: MII mapping calculation error in cache! ${mapped} + ${unmapped} !== ${stats.total}`);
+                } else {
+                    console.log(`✅ Cached data statistics recalculated: ${mapped} mapped + ${unmapped} unmapped = ${stats.total} total`);
+                }
+            }
+            
             return res.json({
                 success: true,
                 cached: true,
                 data: {
                     fileName: originalname,
+                    fileHash: fileHash, // Include fileHash for chatbot
                     extractedText: cachedResult.extracted_text,
-                    departmentalSummaries: cachedResult.departmental_summaries,
+                    departmentalSummaries: correctedSummaries, // Use corrected summaries
                     metadata: {
                         processingTime: `${processingTime}s`,
                         pageCount: cachedResult.metadata?.pageCount || 'N/A',
@@ -53,7 +96,8 @@ const analyzeRFP = async (req, res, next) => {
                         chunked: cachedResult.metadata?.chunked || false,
                         usage: cachedResult.metadata?.usage || null,
                         cachedAt: cachedResult.created_at,
-                        lastAccessed: cachedResult.last_accessed_at
+                        lastAccessed: cachedResult.last_accessed_at,
+                        statisticsRecalculated: true // Flag to indicate stats were recalculated
                     }
                 }
             });
@@ -74,11 +118,16 @@ const analyzeRFP = async (req, res, next) => {
 
         // Step 1.5: Try NEW Deterministic BOQ Extraction (Table-based)
         console.log('\n🎯 Attempting NEW deterministic BOQ extraction...');
+        console.log(`   File: ${originalname}`);
+        console.log(`   Text length: ${extractionResult.text.length} characters`);
         let useDeterministicFlow = false;
         let deterministicResult = null;
         
-        // Only try deterministic extraction for PDFs (for now)
-        if (mimetype === 'application/pdf') {
+        // Try deterministic extraction for PDFs and Excel files (both have table structures)
+        if (mimetype === 'application/pdf' || 
+            mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+            mimetype === 'application/vnd.ms-excel' ||
+            mimetype === 'application/excel') {
             try {
                 deterministicResult = await extractBOQDeterministic(
                     buffer,
@@ -89,11 +138,17 @@ const analyzeRFP = async (req, res, next) => {
                 if (deterministicResult.success && deterministicResult.products.length > 0) {
                     useDeterministicFlow = true;
                     console.log(`✅ Deterministic extraction SUCCESS: ${deterministicResult.products.length} products`);
+                    console.log(`   Method: ${deterministicResult.metadata?.extractionMethod || 'unknown'}`);
+                    console.log(`   Was transposed: ${deterministicResult.metadata?.wasTransposed || false}`);
                 } else {
                     console.log('⚠️ Deterministic extraction found no products, falling back to LLM method...');
+                    if (deterministicResult?.error) {
+                        console.log(`   Error: ${deterministicResult.error}`);
+                    }
                 }
             } catch (error) {
                 console.error('❌ Deterministic extraction failed:', error.message);
+                console.error('   Stack:', error.stack);
                 console.log('⚠️ Falling back to traditional LLM-based extraction...');
             }
         } else {
@@ -223,11 +278,23 @@ const analyzeRFP = async (req, res, next) => {
             enrichedSummaries.productMapping.productsMapped = stats.enriched;
             enrichedSummaries.productMapping.totalItems = stats.total;
             
+            // ✅ CORRECT CALCULATION: unmapped = total - mapped (Indian products)
+            // This ensures: mapped + unmapped = totalItems (always correct)
+            const mapped = stats.indianOEMs;
+            const unmapped = stats.total - mapped;
+            
             enrichedSummaries.productMapping.makeInIndiaMapping = {
                 status: stats.miiCompliance,
-                mapped: stats.indianOEMs,
-                unmapped: stats.globalOEMs + stats.unspecified
+                mapped: mapped,
+                unmapped: unmapped
             };
+            
+            // Validate the calculation
+            if (mapped + unmapped !== stats.total) {
+                console.warn(`⚠️ WARNING: MII mapping calculation error! ${mapped} + ${unmapped} !== ${stats.total}`);
+            } else {
+                console.log(`✅ MII Mapping verified: ${mapped} mapped + ${unmapped} unmapped = ${stats.total} total`);
+            }
             
             // ✅ ENSURE CONSISTENCY: technical.totalItems MUST match productMapping.totalItems
             if (enrichedSummaries.technical) {
@@ -319,12 +386,159 @@ const analyzeRFP = async (req, res, next) => {
 
         FileCache.create(cacheData);
 
-        // Step 4: Return response (with enriched data)
+        // Step 3.5: Store file to disk for document viewing
+        try {
+            storeFile(buffer, fileHash, originalname);
+            console.log(`✅ File stored for document viewing: ${originalname}`);
+        } catch (error) {
+            console.warn(`⚠️ Could not store file for viewing: ${error.message}`);
+        }
+
+        // Step 4: Store document in Pinecone for chatbot queries (async, don't wait)
+        // Extract page-by-page text for page number references
+        let pageTexts = null;
+        if (mimetype === 'application/pdf') {
+            try {
+                const pdfParse = require('pdf-parse');
+                const pdfData = await pdfParse(buffer);
+                const totalPages = pdfData.numpages || extractionResult.metadata.pages || 1;
+                
+                // For pdf-parse, we need to extract pages individually
+                // Since pdf-parse doesn't provide per-page extraction easily,
+                // we'll estimate page boundaries based on text length
+                const fullText = pdfData.text || extractionResult.text;
+                const avgCharsPerPage = fullText.length / totalPages;
+                
+                pageTexts = [];
+                for (let i = 0; i < totalPages; i++) {
+                    const start = Math.floor(i * avgCharsPerPage);
+                    const end = Math.floor((i + 1) * avgCharsPerPage);
+                    pageTexts.push({
+                        pageNumber: i + 1,
+                        text: fullText.substring(start, end)
+                    });
+                }
+                console.log(`✅ Extracted text from ${pageTexts.length} pages for page number references`);
+            } catch (error) {
+                console.warn(`⚠️ Could not extract page-by-page text: ${error.message}`);
+                // Fallback: estimate page numbers based on text length
+                const totalPages = extractionResult.metadata.pages || 1;
+                const avgCharsPerPage = extractionResult.text.length / totalPages;
+                pageTexts = [];
+                for (let i = 0; i < totalPages; i++) {
+                    const start = Math.floor(i * avgCharsPerPage);
+                    const end = Math.floor((i + 1) * avgCharsPerPage);
+                    pageTexts.push({
+                        pageNumber: i + 1,
+                        text: extractionResult.text.substring(start, end)
+                    });
+                }
+            }
+        } else if (mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                   mimetype === 'application/vnd.ms-excel' ||
+                   mimetype === 'application/excel') {
+            // For Excel files, use sheets as "pages"
+            try {
+                const XLSX = require('xlsx');
+                const workbook = XLSX.read(buffer, { type: 'buffer' });
+                const sheetNames = workbook.SheetNames;
+                
+                pageTexts = [];
+                for (let i = 0; i < sheetNames.length; i++) {
+                    const sheetName = sheetNames[i];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                    const sheetText = jsonData.map(row => 
+                        row.filter(cell => cell !== '').join(' | ')
+                    ).join('\n');
+                    
+                    pageTexts.push({
+                        pageNumber: i + 1,
+                        text: `=== Sheet: ${sheetName} ===\n${sheetText}`
+                    });
+                }
+                console.log(`✅ Extracted text from ${pageTexts.length} Excel sheets for page number references`);
+            } catch (error) {
+                console.warn(`⚠️ Could not extract sheet-by-sheet text: ${error.message}`);
+                // Fallback: treat entire Excel as one page
+                pageTexts = [{
+                    pageNumber: 1,
+                    text: extractionResult.text
+                }];
+            }
+        } else {
+            // For Word documents and images, estimate pages based on text length
+            // ~500 words per page for Word, ~300 words per page for images (OCR text is usually less dense)
+            const wordsPerPage = mimetype.startsWith('image/') ? 300 : 500;
+            const wordCount = extractionResult.wordCount;
+            const totalPages = Math.max(1, Math.ceil(wordCount / wordsPerPage));
+            const avgCharsPerPage = extractionResult.text.length / totalPages;
+            
+            pageTexts = [];
+            for (let i = 0; i < totalPages; i++) {
+                const start = Math.floor(i * avgCharsPerPage);
+                const end = Math.floor((i + 1) * avgCharsPerPage);
+                pageTexts.push({
+                    pageNumber: i + 1,
+                    text: extractionResult.text.substring(start, end)
+                });
+            }
+            console.log(`✅ Estimated ${pageTexts.length} pages for ${mimetype} document`);
+        }
+        
+        try {
+            const chatbotUrl = process.env.CHATBOT_API_URL || 'http://localhost:8080';
+            // Only delete old data during testing (set DELETE_OLD_DATA_ON_UPLOAD=true in .env for testing)
+            const deleteOldData = process.env.DELETE_OLD_DATA_ON_UPLOAD === 'true' || false;
+            
+            fetch(`${chatbotUrl}/store-rfp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    fileHash: fileHash,
+                    fileName: originalname,
+                    text: extractionResult.text,
+                    pageTexts: pageTexts, // Include page-by-page text for page number mapping
+                    deleteOldData: deleteOldData, // Only delete during testing
+                    analysisData: enrichedSummaries, // Top-level analysis data for chatbot
+                    metadata: {
+                        uploadedAt: new Date().toISOString(),
+                        pageCount: extractionResult.metadata.pages || 'N/A',
+                        wordCount: extractionResult.wordCount
+                    }
+                })
+            }).then(async response => {
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log(`✅ Document stored in Pinecone for chatbot: ${originalname}`);
+                    console.log(`   Document ID: ${fileHash}`);
+                    console.log(`   Chunks stored: ${result.data?.chunksCount || 'unknown'}`);
+                } else {
+                    const errorText = await response.text();
+                    console.error(`❌ Failed to store document in Pinecone: ${response.status} ${response.statusText}`);
+                    console.error(`   Error details: ${errorText.substring(0, 200)}`);
+                    console.error(`   ⚠️  Reference links will not work until document is stored in Pinecone!`);
+                    console.error(`   Make sure Flask backend is running on ${chatbotUrl}`);
+                }
+            }).catch(error => {
+                console.error(`❌ Error storing document in Pinecone: ${error.message}`);
+                console.error(`   ⚠️  Reference links will not work until document is stored in Pinecone!`);
+                console.error(`   Make sure Flask backend is running on ${chatbotUrl}`);
+                // Don't fail the request if Pinecone storage fails
+            });
+        } catch (error) {
+            console.warn(`⚠️ Error initiating Pinecone storage: ${error.message}`);
+        }
+
+        // Step 5: Return response (with enriched data)
         res.json({
             success: true,
             cached: false,
             data: {
                 fileName: originalname,
+                fileHash: fileHash, // Include fileHash so frontend can use it for document-specific queries
                 extractedText: extractionResult.text,
                 departmentalSummaries: enrichedSummaries,
                 metadata: {

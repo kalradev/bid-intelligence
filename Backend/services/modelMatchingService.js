@@ -40,12 +40,23 @@ const findModelForOEM = async (productName, oem, specifications, category) => {
 **TASK:**
 Find the specific ${oem} model/product number that best matches these specifications.
 
+**CRITICAL: MATCH MODEL FROM SPECIFICATIONS**
+- Analyze the specifications carefully to identify the exact model
+- Look for key indicators:
+  * "IPS Throughput: 110 Gbps, NGFW Throughput: 90 Gbps" → FortiGate 600E or similar
+  * "Hardware Accelerated 40/100 GE QSFP28 Slots: 4" → High-end network switch
+  * "Concurrent Sessions: 120 Million" → Enterprise firewall
+  * "SSL Inspection Throughput: 66 Gbps" → Next-gen firewall
+- Match throughput, ports, sessions, and other specs to actual product models
+- Use specifications to narrow down to the exact model number
+
 **CRITICAL INSTRUCTIONS:**
 1. ALWAYS return a SPECIFIC model number/name (NEVER return "Standard Model" or generic names)
 2. Use actual product model numbers that exist in the market
-3. If specifications are minimal, suggest the most popular/standard model from that OEM
-4. The model MUST match the product category and OEM
-5. Return actual model numbers like "FortiGate 600E", "Cisco Catalyst 2960-X", NOT generic names
+3. Match specifications to real product models (e.g., "110 Gbps IPS" → FortiGate 600E, "90 Gbps NGFW" → FortiGate 600E)
+4. If specifications are minimal, suggest the most popular/standard model from that OEM
+5. The model MUST match the product category and OEM
+6. Return actual model numbers like "FortiGate 600E", "Cisco Catalyst 2960-X", "PA-5220", NOT generic names
 
 **MANDATORY: Your response MUST contain a specific model number. Generic responses are NOT acceptable.**
 
@@ -173,11 +184,22 @@ const findModelsForMultipleOEMs = async (productName, oemsString, specifications
         
     } catch (error) {
         console.error(`   ❌ Multi-OEM model matching error:`, error.message);
+        // CRITICAL: Never return "Standard Model" - use intelligent fallback
+        const fallbackModels = oems.map(oem => 
+            getQuickModelFallback(productName, oem, category)
+        );
         return {
-            model: 'Standard Model',
-            confidence: 50,
+            model: fallbackModels.join(' / '),
+            bestModel: fallbackModels[0],
+            bestOEM: oems[0],
+            confidence: 60,
             source: 'error-fallback',
-            reasoning: 'Error matching models for multiple OEMs'
+            allModels: oems.map((oem, i) => ({
+                oem: oem,
+                model: fallbackModels[i],
+                confidence: 60
+            })),
+            reasoning: 'Using intelligent fallback for multiple OEMs'
         };
     }
 };

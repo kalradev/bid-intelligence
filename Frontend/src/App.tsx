@@ -13,9 +13,12 @@ import Commercial from "./pages/Commercial.jsx";
 import Finance from "./pages/Finance.jsx";
 import Legal from "./pages/Legal.jsx";
 import SCM from "./pages/SCM.jsx";
+import ChatbotPage from "./pages/ChatbotPage";
+import DocumentViewer from "./pages/DocumentViewer";
 
 
 import { Routes, Route, useLocation } from "react-router-dom";
+import ChatbotWidget from "./components/ChatbotWidget";
 
 export default function App() {
   const location = useLocation();
@@ -31,15 +34,19 @@ export default function App() {
     "/commercial",
 "/finance",
 "/legal",
-"/scm",
+        "/scm",
+        "/chatbot",
+        "/document-viewer",
    // ⬅️ Make navbar full width like Smart RFP
   ];
 
   const isFullWidth = fullWidthPages.includes(currentPath);
 
   return (
-    <div className={isFullWidth ? "full-width-page" : "app-wrapper"}>
-      <Routes>
+    <>
+      <ChatbotWidget />
+      <div className={isFullWidth ? "full-width-page" : "app-wrapper"}>
+        <Routes>
         <Route path="/commercial" element={<Commercial />} />
 <Route path="/finance" element={<Finance />} />
 <Route path="/legal" element={<Legal />} />
@@ -54,7 +61,10 @@ export default function App() {
         <Route path="/global-intelligence" element={<GlobalIntelligencePage />} />
         <Route path="/technical" element={<Technical />} />
         <Route path="/bid-management" element={<BidManagement />} />   {/* ⬅️ NEW NAVBAR PAGE */}
-      </Routes>
-    </div>
+        <Route path="/chatbot" element={<ChatbotPage />} />
+        <Route path="/document-viewer" element={<DocumentViewer />} />
+        </Routes>
+      </div>
+    </>
   );
 }

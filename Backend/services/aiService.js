@@ -77,7 +77,69 @@ CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS
 - Group related items together under appropriate subheadings
 - Example structure: {"Financial": ["item1", "item2"], "Technical": ["item3", "item4"]}
 - If an item doesn't fit a category, use "General" or "Other"
-- MANDATORY: Use object structure with subheadings, NOT flat arrays`;
+- MANDATORY: Use object structure with subheadings, NOT flat arrays
+
+💰 PRICING APPOINTMENT & PRICING BID EXTRACTION:
+For commercial.pricingAppointment: Extract ALL mentions of:
+- pricing appointment, appointment of pricing committee, price bid appointment schedule
+- scheduled pricing meeting, evaluation committee meeting date
+- financial bid opening appointment, tender fee appointment time, price negotiation schedule
+- Return event name, date, time, location (if available), and any notes
+
+For commercial.pricingBid: Extract ALL mentions of:
+- pricing bid, price bid, financial bid, commercial bid, BOQ submission, cost sheet
+- financial evaluation, price schedule, L1 criteria, payment schedule, price format
+- Return: requirements, format required, mandatory documents, submission instructions
+- evaluation criteria, conditions for disqualification, payment terms, taxes & charges
+- If not found, return empty arrays/strings - DO NOT guess or make up information
+
+📋 BID MANAGEMENT EXTRACTION (CRITICAL):
+For bidManagement.successFactors.emdExemption: Extract ALL mentions of:
+- EMD exemption, MSME exemption, Startup India exemption, EMD waiver, EMD relaxation
+- exemption categories, documents needed for exemption
+- Return: who is exempt, conditions for exemption, documents required, reference clause (if available)
+- Extract even if embedded in tables, footnotes, or annexures
+- If not found, return empty array - DO NOT create fake data
+
+For bidManagement.successFactors.technicalEvaluationCriteria: Extract ALL mentions of:
+- technical evaluation methodology, scoring pattern, weightage, marks allocation
+- qualification thresholds, technical bid evaluation rules
+- functional/technical compliance criteria
+- Return: evaluation parameters, scoring system, minimum qualifying score, mandatory compliance points
+- Extract exact wording from document - do not rewrite or modify meaning
+- If not found, return empty array - DO NOT guess
+
+For bidManagement.successFactors.preQualificationCriteria: Extract ALL mentions of:
+- eligibility criteria, PQ criteria, bidder must have, experience requirements
+- turnover criteria, certifications required, manpower requirements, OEM requirements
+- Return: each PQ requirement as a bullet point with numbers exactly as written (years, turnover, certificates)
+- Extract exact wording - preserve all numbers and specifications
+- If not found, return empty array - DO NOT infer requirements
+
+⚠️ BID MANAGEMENT RISK FACTORS EXTRACTION (CRITICAL):
+For bidManagement.riskFactors.liquidatedDamages: Extract ALL mentions of:
+- liquidated damages, LD penalty, penalty for delay, delay penalty, performance penalty
+- compensation for delay, SLA violation penalty, penalty clause, LD rate (% per week or per day)
+- maximum LD cap
+- Return: all LD conditions, percentage/amount mentioned, max cap (like "10% of contract value"), timeline triggers
+- Extract exact wording from document - preserve all percentages, amounts, and conditions
+- If not found, return empty array - DO NOT guess
+
+For bidManagement.riskFactors.siteSurvey: Extract ALL mentions of:
+- site survey, pre-bid site visit, mandatory site inspection, bidder must visit site
+- physical verification before bidding, site assessment, location survey responsibility
+- Return: what is required in site survey, whether it is mandatory, responsibilities of bidder
+- documents/report to be submitted
+- Extract even if embedded in tables, footnotes, or annexures
+- If not found, return empty array - DO NOT create fake data
+
+For bidManagement.riskFactors.certifications: Extract ALL mentions of:
+- certifications required, technical certifications, OEM certifications, ISO certifications
+- compliance certificates, supporting documents, mandatory certificates, local certifications
+- Return: list of required certificates, issuing authority if mentioned, validity conditions
+- compliance standards
+- Extract exact certificate names and requirements - preserve all specifications
+- If not found, return empty array - DO NOT infer certifications`;
 
     const userPrompt = buildUserPrompt(documentText, fileName);
     
@@ -406,7 +468,10 @@ Return ONLY valid JSON with this structure:
       "Technical": ["technical success factors"],
       "Operational": ["operational success factors"],
       "Compliance": ["compliance-related success factors"],
-      "Timeline": ["timeline-related success factors"]
+      "Timeline": ["timeline-related success factors"],
+      "emdExemption": ["array of EMD exemption details - who is exempt, conditions, documents required, reference clause if available"],
+      "technicalEvaluationCriteria": ["array of technical evaluation criteria - evaluation parameters, scoring system, minimum qualifying score, mandatory compliance points"],
+      "preQualificationCriteria": ["array of pre-qualification criteria - each PQ requirement as a bullet with exact numbers (years, turnover, certificates)"]
     },
     "keyPoints": {
       "Deadlines": ["deadline-related points - consolidate duplicates"],
@@ -426,6 +491,11 @@ Return ONLY valid JSON with this structure:
       "Technical": ["technical risks"],
       "Operational": ["operational risks"],
       "Timeline": ["timeline-related risks"]
+    },
+    "riskFactors": {
+      "liquidatedDamages": ["array of LD conditions - percentage/amount, max cap, timeline triggers"],
+      "siteSurvey": ["array of site survey requirements - what is required, whether mandatory, responsibilities, documents/report to be submitted"],
+      "certifications": ["array of required certificates - list of certificates, issuing authority if mentioned, validity conditions, compliance standards"]
     },
     "actionItems": ["3-5 SPECIFIC actions with numeric targets/deadlines"]
   },
@@ -457,6 +527,23 @@ Return ONLY valid JSON with this structure:
     "paymentTerms": "string (SPECIFIC percentages/milestones: e.g., 70-20-10)",
     "warranties": "string (SPECIFIC duration/terms with numbers)",
     "penalties": "string (SPECIFIC LD: %/day, max cap)",
+    "pricingAppointment": [
+      {
+        "event": "string (name of pricing appointment event)",
+        "date": "string (date in YYYY-MM-DD format or as mentioned in document)",
+        "time": "string (time if mentioned)",
+        "location": "string (location if mentioned, else empty string)",
+        "notes": "string (any additional notes)"
+      }
+    ],
+    "pricingBid": {
+      "requirements": ["array of key requirements for pricing bid"],
+      "submissionInstructions": ["array of submission instructions"],
+      "evaluationCriteria": ["array of evaluation criteria (e.g., L1 criteria)"],
+      "documentsNeeded": ["array of mandatory documents for pricing bid"],
+      "paymentTerms": ["array of payment terms specific to pricing bid"],
+      "taxesAndCharges": ["array of taxes and charges applicable"]
+    },
     "keyTerms": {
       "Payment": ["payment-related terms"],
       "Warranty": ["warranty-related terms"],
@@ -537,12 +624,17 @@ Return ONLY valid JSON with this structure:
     },
     "miiProductStatus": [
       "ARRAY: List ALL products found in BOQ/BOM/specifications. Do NOT skip items.",
+      "SPECIAL HANDLING FOR SPECIFICATION TABLES:",
+      "- If document has a 'Specifications' table with 'Model 1', 'Model 2', 'Model 3' as columns → Extract each Model as a separate product",
+      "- For specification tables: Product name = 'Model 1', 'Model 2', 'Model 3', etc.",
+      "- Extract ALL specifications for each model from the table",
+      "- Combine all specification rows into the 'specifications' field for each model",
       {
-        "productName": "string (exact product name from document)",
-        "category": "string (product category/type)",
-        "specifications": "string (CRITICAL: Provide DETAILED, COMPREHENSIVE specifications (150-200 characters). If in document → extract. If NOT in document → GENERATE detailed specs based on product type. NEVER use 'N/A' or leave empty. Examples: 'USB 3.1 Gen 2, 10Gbps transfer, gold-plated connectors, 6ft length, braided nylon, reversible design' OR 'REST API integration, 10K tickets/day capacity, ITIL compliant, SLA tracking, multi-tenant architecture, reporting dashboard' OR 'SAML 2.0/OIDC support, multi-factor authentication, role-based access control, 100+ device onboarding, audit logging'. ALWAYS provide 3-5 technical details per product)",
-        "quantity": "string (quantity if mentioned)",
-        "unit": "string (unit if mentioned)",
+        "productName": "string (exact product name from document - can be 'Model 1', 'Model 2', 'Model 3', etc. for specification tables)",
+        "category": "string (product category/type - infer from specifications: Hardware, Security, Networking, etc.)",
+        "specifications": "string (CRITICAL: For specification tables, extract ALL specifications from the table for this model. Combine all spec rows into one field. If in document → extract. If NOT in document → GENERATE detailed specs based on product type. NEVER use 'N/A' or leave empty. Examples: 'USB 3.1 Gen 2, 10Gbps transfer, gold-plated connectors, 6ft length, braided nylon, reversible design' OR 'REST API integration, 10K tickets/day capacity, ITIL compliant, SLA tracking, multi-tenant architecture, reporting dashboard' OR 'SAML 2.0/OIDC support, multi-factor authentication, role-based access control, 100+ device onboarding, audit logging'. ALWAYS provide 3-5 technical details per product)",
+        "quantity": "string (quantity if mentioned, otherwise 'N/A')",
+        "unit": "string (unit if mentioned, otherwise 'N/A')",
         "oem": "string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')",
         "miiStatus": "string (MII-Compliant/Non-MII/Requires Review)"
       }
@@ -584,6 +676,8 @@ Return ONLY valid JSON with this structure:
 - If document has 200 items → extract up to 200 items (prioritize items with OEM mentions)
 - Do NOT summarize products into categories - list each individual item
 - Example: If BOQ lists "Switch 24-port", "Switch 48-port", "Router Cisco" → extract all 3 separately
+- For SPECIFICATION TABLES: Extract each Model (Model 1, Model 2, Model 3) as a separate product
+- Example: Specification table with Model 1, Model 2, Model 3 columns → Extract 3 products with all their specifications
 
 ⚠️ CONSISTENCY CHECK - CRITICAL:
 - projectOverview.lastSubmissionDate = "2023-12-15 15:00:00"
@@ -651,6 +745,68 @@ CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS
 - Example structure: {"Financial": ["item1", "item2"], "Technical": ["item3", "item4"]}
 - If an item doesn't fit a category, use "General" or "Other"
 - MANDATORY: Use object structure with subheadings, NOT flat arrays
+
+💰 PRICING APPOINTMENT & PRICING BID EXTRACTION:
+For commercial.pricingAppointment: Extract ALL mentions of:
+- pricing appointment, appointment of pricing committee, price bid appointment schedule
+- scheduled pricing meeting, evaluation committee meeting date
+- financial bid opening appointment, tender fee appointment time, price negotiation schedule
+- Return event name, date, time, location (if available), and any notes
+
+For commercial.pricingBid: Extract ALL mentions of:
+- pricing bid, price bid, financial bid, commercial bid, BOQ submission, cost sheet
+- financial evaluation, price schedule, L1 criteria, payment schedule, price format
+- Return: requirements, format required, mandatory documents, submission instructions
+- evaluation criteria, conditions for disqualification, payment terms, taxes & charges
+- If not found, return empty arrays/strings - DO NOT guess or make up information
+
+📋 BID MANAGEMENT EXTRACTION (CRITICAL):
+For bidManagement.successFactors.emdExemption: Extract ALL mentions of:
+- EMD exemption, MSME exemption, Startup India exemption, EMD waiver, EMD relaxation
+- exemption categories, documents needed for exemption
+- Return: who is exempt, conditions for exemption, documents required, reference clause (if available)
+- Extract even if embedded in tables, footnotes, or annexures
+- If not found, return empty array - DO NOT create fake data
+
+For bidManagement.successFactors.technicalEvaluationCriteria: Extract ALL mentions of:
+- technical evaluation methodology, scoring pattern, weightage, marks allocation
+- qualification thresholds, technical bid evaluation rules
+- functional/technical compliance criteria
+- Return: evaluation parameters, scoring system, minimum qualifying score, mandatory compliance points
+- Extract exact wording from document - do not rewrite or modify meaning
+- If not found, return empty array - DO NOT guess
+
+For bidManagement.successFactors.preQualificationCriteria: Extract ALL mentions of:
+- eligibility criteria, PQ criteria, bidder must have, experience requirements
+- turnover criteria, certifications required, manpower requirements, OEM requirements
+- Return: each PQ requirement as a bullet point with numbers exactly as written (years, turnover, certificates)
+- Extract exact wording - preserve all numbers and specifications
+- If not found, return empty array - DO NOT infer requirements
+
+⚠️ BID MANAGEMENT RISK FACTORS EXTRACTION (CRITICAL):
+For bidManagement.riskFactors.liquidatedDamages: Extract ALL mentions of:
+- liquidated damages, LD penalty, penalty for delay, delay penalty, performance penalty
+- compensation for delay, SLA violation penalty, penalty clause, LD rate (% per week or per day)
+- maximum LD cap
+- Return: all LD conditions, percentage/amount mentioned, max cap (like "10% of contract value"), timeline triggers
+- Extract exact wording from document - preserve all percentages, amounts, and conditions
+- If not found, return empty array - DO NOT guess
+
+For bidManagement.riskFactors.siteSurvey: Extract ALL mentions of:
+- site survey, pre-bid site visit, mandatory site inspection, bidder must visit site
+- physical verification before bidding, site assessment, location survey responsibility
+- Return: what is required in site survey, whether it is mandatory, responsibilities of bidder
+- documents/report to be submitted
+- Extract even if embedded in tables, footnotes, or annexures
+- If not found, return empty array - DO NOT create fake data
+
+For bidManagement.riskFactors.certifications: Extract ALL mentions of:
+- certifications required, technical certifications, OEM certifications, ISO certifications
+- compliance certificates, supporting documents, mandatory certificates, local certifications
+- Return: list of required certificates, issuing authority if mentioned, validity conditions
+- compliance standards
+- Extract exact certificate names and requirements - preserve all specifications
+- If not found, return empty array - DO NOT infer certifications
 
 🔥 CRITICAL FOR THIS CHUNK: Extract ALL products/items from BOQ/BOM found in this section.
 

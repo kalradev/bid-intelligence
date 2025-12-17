@@ -10,7 +10,7 @@
  * This ensures cached results are invalidated when logic changes.
  */
 
-const PROCESSING_VERSION = 30; // Zero N/A products - Validation filters invalid product names (N/A, empty, generic)
+const PROCESSING_VERSION = 31; // Transposed table support - Added detection and transformation for specification tables (Model 1, Model 2, etc. in columns)
 
 module.exports = {
     PROCESSING_VERSION
