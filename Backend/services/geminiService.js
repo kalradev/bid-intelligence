@@ -50,8 +50,10 @@ CRITICAL: FINANCIAL DATA EXTRACTION
 - Bid value: Extract EXACT value from document (do NOT estimate)
 - If document says "₹15 Crore", write "₹15 Crore" - do NOT convert to "₹5L"
 - If document says "2% of bid value", write "2% of bid value" - do NOT calculate the amount
-- NEVER add parenthetical examples like "(2%)" unless document explicitly states it
-- When in doubt, extract verbatim text from document
+- ABSOLUTELY FORBIDDEN: Adding "(2%)" or any percentage in parentheses to EMD unless BOTH the amount AND percentage are explicitly written together in the document
+- CORRECT: "₹5,000 (Non-refundable)" if document says this
+- WRONG: "₹5,000 (2%)" when document only says "₹5,000" - DO NOT ADD THE PERCENTAGE
+- When in doubt, extract verbatim text from document - NEVER add your own calculations or interpretations
 
 CRITICAL: DEDUPLICATION & CONSOLIDATION
 - **REMOVE DUPLICATES**: If same information appears multiple times (e.g., "Turnover: min ₹50Cr" and "Minimum annual turnover of ₹300 Crore"), consolidate into ONE clear statement
@@ -62,14 +64,19 @@ CRITICAL: DEDUPLICATION & CONSOLIDATION
 7. Extract product/material items from whichever source (BOQ or BOM) is available in the document.
 8. INFER "category" based on the item type (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security).
 
-9. **CRITICAL: EXTRACT ONLY ACTUAL PRODUCTS FROM THE DOCUMENT**
+9. **CRITICAL: EXTRACT PRODUCTS FROM SPECIFICATION TABLES**
+   - **SPECIFICATION TABLES**: If document has a "Specifications" table with "Model 1", "Model 2", "Model 3" as column headers, extract EACH MODEL as a separate product
+   - **SPECIFICATION TABLE FORMAT**: 
+     * Title: "Specifications" or "Technical Specifications"
+     * Headers: "Model 1", "Model 2", "Model 3", etc. (or "Product A", "Product B", etc.)
+     * Rows: Specification names in first column, values in subsequent columns
+   - **EXTRACT ALL MODELS**: If you see "Model 2" with specifications like "IPS Throughput: 110 Gbps", "NGFW Throughput: 90 Gbps", extract "Model 2" as a product
+   - **COMBINE SPECIFICATIONS**: For each model, combine ALL specifications into the specifications field (e.g., "IPS Throughput: 110 Gbps; NGFW Throughput: 90 Gbps; Hardware Accelerated 40/100 GE QSFP28 Slots: 4")
+   - **EXTRACT FROM ANY TABLE**: Look for specification tables, comparison tables, product comparison charts, technical specification sheets
    - **NO HALLUCINATIONS**: Only extract products that are explicitly mentioned in the document
    - **NO GENERIC ITEMS**: Do not add generic items like "Miscellaneous", "Others" unless explicitly listed
    - **NO N/A PRODUCTS**: NEVER create products with name "N/A" or empty names
-   - **VERIFY EACH PRODUCT**: Each product must have a corresponding entry in the BOQ/BOM/product list
-   - **ACCURACY OVER QUANTITY**: Better to extract fewer accurate products than many incorrect ones
-   - **INVALID PRODUCT NAMES**: Do NOT extract products named: "N/A", "Not Applicable", "TBD", "To Be Decided", "Miscellaneous", "Others", "Various"
-   - **REAL NAMES ONLY**: Each product must have a specific, identifiable name from the document
+   - **REAL NAMES ONLY**: Each product must have a specific, identifiable name from the document (Model 2, Model 1, Product A, etc. are VALID names)
 
 10. **CRITICAL: OEM (Original Equipment Manufacturer) EXTRACTION & INTELLIGENT SUGGESTION**
    - **STEP 1: AGGRESSIVELY SEARCH** for brand names in document:
@@ -77,8 +84,19 @@ CRITICAL: DEDUPLICATION & CONSOLIDATION
      - A separate "Approved Makes", "Preferred Brands", or "List of Makes" section/annexure
      - Technical specifications columns
      - Look for "Make:", "Brand:", "Mfr:", "Model:", "or equivalent"
-   - **STEP 2: IF OEM FOUND** → Extract it (if multiple brands listed like "Havells / Polycab / Anchor", extract the **FIRST ONE**)
-   - **STEP 3: IF OEM NOT FOUND** → SUGGEST UNIQUE, PRODUCT-SPECIFIC OEM based on EXACT product type:
+   - **STEP 2: INFER OEM FROM SPECIFICATIONS** (CRITICAL for specification tables):
+     * If specifications mention "FortiGate", "Fortinet", "FortiOS" → OEM: "Fortinet"
+     * If specifications mention "IPS Throughput", "NGFW Throughput", "SSL Inspection" → Likely "Fortinet" or "Palo Alto Networks"
+     * If specifications mention "Catalyst", "Cisco" → OEM: "Cisco"
+     * If specifications mention "EX Series", "Juniper" → OEM: "Juniper Networks"
+     * If specifications mention "Aruba", "CX Series" → OEM: "Aruba" or "HPE Aruba"
+     * If specifications mention "PA-", "Palo Alto" → OEM: "Palo Alto Networks"
+     * If specifications mention "Check Point", "Smart-1" → OEM: "Check Point"
+     * If specifications mention "PowerEdge", "Dell" → OEM: "Dell PowerEdge"
+     * If specifications mention "ProLiant", "HP" → OEM: "HP ProLiant"
+     * Look for brand-specific terminology in specifications to identify OEM
+   - **STEP 3: IF OEM FOUND** → Extract it (if multiple brands listed like "Havells / Polycab / Anchor", extract ALL as "Havells / Polycab / Anchor")
+   - **STEP 4: IF OEM NOT FOUND** → SUGGEST 2-3 BEST-FIT OEMS based on specifications:
    
    **CRITICAL: MATCH OEM TO PRODUCT CATEGORY - DO NOT USE GENERIC OEMS**
    
@@ -187,7 +205,7 @@ Return ONLY a valid JSON object with this EXACT structure:
     "client": "string (client/purchaser organization name)",
     "tenderId": "string (CRITICAL: Search ENTIRE document for Tender ID using ALL these alternative names: Tender Reference Number, Tender Ref No., Bid ID, Bid Reference Number, RFP Number, RFP ID, RFQ Number, EOI Number, Procurement Reference Number, Procurement ID, Notice Number, NIT Number, NIT ID, Project ID, Work ID, Work Reference Number, Document Number, Contract ID, Solicitation Number, Enquiry Number, Quotation Number, Notice ID. Extract the EXACT value found. If NOT found, use filename as fallback, but ONLY if no tender ID is found in document)",
     "bidValue": "string (SEARCH ENTIRE DOCUMENT for: Estimated Value, Estimated Cost, Project Cost Estimate, Approximate Value, Budgetary Estimate, Cost Projection, Engineer's Estimate, Pre-Tender Estimate, Probable Cost of Construction, BOQ Estimated Value, Tender Value, Contract Value. Extract EXACT amount with currency as written, e.g., ₹450 Cr)",
-    "emd": "string (CRITICAL: Extract EXACT EMD amount from document ONLY IF PRESENT. If NOT mentioned in document, return 'N/A'. Do NOT calculate. Do NOT add percentage unless document shows both. If document says '₹15 Crore', write '₹15 Crore' NOT '₹5L (2%)')",
+    "emd": "string (CRITICAL RULE - READ CAREFULLY: Extract ONLY what is written in the document. If document says '₹5,000 (Non-refundable)', write EXACTLY that. If document says '₹5,000', write ONLY '₹5,000' - DO NOT ADD '(2%)' or any percentage. If document says '2% of bid value', write '2% of bid value' - DO NOT calculate the amount. If EMD is NOT mentioned, return 'N/A'. FORBIDDEN: Adding calculations, percentages, or parenthetical notes that are not in the original document text)",
     "completionPeriod": "string (project duration in weeks/months)",
     "lastSubmissionDate": "string (bid submission deadline with time)"
   },
@@ -336,6 +354,7 @@ Return ONLY a valid JSON object with this EXACT structure:
         "quantity": "string (quantity if mentioned, e.g., '1', '10', 'Lumpsum')",
         "unit": "string (unit if mentioned, e.g., 'Nos', 'Set', 'LS')",
         "oem": "string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')",
+        "model": "string (CRITICAL: Extract specific model number/name from specifications. For specification tables, if product name is 'Model 2', extract the actual model number from specifications. Look for model numbers like 'FortiGate 600E', 'PA-5220', 'Catalyst 2960-X', 'EX4300', 'CX 6300' in the specifications. If specifications mention 'IPS Throughput: 110 Gbps, NGFW Throughput: 90 Gbps' → likely 'FortiGate 600E' or similar. If specifications mention 'Hardware Accelerated 40/100 GE QSFP28 Slots: 4' → likely network switch model. Use specifications to infer the best-fit model. If no model found, use the product name itself as the model. NEVER return 'N/A')",
         "miiStatus": "string (Classification: 'Indian OEM', 'Global OEM', 'MII-Compliant', 'Likely Indian', 'Requires Review')"
       }
     ]
@@ -343,9 +362,15 @@ Return ONLY a valid JSON object with this EXACT structure:
 }
 
 CRITICAL INSTRUCTIONS FOR PRODUCT MAPPING:
-- Extract products/items from the BOQ or BOM section.
+- **PRIORITY 1: SPECIFICATION TABLES** - If document contains a "Specifications" table with "Model 1", "Model 2", "Model 3" columns, extract EACH MODEL as a separate product with ALL its specifications combined.
+- **PRIORITY 2: BOQ/BOM** - Extract products/items from the BOQ or BOM section.
 - **LIMIT**: Extract up to 40 most important/representative products per chunk to balance completeness with output limits.
 - For each product, search the document chunk for Brand names.
+- **SPECIFICATION TABLE EXTRACTION**: When you see a specification table:
+  * Extract each model (Model 1, Model 2, etc.) as a product
+  * Combine ALL specifications for that model into one specifications field
+  * Infer OEM from specifications (e.g., "IPS Throughput", "NGFW" → Fortinet; "Catalyst" → Cisco)
+  * Infer model number from specifications (e.g., "110 Gbps IPS" → FortiGate 600E or similar)
 - Populate the miiProductStatus array with the products found (max 40 per chunk).
 
 **CRITICAL CONSISTENCY RULE:**

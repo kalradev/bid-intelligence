@@ -54,13 +54,13 @@ export default function LandingPage() {
             </div>
 
             <div className="hover-card">
-              <div className="hover-icon bg-gradient-green">
-                <LineChart className="w-8 h-8 text-white" />
+              <div className="hover-icon bg-gradient-cyan">
+                <Globe2 className="w-8 h-8 text-white" />
               </div>
-              <h3>Predictive Cost Estimation</h3>
+              <h3>Global Bid Intelligence</h3>
               <p>
-                Leverage machine learning to forecast costs and bid
-                success probabilities with stunning accuracy.
+                Stay ahead with live updates on global tenders, competitor activity, and
+                market bidding trends to optimize every submission.
               </p>
             </div>
 
@@ -76,13 +76,13 @@ export default function LandingPage() {
             </div>
 
             <div className="hover-card">
-              <div className="hover-icon bg-gradient-cyan">
-                <Globe2 className="w-8 h-8 text-white" />
+              <div className="hover-icon bg-gradient-green">
+                <LineChart className="w-8 h-8 text-white" />
               </div>
-              <h3>Global Bid Intelligence</h3>
+              <h3>Predictive Cost Estimation</h3>
               <p>
-                Stay ahead with live updates on global tenders, competitor activity, and
-                market bidding trends to optimize every submission.
+                Leverage machine learning to forecast costs and bid
+                success probabilities with stunning accuracy.
               </p>
             </div>
           </div>

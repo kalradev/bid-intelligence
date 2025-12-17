@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
 import { exportToPDF } from "../utils/pdfExport";
+import { processDepartmentData, filterEMD } from "../utils/deduplication";
 
 const Technical = () => {
   const [data, setData] = useState(null);
@@ -10,7 +11,14 @@ const Technical = () => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
       const parsed = JSON.parse(storedData);
-      setData(parsed?.data?.departmentalSummaries?.technical);
+      const technicalData = parsed?.data?.departmentalSummaries?.technical;
+      
+      // Process and deduplicate all list-based fields, filter N/A
+      if (technicalData) {
+        setData(processDepartmentData(technicalData));
+      } else {
+        setData(null);
+      }
     }
   }, []);
 
@@ -97,27 +105,33 @@ const Technical = () => {
             </h3>
             {typeof data.keyPoints === 'object' && !Array.isArray(data.keyPoints) ? (
               // New organized structure with subheadings
-              Object.entries(data.keyPoints).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.keyPoints).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((point, idx) => (
+                      {filteredItems.map((point, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.keyPoints) && data.keyPoints.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px" }}>
-                {data.keyPoints.map((point, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredPoints = filterEMD(data.keyPoints);
+                return filteredPoints.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px" }}>
+                    {filteredPoints.map((point, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}
@@ -145,21 +159,23 @@ const Technical = () => {
               Critical Requirements
             </h3>
             {typeof data.criticalRequirements === 'object' && !Array.isArray(data.criticalRequirements) ? (
-              // New organized structure with subheadings
-              Object.entries(data.criticalRequirements).map(([category, items]) => (
-                items && items.length > 0 && (
-                  <div key={category} style={{ marginBottom: "16px" }}>
-                    <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
-                      {category}
-                    </h4>
-                    <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((req, idx) => (
-                        <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )
-              ))
+              // New organized structure with subheadings - exclude "Quality" category
+              Object.entries(data.criticalRequirements)
+                .filter(([category]) => category.toLowerCase() !== 'quality')
+                .map(([category, items]) => (
+                  items && items.length > 0 && (
+                    <div key={category} style={{ marginBottom: "16px" }}>
+                      <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
+                        {category}
+                      </h4>
+                      <ul style={{ paddingLeft: "20px" }}>
+                        {items.map((req, idx) => (
+                          <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                ))
             ) : Array.isArray(data.criticalRequirements) && data.criticalRequirements.length > 0 ? (
               // Fallback for old array structure
               <ul style={{ paddingLeft: "20px" }}>
@@ -179,27 +195,33 @@ const Technical = () => {
             </h3>
             {typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
               // New organized structure with subheadings
-              Object.entries(data.riskAreas).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.riskAreas).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                      {items.map((risk, idx) => (
+                      {filteredItems.map((risk, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                {data.riskAreas.map((risk, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredRisks = filterEMD(data.riskAreas);
+                return filteredRisks.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                    {filteredRisks.map((risk, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}

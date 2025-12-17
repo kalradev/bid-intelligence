@@ -1,16 +1,31 @@
 import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
 import { exportToPDF } from "../utils/pdfExport";
+import { processDepartmentData, filterEMD } from "../utils/deduplication";
 
 const Finance = () => {
   const [data, setData] = useState(null);
+  const [paymentTerms, setPaymentTerms] = useState(null);
   const contentRef = useRef(null);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
       const parsed = JSON.parse(storedData);
-      setData(parsed?.data?.departmentalSummaries?.finance);
+      const financeData = parsed?.data?.departmentalSummaries?.finance;
+      const commercialData = parsed?.data?.departmentalSummaries?.commercial;
+      
+      // Process and deduplicate all list-based fields, filter N/A
+      if (financeData) {
+        setData(processDepartmentData(financeData));
+      } else {
+        setData(null);
+      }
+      
+      // Get payment terms from commercial data
+      if (commercialData && commercialData.paymentTerms) {
+        setPaymentTerms(commercialData.paymentTerms);
+      }
     }
   }, []);
 
@@ -67,6 +82,23 @@ const Finance = () => {
         </h3>
         <p style={{ fontWeight: "700" }}>{data.bankGuarantee || "N/A"}</p>
 
+        {/* Payment Terms */}
+        {paymentTerms && (
+          <>
+            <h3
+              style={{
+                fontWeight: "700",
+                marginTop: "26px",
+                marginBottom: "8px",
+              }}
+            >
+              Payment Terms
+            </h3>
+            <p>{paymentTerms}</p>
+          </>
+        )}
+
+
 
 
 
@@ -79,27 +111,33 @@ const Finance = () => {
             </h3>
             {typeof data.keyPoints === 'object' && !Array.isArray(data.keyPoints) ? (
               // New organized structure with subheadings
-              Object.entries(data.keyPoints).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.keyPoints).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((point, idx) => (
+                      {filteredItems.map((point, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.keyPoints) && data.keyPoints.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px" }}>
-                {data.keyPoints.map((point, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredPoints = filterEMD(data.keyPoints);
+                return filteredPoints.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px" }}>
+                    {filteredPoints.map((point, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}
@@ -128,27 +166,33 @@ const Finance = () => {
             </h3>
             {typeof data.complianceRequirements === 'object' && !Array.isArray(data.complianceRequirements) ? (
               // New organized structure with subheadings
-              Object.entries(data.complianceRequirements).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.complianceRequirements).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((req, idx) => (
+                      {filteredItems.map((req, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.complianceRequirements) && data.complianceRequirements.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px" }}>
-                {data.complianceRequirements.map((req, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredReqs = filterEMD(data.complianceRequirements);
+                return filteredReqs.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px" }}>
+                    {filteredReqs.map((req, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}
@@ -161,27 +205,33 @@ const Finance = () => {
             </h3>
             {typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
               // New organized structure with subheadings
-              Object.entries(data.riskAreas).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.riskAreas).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                      {items.map((risk, idx) => (
+                      {filteredItems.map((risk, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                {data.riskAreas.map((risk, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredRisks = filterEMD(data.riskAreas);
+                return filteredRisks.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                    {filteredRisks.map((risk, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}

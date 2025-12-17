@@ -71,18 +71,30 @@ const getEditDistance = (str1, str2) => {
  * @returns {Boolean} - True if duplicates
  */
 const areDuplicates = (product1, product2, threshold = 0.85) => {
-    // Compare product names
+    // Normalize product names for comparison
+    const name1 = (product1.productName || '').toLowerCase().trim();
+    const name2 = (product2.productName || '').toLowerCase().trim();
+    
+    // CRITICAL: Exact name match (100% similarity) = always duplicate
+    // This handles cases like "Model 2" appearing multiple times with different specifications
+    if (name1 === name2 && name1.length > 0) {
+        return true; // Always merge products with exact same name
+    }
+    
+    // Compare product names using similarity
     const nameSimilarity = calculateSimilarity(
         product1.productName,
         product2.productName
     );
     
     if (nameSimilarity >= threshold) {
-        // Also check OEM if both are specified
+        // For high similarity (but not exact), check OEM if both are specified
+        // Only treat as different if OEMs are clearly different
         if (product1.oem !== 'Unspecified' && product2.oem !== 'Unspecified') {
             const oemSimilarity = calculateSimilarity(product1.oem, product2.oem);
-            // If names match but OEMs are different, they're different products
-            if (oemSimilarity < 0.5) {
+            // If names match but OEMs are very different, they might be different products
+            // But if similarity is very high (>= 0.9), still merge (might be slight OEM variation)
+            if (oemSimilarity < 0.5 && nameSimilarity < 0.95) {
                 return false;
             }
         }
@@ -90,6 +102,37 @@ const areDuplicates = (product1, product2, threshold = 0.85) => {
     }
     
     return false;
+};
+
+/**
+ * Merge specifications from multiple products
+ * @param {String} spec1 - First specification string
+ * @param {String} spec2 - Second specification string
+ * @returns {String} - Merged specifications
+ */
+const mergeSpecifications = (spec1, spec2) => {
+    if (!spec1 && !spec2) return '';
+    if (!spec1) return spec2;
+    if (!spec2) return spec1;
+    
+    // Split by common delimiters
+    const specs1 = spec1.split(/[;,\n]/).map(s => s.trim()).filter(s => s);
+    const specs2 = spec2.split(/[;,\n]/).map(s => s.trim()).filter(s => s);
+    
+    // Combine and deduplicate
+    const allSpecs = [...specs1, ...specs2];
+    const uniqueSpecs = [];
+    const seen = new Set();
+    
+    for (const spec of allSpecs) {
+        const normalized = spec.toLowerCase().trim();
+        if (!seen.has(normalized) && spec.length > 0) {
+            seen.add(normalized);
+            uniqueSpecs.push(spec);
+        }
+    }
+    
+    return uniqueSpecs.join('; ');
 };
 
 /**
@@ -122,9 +165,25 @@ const deduplicateProducts = (products, threshold = 0.85) => {
                 if (product.oem !== 'Unspecified' && uniqueProduct.oem === 'Unspecified') {
                     uniqueProduct.oem = product.oem;
                 }
-                if (product.specifications && !uniqueProduct.specifications) {
-                    uniqueProduct.specifications = product.specifications;
+                
+                // Preserve model if it's valid (prefer existing if both are valid)
+                if (product.model && product.model !== 'N/A' && product.model.trim() !== '') {
+                    if (!uniqueProduct.model || uniqueProduct.model === 'N/A' || uniqueProduct.model.trim() === '') {
+                        uniqueProduct.model = product.model;
+                    } else if (product.model.length > uniqueProduct.model.length) {
+                        // Prefer longer/more specific model names
+                        uniqueProduct.model = product.model;
+                    }
                 }
+                
+                // CRITICAL: Merge specifications instead of replacing
+                if (product.specifications || uniqueProduct.specifications) {
+                    uniqueProduct.specifications = mergeSpecifications(
+                        uniqueProduct.specifications || '',
+                        product.specifications || ''
+                    );
+                }
+                
                 if (product.confidence > uniqueProduct.confidence) {
                     uniqueProduct.confidence = product.confidence;
                 }
@@ -153,30 +212,56 @@ const deduplicateProducts = (products, threshold = 0.85) => {
 
 /**
  * Remove exact duplicates (faster check for obvious duplicates)
+ * CRITICAL: For products with same name, merge their specifications
  * @param {Array} products - Array of product objects
  * @returns {Array} - Products with exact duplicates removed
  */
 const removeExactDuplicates = (products) => {
     console.log(`🔄 Removing exact duplicates from ${products.length} products...`);
     
-    const seen = new Set();
-    const uniqueProducts = [];
+    const productMap = new Map(); // key -> product object
     let duplicateCount = 0;
     
     for (const product of products) {
-        // Create a unique key from product name and OEM
-        const key = `${product.productName.toLowerCase().trim()}|${product.oem.toLowerCase().trim()}`;
+        // Create a unique key from product name and OEM (case-insensitive)
+        const key = `${product.productName.toLowerCase().trim()}|${(product.oem || 'Unspecified').toLowerCase().trim()}`;
         
-        if (!seen.has(key)) {
-            seen.add(key);
-            uniqueProducts.push(product);
+        if (!productMap.has(key)) {
+            // First occurrence - add to map
+            productMap.set(key, { ...product });
         } else {
+            // Duplicate found - merge specifications
             duplicateCount++;
+            const existingProduct = productMap.get(key);
+            
+            // Merge specifications
+            if (product.specifications || existingProduct.specifications) {
+                existingProduct.specifications = mergeSpecifications(
+                    existingProduct.specifications || '',
+                    product.specifications || ''
+                );
+            }
+            
+            // Use better OEM if available
+            if (product.oem !== 'Unspecified' && existingProduct.oem === 'Unspecified') {
+                existingProduct.oem = product.oem;
+            }
+            
+            // Use higher confidence
+            if (product.confidence > existingProduct.confidence) {
+                existingProduct.confidence = product.confidence;
+            }
         }
     }
     
+    const uniqueProducts = Array.from(productMap.values());
+    
     console.log(`✅ Removed ${duplicateCount} exact duplicates`);
     console.log(`   Final count: ${uniqueProducts.length} unique products`);
+    
+    if (duplicateCount > 0) {
+        console.log(`   📝 Merged specifications for products with same name`);
+    }
     
     return uniqueProducts;
 };
@@ -258,6 +343,7 @@ module.exports = {
     deduplicatePipeline,
     areDuplicates,
     calculateSimilarity,
-    sortProductsByQuality
+    sortProductsByQuality,
+    mergeSpecifications
 };
 

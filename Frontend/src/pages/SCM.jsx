@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { processDepartmentData, filterEMD } from "../utils/deduplication";
 import { exportToPDF } from "../utils/pdfExport";
 
 const SCM = () => {
@@ -10,7 +11,15 @@ const SCM = () => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
       const parsed = JSON.parse(storedData);
-      setData(parsed?.data?.departmentalSummaries?.scm);
+      const scmData = parsed?.data?.departmentalSummaries?.scm;
+
+      // Process and deduplicate all list-based fields, filter N/A
+      if (scmData) {
+        const processedData = processDepartmentData(scmData);
+        setData(processedData);
+      } else {
+        setData(null);
+      }
     }
   }, []);
 
@@ -75,12 +84,75 @@ const SCM = () => {
         >
           Risk Level
         </h3>
-        <p style={{
-          fontWeight: "700",
-          color: data.riskLevel === "High" ? "#dc2626" : data.riskLevel === "Medium" ? "#d97706" : "#059669"
+        <div style={{
+          marginBottom: "12px"
         }}>
-          {data.riskLevel || "N/A"}
-        </p>
+          <p style={{
+            fontWeight: "700",
+            fontSize: "18px",
+            color: data.riskLevel === "High" ? "#dc2626" : data.riskLevel === "Medium" ? "#d97706" : "#059669",
+            marginBottom: "8px"
+          }}>
+            {data.riskLevel || "N/A"}
+          </p>
+
+          {/* Risk Level Explanation */}
+          <div style={{
+            background: data.riskLevel === "High" ? "#fee2e2" : data.riskLevel === "Medium" ? "#fef3c7" : "#d1fae5",
+            border: `1px solid ${data.riskLevel === "High" ? "#fecaca" : data.riskLevel === "Medium" ? "#fde68a" : "#a7f3d0"}`,
+            borderRadius: "8px",
+            padding: "12px 16px",
+            fontSize: "14px",
+            color: data.riskLevel === "High" ? "#991b1b" : data.riskLevel === "Medium" ? "#92400e" : "#065f46"
+          }}>
+            <p style={{ margin: "0 0 6px 0", fontWeight: "600" }}>
+              What does this mean?
+            </p>
+            {data.riskLevel === "High" && (
+              <ul style={{ margin: "0", paddingLeft: "20px" }}>
+                <li>Significant delivery constraints and timeline risks</li>
+                <li>Limited supplier availability or import dependencies</li>
+                <li>Complex logistics and procurement challenges</li>
+                <li>Requires early sourcing and contingency planning</li>
+              </ul>
+            )}
+            {data.riskLevel === "Medium" && (
+              <ul style={{ margin: "0", paddingLeft: "20px" }}>
+                <li>Moderate delivery constraints and timeline considerations</li>
+                <li>Some supplier availability concerns or import dependencies</li>
+                <li>Standard logistics with some planning required</li>
+                <li>Monitor critical items and lead times closely</li>
+              </ul>
+            )}
+            {data.riskLevel === "Low" && (
+              <ul style={{ margin: "0", paddingLeft: "20px" }}>
+                <li>Minimal delivery constraints and timeline risks</li>
+                <li>Good supplier availability and local sourcing options</li>
+                <li>Straightforward logistics and procurement</li>
+                <li>Standard procurement processes should suffice</li>
+              </ul>
+            )}
+            {(!data.riskLevel || data.riskLevel === "N/A") && (
+              <p style={{ margin: "0" }}>
+                Risk level is determined based on delivery constraints, supplier availability, import dependencies,
+                and complexity of procurement. It helps prioritize supply chain planning efforts.
+              </p>
+            )}
+          </div>
+
+          {/* Risk Factors */}
+          <div style={{
+            marginTop: "12px",
+            fontSize: "13px",
+            color: "#6b7280",
+            fontStyle: "italic"
+          }}>
+            <p style={{ margin: "0" }}>
+              <strong>Risk Factors Considered:</strong> Delivery timelines, supplier availability,
+              import dependencies, critical items count, and logistics complexity.
+            </p>
+          </div>
+        </div>
 
         {/* Sourcing Strategy */}
         <h3
@@ -114,27 +186,33 @@ const SCM = () => {
             </h3>
             {typeof data.keyPoints === 'object' && !Array.isArray(data.keyPoints) ? (
               // New organized structure with subheadings
-              Object.entries(data.keyPoints).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.keyPoints).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((point, idx) => (
+                      {filteredItems.map((point, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.keyPoints) && data.keyPoints.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px" }}>
-                {data.keyPoints.map((point, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredPoints = filterEMD(data.keyPoints);
+                return filteredPoints.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px" }}>
+                    {filteredPoints.map((point, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}
@@ -163,27 +241,33 @@ const SCM = () => {
             </h3>
             {typeof data.complianceRequirements === 'object' && !Array.isArray(data.complianceRequirements) ? (
               // New organized structure with subheadings
-              Object.entries(data.complianceRequirements).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.complianceRequirements).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {items.map((req, idx) => (
+                      {filteredItems.map((req, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.complianceRequirements) && data.complianceRequirements.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px" }}>
-                {data.complianceRequirements.map((req, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredReqs = filterEMD(data.complianceRequirements);
+                return filteredReqs.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px" }}>
+                    {filteredReqs.map((req, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}
@@ -196,27 +280,33 @@ const SCM = () => {
             </h3>
             {typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
               // New organized structure with subheadings
-              Object.entries(data.riskAreas).map(([category, items]) => (
-                items && items.length > 0 && (
+              Object.entries(data.riskAreas).map(([category, items]) => {
+                const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
+                return filteredItems && filteredItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                      {items.map((risk, idx) => (
+                      {filteredItems.map((risk, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
                       ))}
                     </ul>
                   </div>
-                )
-              ))
+                );
+              })
             ) : Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
-              // Fallback for old array structure
-              <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                {data.riskAreas.map((risk, idx) => (
-                  <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
-                ))}
-              </ul>
+              // Fallback for old array structure - filter EMD values
+              (() => {
+                const filteredRisks = filterEMD(data.riskAreas);
+                return filteredRisks.length > 0 ? (
+                  <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                    {filteredRisks.map((risk, idx) => (
+                      <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                    ))}
+                  </ul>
+                ) : null;
+              })()
             ) : null}
           </>
         )}

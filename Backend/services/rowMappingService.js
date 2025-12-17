@@ -26,7 +26,7 @@ const mapRowToProduct = async (row, headers = [], documentContext = '') => {
             ? JSON.stringify(rowData) 
             : row.join(' | ');
         
-        const model = genAI.getGenerativeModel({ 
+        const geminiModel = genAI.getGenerativeModel({ 
             model: 'gemini-2.5-flash', // Updated to 2.5-flash (1.5-flash is deprecated)
             generationConfig: {
                 temperature: 0.0, // ZERO temperature for 100% deterministic output
@@ -35,7 +35,7 @@ const mapRowToProduct = async (row, headers = [], documentContext = '') => {
             }
         });
         
-        const prompt = `You are a BOQ (Bill of Quantities) data mapper. Extract product information from this table row.
+        const prompt = `You are a BOQ (Bill of Quantities) and Product Specifications data mapper. Extract product information from this table row.
 
 **CONTEXT:** ${documentContext || 'RFP/Tender Document'}
 
@@ -46,15 +46,23 @@ ${rowText}
 
 **TASK:**
 Map this row to a structured product object. Extract:
-1. Product name (the item description)
+1. Product name (the item description, model name, or product identifier)
 2. Quantity (if present)
 3. Unit (e.g., nos, units, pcs, meters)
 4. OEM/Brand (if mentioned in row, otherwise return "Unspecified")
-5. Category (infer from product type: Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking, etc.)
-6. Specifications (any technical details)
+5. Model (extract specific model number/name if present in the row data. Look for model identifiers, product codes, or variant names. If product name is a model identifier like "Model 2", use that. If no model found, return "N/A")
+6. Category (infer from product type: Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking, etc.)
+7. Specifications (any technical details, performance metrics, features)
+
+**SPECIAL HANDLING FOR SPECIFICATION TABLES:**
+- If product name is "Model 1", "Model 2", "Model 3", etc., use that as the product name
+- Extract all specifications from the row and include them in the specifications field
+- For specification tables, the product name might be in the first column
+- Look for model numbers, product codes, or variant names
 
 **CRITICAL RULES:**
 - Product name MUST be specific and real (NEVER "N/A", "Not Applicable", "Miscellaneous")
+- Product names like "Model 1", "Model 2", "Product A", "Variant X" are VALID product names
 - If OEM/Brand not in row, return "Unspecified" (do NOT guess)
 - Category must be one of: Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking, Mechanical, Plumbing, Other
 - If this row is NOT a product (e.g., header, total, page number, footer), mark isValid as false
@@ -67,6 +75,7 @@ Map this row to a structured product object. Extract:
   "quantity": "number or string (if present)",
   "unit": "string (if present)",
   "oem": "string (OEM/brand if in row, else 'Unspecified')",
+  "model": "string (CRITICAL: Extract specific model number/name if present in row data. Look for model identifiers, product codes, variant names. If product name is a model identifier like 'Model 2', use that. If no model found, use the product name itself as the model. NEVER return 'N/A')",
   "category": "string (one of the categories above)",
   "specifications": "string (any technical details from row)",
   "isValid": true/false (false if not a product row)
@@ -74,7 +83,7 @@ Map this row to a structured product object. Extract:
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-        const result = await model.generateContent(prompt);
+        const result = await geminiModel.generateContent(prompt);
         const responseText = result.response.text();
         
         // Clean response (remove markdown code blocks if present)
@@ -93,11 +102,47 @@ Return ONLY valid JSON. No markdown, no explanation.`;
             return null; // Skip invalid rows
         }
         
+        // Extract model - ALWAYS return a model, never "N/A"
+        let model = mappedProduct.model;
+        
+        // If LLM didn't extract model, try to extract it dynamically from OEM field
+        if (!model || model === 'N/A' || model.trim() === '') {
+            if (mappedProduct.oem && mappedProduct.oem !== 'Unspecified') {
+                // Generic pattern: Look for alphanumeric model identifiers after brand name
+                const oemParts = mappedProduct.oem.split('/').map(p => p.trim());
+                for (const part of oemParts) {
+                    const words = part.split(/\s+/);
+                    if (words.length >= 2) {
+                        // Skip first word (usually brand), check remaining for model patterns
+                        for (let i = 1; i < words.length; i++) {
+                            const potentialModel = words.slice(i).join(' ');
+                            if (/[\w\-]+/.test(potentialModel) && potentialModel.length < 50 && potentialModel.length > 2) {
+                                model = potentialModel.trim();
+                                break;
+                            }
+                        }
+                    }
+                    if (model && model !== 'N/A') break;
+                }
+            }
+        }
+        
+        // If product name is a model identifier (Model 1, Model 2, etc.), use it as model
+        if ((!model || model === 'N/A' || model.trim() === '') && /^Model\s*\d+$/i.test(mappedProduct.productName)) {
+            model = mappedProduct.productName;
+        }
+        
+        // CRITICAL: Never return "N/A" - use product name as fallback if needed
+        if (!model || model === 'N/A' || model.trim() === '') {
+            model = mappedProduct.productName || 'Standard Model';
+        }
+        
         return {
             productName: mappedProduct.productName,
             quantity: mappedProduct.quantity || 'N/A',
             unit: mappedProduct.unit || 'N/A',
             oem: mappedProduct.oem || 'Unspecified',
+            model: model,
             category: mappedProduct.category || 'Other',
             specifications: mappedProduct.specifications || '',
             miiStatus: 'Pending Classification', // Will be classified later

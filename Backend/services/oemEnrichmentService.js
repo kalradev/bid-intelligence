@@ -14,6 +14,7 @@
 
 const { classifyMIIStatus, getCategoryOEMs, getAllIndianOEMs, getAllGlobalOEMs } = require('../data/miiDatabase');
 const { findModelForOEM, findModelsForMultipleOEMs, getQuickModelFallback } = require('./modelMatchingService');
+const { inferOEMFromSpecs, inferModelFromSpecs } = require('./specificationAnalyzer');
 
 /**
  * Generate deterministic hash from string (for consistent OEM selection)
@@ -484,12 +485,23 @@ const searchWithWebScraping = async (query, category, productName = '') => {
         }
         
         // ✅ SELECT 2-3 OPTIONS (deterministic based on product name)
+        // Always provide 2-3 OEM options for flexibility
         const hash = simpleHash(productName || query);
-        const option1 = options[hash % options.length];
-        const option2 = options[(hash + 1) % options.length];
-        const option3 = options[(hash + 2) % options.length];
+        const numOptions = Math.min(3, options.length); // Get 2-3 options
+        const selectedOptions = [];
         
-        const selectedOptions = [option1, option2, option3];
+        for (let i = 0; i < numOptions; i++) {
+            const index = (hash + i) % options.length;
+            if (!selectedOptions.includes(options[index])) {
+                selectedOptions.push(options[index]);
+            }
+        }
+        
+        // Ensure we have at least 2 options
+        if (selectedOptions.length < 2 && options.length >= 2) {
+            selectedOptions.push(options[(hash + selectedOptions.length) % options.length]);
+        }
+        
         const oemOptions = selectedOptions.join(' / ');
         
         // ✅ SMART CLASSIFICATION - Check all options, not just first
@@ -857,6 +869,13 @@ const enrichProducts = async (products) => {
                 };
             }
             
+            // ✅ STEP 1: Try to infer OEM from specifications FIRST (for specification tables)
+            const specsInferredOEM = inferOEMFromSpecs(product.specifications || '', product.productName);
+            if (specsInferredOEM && (!product.oem || product.oem === 'Unspecified' || product.oem === 'N/A')) {
+                console.log(`   🎯 Inferred OEM from specifications: ${specsInferredOEM.oem} (${specsInferredOEM.confidence}% confidence)`);
+                product.oem = specsInferredOEM.oem;
+            }
+            
             // Skip if OEM is already specified and properly classified
             if (product.oem && 
                 product.oem !== 'Unspecified' && 
@@ -869,41 +888,89 @@ const enrichProducts = async (products) => {
                 // Check if multiple OEMs (contains " / ")
                 const isMultipleOEMs = product.oem.includes(' / ');
                 
-                // Find matching model(s) for this OEM
+                // ✅ STEP 2: Try to infer model from specifications FIRST
                 let modelInfo = null;
-                try {
-                    if (isMultipleOEMs) {
-                        // Handle multiple OEMs - find model for each
-                        modelInfo = await findModelsForMultipleOEMs(
-                            product.productName,
-                            product.oem,
-                            product.specifications || '',
-                            product.category || 'Other'
-                        );
-                    } else {
-                        // Single OEM - find one model
-                        modelInfo = await findModelForOEM(
-                            product.productName,
-                            product.oem,
-                            product.specifications || '',
-                            product.category || 'Other'
-                        );
+                const specsInferredModel = await inferModelFromSpecs(
+                    product.specifications || '',
+                    product.oem.split(' / ')[0], // Use first OEM for inference
+                    product.productName
+                );
+                
+                if (specsInferredModel && specsInferredModel.model) {
+                    console.log(`   🎯 Inferred model from specifications: ${specsInferredModel.model} (${specsInferredModel.confidence}% confidence)`);
+                    modelInfo = specsInferredModel;
+                } else {
+                    // Fallback to standard model matching
+                    try {
+                        if (isMultipleOEMs) {
+                            // Handle multiple OEMs - find model for each (2-3 OEMs with models)
+                            modelInfo = await findModelsForMultipleOEMs(
+                                product.productName,
+                                product.oem,
+                                product.specifications || '',
+                                product.category || 'Other'
+                            );
+                        } else {
+                            // Single OEM - find one model
+                            modelInfo = await findModelForOEM(
+                                product.productName,
+                                product.oem,
+                                product.specifications || '',
+                                product.category || 'Other'
+                            );
+                        }
+                    } catch (modelError) {
+                        console.warn(`   ⚠️ Model matching failed, using intelligent fallback`);
+                        modelInfo = {
+                            model: getQuickModelFallback(product.productName, product.oem, product.category),
+                            confidence: 60,
+                            source: 'quick-fallback'
+                        };
                     }
-                } catch (modelError) {
-                    console.warn(`   ⚠️ Model matching failed, using fallback`);
-                    modelInfo = {
-                        model: getQuickModelFallback(product.productName, product.oem, product.category),
-                        confidence: 60,
-                        source: 'quick-fallback'
-                    };
+                }
+                
+                // ✅ CRITICAL: If product name is generic (Model 2, Model 1, etc.), NEVER use it as model
+                // Always replace with actual model number from specifications
+                const isGenericProductName = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.productName || '');
+                const existingModel = product.model && 
+                                    product.model !== 'N/A' && 
+                                    product.model.trim() !== '' &&
+                                    !isGenericProductName && // Don't use if it's a generic name
+                                    !/^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.model);
+                
+                // CRITICAL: Always return a model, never "N/A" or "Standard Model" or generic names
+                let finalModel = null;
+                
+                if (isGenericProductName && modelInfo && modelInfo.model) {
+                    // Product name is generic - ALWAYS use the inferred model from specifications
+                    console.log(`   ✅ Replacing generic product name "${product.productName}" with actual model: ${modelInfo.model}`);
+                    finalModel = modelInfo.model;
+                } else if (existingModel) {
+                    // Use existing model if it's not generic
+                    finalModel = product.model;
+                } else if (modelInfo && modelInfo.model) {
+                    // Use inferred model
+                    finalModel = modelInfo.model;
+                } else {
+                    // Fallback
+                    finalModel = getQuickModelFallback(product.productName, product.oem, product.category);
+                }
+                
+                // Ensure model is never empty, generic, or "N/A"
+                if (!finalModel || 
+                    finalModel === 'N/A' || 
+                    finalModel.toLowerCase().includes('standard model') ||
+                    /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(finalModel)) {
+                    // Last resort fallback
+                    finalModel = getQuickModelFallback(product.productName, product.oem, product.category);
                 }
                 
                 return {
                     ...product,
                     miiStatus: miiStatus,
-                    model: modelInfo?.model || `${product.oem} Standard Model`,
-                    modelConfidence: modelInfo?.confidence || 60,
-                    modelSource: modelInfo?.source || 'fallback',
+                    model: finalModel,
+                    modelConfidence: existingModel ? 90 : (modelInfo?.confidence || 60),
+                    modelSource: existingModel ? 'product-name' : (modelInfo?.source || 'fallback'),
                     bestModel: modelInfo?.bestModel,
                     bestOEM: modelInfo?.bestOEM,
                     allModels: modelInfo?.allModels,
@@ -922,38 +989,125 @@ const enrichProducts = async (products) => {
                 ? oemInfo.oem 
                 : getCategoryOEMs(product.category || 'Unknown').global[0] || 'Cisco';
             
+            // ✅ STEP 4: For generic product names with specifications, ALWAYS infer model from specs
+            let finalModelInfo = null;
+            if (hasSpecs && isGenericProductName && finalOEM) {
+                console.log(`   🔍 Generic product name detected - inferring model from specifications...`);
+                const specsInferredModel = await inferModelFromSpecs(
+                    product.specifications,
+                    finalOEM.split(' / ')[0], // Use first OEM
+                    product.productName
+                );
+                
+                if (specsInferredModel && specsInferredModel.model) {
+                    console.log(`   ✅ Found actual model from specs: ${specsInferredModel.model}`);
+                    finalModelInfo = specsInferredModel;
+                } else {
+                    // Try standard model matching
+                    try {
+                        finalModelInfo = await findModelForOEM(
+                            product.productName,
+                            finalOEM,
+                            product.specifications,
+                            product.category || 'Other'
+                        );
+                    } catch (e) {
+                        console.warn(`   ⚠️ Model matching failed`);
+                    }
+                }
+            } else {
+                // Standard model matching for non-generic products
+                try {
+                    if (finalOEM.includes(' / ')) {
+                        finalModelInfo = await findModelsForMultipleOEMs(
+                            product.productName,
+                            finalOEM,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    } else {
+                        finalModelInfo = await findModelForOEM(
+                            product.productName,
+                            finalOEM,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    }
+                } catch (e) {
+                    console.warn(`   ⚠️ Model matching failed`);
+                }
+            }
+            
             // ✅ ENSURE MII STATUS IS VALID
             const finalMiiStatus = oemInfo.miiStatus && oemInfo.miiStatus !== 'Requires Review'
                 ? oemInfo.miiStatus
                 : classifyMIIStatus(finalOEM, product.category || '');
             
-            // ✅ FIND MODEL for searched OEM (check if multiple)
-            const isMultipleOEMs = finalOEM.includes(' / ');
-            let modelInfo = null;
-            try {
-                if (isMultipleOEMs) {
-                    // Handle multiple OEMs - find model for each
-                    modelInfo = await findModelsForMultipleOEMs(
-                        product.productName,
-                        finalOEM,
-                        product.specifications || '',
-                        product.category || 'Other'
-                    );
-                } else {
-                    // Single OEM - find one model
-                    modelInfo = await findModelForOEM(
-                        product.productName,
-                        finalOEM,
-                        product.specifications || '',
-                        product.category || 'Other'
-                    );
+            // ✅ Use finalModelInfo if we already found it (for generic products with specs)
+            let modelInfo = finalModelInfo;
+            
+            // If we don't have modelInfo yet, find it
+            if (!modelInfo) {
+                const isMultipleOEMs = finalOEM.includes(' / ');
+                try {
+                    if (isMultipleOEMs) {
+                        modelInfo = await findModelsForMultipleOEMs(
+                            product.productName,
+                            finalOEM,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    } else {
+                        modelInfo = await findModelForOEM(
+                            product.productName,
+                            finalOEM,
+                            product.specifications || '',
+                            product.category || 'Other'
+                        );
+                    }
+                } catch (modelError) {
+                    console.warn(`   ⚠️ Model matching failed, using intelligent fallback`);
+                    modelInfo = {
+                        model: getQuickModelFallback(product.productName, finalOEM, product.category),
+                        confidence: 60,
+                        source: 'quick-fallback'
+                    };
                 }
-            } catch (modelError) {
-                modelInfo = {
-                    model: getQuickModelFallback(product.productName, finalOEM, product.category),
-                    confidence: 60,
-                    source: 'quick-fallback'
-                };
+            }
+            
+            // ✅ CRITICAL: If product name is generic, NEVER use it as model - always use inferred model
+            const isGenericProductName = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.productName || '');
+            const existingModel = product.model && 
+                                product.model !== 'N/A' && 
+                                product.model.trim() !== '' &&
+                                !isGenericProductName && // Don't use if it's a generic name
+                                !/^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.model);
+            
+            // CRITICAL: Always return a model, never "N/A" or "Standard Model" or generic names
+            let finalModel = null;
+            
+            if (isGenericProductName && modelInfo && modelInfo.model) {
+                // Product name is generic - ALWAYS use the inferred model from specifications
+                console.log(`   ✅ Replacing generic product name "${product.productName}" with actual model: ${modelInfo.model}`);
+                finalModel = modelInfo.model;
+            } else if (existingModel) {
+                // Use existing model if it's not generic
+                finalModel = product.model;
+            } else if (modelInfo && modelInfo.model) {
+                // Use inferred model
+                finalModel = modelInfo.model;
+            } else {
+                // Fallback
+                finalModel = getQuickModelFallback(product.productName, finalOEM, product.category);
+            }
+            
+            // Ensure model is never empty, generic, or "N/A"
+            if (!finalModel || 
+                finalModel === 'N/A' || 
+                finalModel.toLowerCase().includes('standard model') ||
+                /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(finalModel)) {
+                // Last resort fallback
+                finalModel = getQuickModelFallback(product.productName, finalOEM, product.category);
             }
             
             return {
@@ -961,9 +1115,9 @@ const enrichProducts = async (products) => {
                 productName: product.productName,
                 category: product.category || 'Unknown',
                 oem: finalOEM,
-                model: modelInfo?.model || `${finalOEM} Standard Model`,
-                modelConfidence: modelInfo?.confidence || 60,
-                modelSource: modelInfo?.source || 'web-search-matched',
+                model: finalModel,
+                modelConfidence: existingModel ? 90 : (modelInfo?.confidence || 60),
+                modelSource: existingModel ? 'product-name' : (modelInfo?.source || 'web-search-matched'),
                 bestModel: modelInfo?.bestModel,
                 bestOEM: modelInfo?.bestOEM,
                 allModels: modelInfo?.allModels,
