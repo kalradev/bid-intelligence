@@ -89,6 +89,52 @@ const Commercial = () => {
         </h3>
         <p>{data.penalties || "N/A"}</p>
 
+        {/* Pricing Appointment */}
+        {data.pricingAppointment && Array.isArray(data.pricingAppointment) && data.pricingAppointment.length > 0 && (
+          <>
+            <h3
+              style={{
+                fontWeight: "700",
+                marginTop: "26px",
+                marginBottom: "12px",
+              }}
+            >
+              Pricing Appointment
+            </h3>
+            <div style={{ background: "#e0f2fe", padding: "15px", borderRadius: "8px" }}>
+              {data.pricingAppointment.map((appointment, idx) => (
+                <div key={idx} style={{ marginBottom: idx < data.pricingAppointment.length - 1 ? "16px" : "0", paddingBottom: idx < data.pricingAppointment.length - 1 ? "16px" : "0", borderBottom: idx < data.pricingAppointment.length - 1 ? "1px solid #bae6fd" : "none" }}>
+                  {appointment.event && (
+                    <p style={{ marginBottom: "8px", fontWeight: "600", fontSize: "16px" }}>
+                      <strong>Event:</strong> {appointment.event}
+                    </p>
+                  )}
+                  {appointment.date && (
+                    <p style={{ marginBottom: "4px" }}>
+                      <strong>Date:</strong> {appointment.date}
+                    </p>
+                  )}
+                  {appointment.time && (
+                    <p style={{ marginBottom: "4px" }}>
+                      <strong>Time:</strong> {appointment.time}
+                    </p>
+                  )}
+                  {appointment.location && (
+                    <p style={{ marginBottom: "4px" }}>
+                      <strong>Location:</strong> {appointment.location}
+                    </p>
+                  )}
+                  {appointment.notes && (
+                    <p style={{ marginBottom: "0", fontStyle: "italic", color: "#6b7280" }}>
+                      <strong>Notes:</strong> {appointment.notes}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* Pricing Bid */}
         {data.pricingBid && (
           <>

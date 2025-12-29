@@ -6,7 +6,17 @@ Sure — here is the **full README.md in one copy-paste block** (no explanation 
 # 📌 Bid-Intelligence.ai — RFP Analysis & Bid Management Platform
 
 Bid-Intelligence.ai is an AI-powered platform that automates the extraction, analysis, and cost estimation of **RFP (Request for Proposal) documents**.  
-Users upload bid documents, and the system processes them through the **OpenAI API** to generate summaries, departmental insights, and bid-management support.
+Users upload bid documents, and the system processes them through AI providers (OpenAI / Gemini) to generate summaries, departmental insights, and bid-management support.
+
+---
+
+## 📚 Main Documentation (Start Here)
+
+- `QUICK_START.md` – install, configure AI keys, run backend + frontend, optional PostgreSQL.
+- `IMPLEMENTATION_SUMMARY.md` – technical overview of deterministic BOQ, OEM/model enrichment, and the processing pipeline.
+- `SECURITY_MEASURES.md` – security hardening, data handling, and deployment considerations.
+
+You can treat these as the **main docs**; other `.md` files are detailed/internal notes.
 
 ---
 
@@ -102,33 +112,9 @@ README.md
 
 ---
 
-## 🚀 Setup Instructions
+## 🚀 Setup & Running
 
-### 1️⃣ Backend Setup
-```bash
-cd backend
-npm install
-cp .env.example .env   # enter API keys and DB credentials
-npm start
-````
-
-### 2️⃣ Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-### 3️⃣ Required Environment Variables (`.env`)
-
-```
-OPENAI_API_KEY=
-DATABASE_URL=
-CLOUD_STORAGE_KEY=
-CLOUD_STORAGE_SECRET=
-AUTH_PROVIDER_KEY=
-```
+For complete, up‑to‑date setup instructions (backend, frontend, AI keys, optional PostgreSQL), see **`QUICK_START.md`**.
 
 ---
 
@@ -197,15 +183,4 @@ AUTH_PROVIDER_KEY=
 
 If you use or enhance this project, ⭐ starring the repository is appreciated!
 
-```
-
----
-
-If you'd like, I can also generate:
-✔ Setup screenshots  
-✔ API request/response samples  
-✔ Swagger documentation  
-✔ a **LICENSE** file  
-
-Just tell me what you want next 🚀
 ```

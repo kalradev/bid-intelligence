@@ -14,6 +14,7 @@ console.log('📦 Variables loaded:', Object.keys(envConfig).length);
 const express = require('express');
 const cors = require('cors');
 const rfpRoutes = require('./routes/rfpRoutes');
+const exactReferenceRoutes = require('./routes/exactReferenceRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -26,6 +27,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/rfp', rfpRoutes);
+app.use('/api/reference', exactReferenceRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -48,12 +50,10 @@ app.listen(PORT, () => {
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`\n🔑 API Key Status:`);
     console.log(`   OpenAI: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
-    console.log(`   Gemini: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '❌ Missing'}`);
     
     // Debug: Show what dotenv loaded
     console.log(`\n📋 Environment Variables Loaded:`);
     console.log(`   OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? 'Present (length: ' + process.env.OPENAI_API_KEY.length + ')' : 'MISSING'}`);
-    console.log(`   GEMINI_API_KEY: ${process.env.GEMINI_API_KEY ? 'Present (length: ' + process.env.GEMINI_API_KEY.length + ')' : 'MISSING'}`);
     console.log(`   PORT: ${process.env.PORT}`);
     console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
     console.log(`   MAX_FILE_SIZE_MB: ${process.env.MAX_FILE_SIZE_MB}`);

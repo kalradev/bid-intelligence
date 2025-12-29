@@ -1,19 +1,16 @@
 /**
- * Unified AI Service - OpenAI Primary with Gemini Fallback
+ * Unified AI Service - OpenAI Only
  * 
- * Priority: OpenAI → Gemini
- * Automatically switches to Gemini if OpenAI quota exceeded
+ * Uses OpenAI API for all AI operations (paid account with generous limits)
  */
 
 const OpenAI = require('openai');
-const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const { getAllIndianOEMs, getAllGlobalOEMs } = require('../data/miiDatabase');
 
-// Initialize AI clients conditionally
+// Initialize OpenAI client
 let openai = null;
-let genAI = null;
 
-// Initialize OpenAI only if API key exists
+// Initialize OpenAI - API key is required
 if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '') {
     try {
         openai = new OpenAI({
@@ -21,39 +18,34 @@ if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '') {
         });
         console.log('✅ OpenAI client initialized');
     } catch (error) {
-        console.warn('⚠️  OpenAI initialization failed:', error.message);
+        console.error('❌ OpenAI initialization failed:', error.message);
+        throw new Error('OpenAI client initialization failed. Please check your OPENAI_API_KEY.');
     }
 } else {
-    console.warn('⚠️  OPENAI_API_KEY not found in .env - will use Gemini only');
-}
-
-// Initialize Gemini
-if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    console.log('✅ Gemini client initialized');
-} else {
-    console.error('❌ GEMINI_API_KEY not found in .env');
+    console.error('❌ OPENAI_API_KEY not found in .env');
+    throw new Error('OPENAI_API_KEY is required but not found in environment variables.');
 }
 
 // Configuration
 const OPENAI_MODEL = 'gpt-4o-mini'; // Cost-effective model
-const GEMINI_MODEL = 'gemini-2.0-flash-exp';
 const TEMPERATURE = 0.3;
 const MAX_TOKENS_OPENAI = 16384;
-const MAX_TOKENS_GEMINI = 8192;
 
-// Chunking configuration - Increased for faster processing
+// Chunking configuration
 const CHUNK_SIZE_OPENAI = 150000; // ~37.5k tokens per chunk for OpenAI (128k context window supports this)
-const CHUNK_SIZE_GEMINI = 120000; // ~30k tokens per chunk for Gemini (1M context window supports this)
 const MAX_CONTEXT_OPENAI = 100000; // ~25k tokens, safe limit for input (128k total - output buffer)
 
 /**
- * Generate departmental summaries using AI (OpenAI → Gemini fallback)
+ * Generate departmental summaries using OpenAI
  * @param {String} documentText - Extracted document text
  * @param {String} fileName - Original file name
  * @returns {Promise<Object>} - Departmental summaries
  */
 const generateDepartmentalSummaries = async (documentText, fileName) => {
+    if (!openai) {
+        throw new Error('OpenAI client not initialized. Please check your OPENAI_API_KEY.');
+    }
+    
     const systemPrompt = `You are an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
 
 FOCUS: Extract UNIQUE, SPECIFIC information needed to WIN the bid.
@@ -147,46 +139,19 @@ For bidManagement.riskFactors.certifications: Extract ALL mentions of:
     const estimatedTokens = estimateTokens(documentText);
     const documentTooLarge = estimatedTokens > 25000; // ~100k characters
     
-    // Try OpenAI first (if available)
-    if (openai) {
-        try {
-            if (documentTooLarge) {
-                console.log(`⚡ Large document (${estimatedTokens} tokens), using OpenAI chunking strategy...`);
-                return await processLargeDocument(documentText, fileName, 'openai');
-            }
-            
-            console.log('🤖 Attempting with OpenAI (gpt-4o-mini)...');
-            const result = await generateWithOpenAI(systemPrompt, userPrompt);
-            console.log('✅ OpenAI generation successful');
-            return result;
-        } catch (openaiError) {
-            console.warn('⚠️  OpenAI failed:', openaiError.message);
-            
-            // Check if it's a quota/rate limit error
-            if (isQuotaError(openaiError)) {
-                console.log('💡 OpenAI quota exceeded. Falling back to Gemini...');
-            } else {
-                console.log('💡 OpenAI error. Falling back to Gemini...');
-            }
-        }
-    } else {
-        console.log('💡 OpenAI not configured. Using Gemini...');
-    }
-    
-    // Use Gemini (either as fallback or primary)
     try {
         if (documentTooLarge) {
-            console.log(`⚡ Large document (${estimatedTokens} tokens), using Gemini chunking strategy...`);
-            return await processLargeDocument(documentText, fileName, 'gemini');
+            console.log(`⚡ Large document (${estimatedTokens} tokens), using OpenAI chunking strategy...`);
+            return await processLargeDocument(documentText, fileName);
         }
         
-        console.log('🤖 Attempting with Gemini (gemini-2.0-flash-exp)...');
-        const result = await generateWithGemini(systemPrompt, userPrompt, documentText, fileName);
-        console.log('✅ Gemini generation successful');
+        console.log('🤖 Generating summaries with OpenAI (gpt-4o-mini)...');
+        const result = await generateWithOpenAI(systemPrompt, userPrompt);
+        console.log('✅ OpenAI generation successful');
         return result;
-    } catch (geminiError) {
-        console.error('❌ Gemini failed:', geminiError.message);
-        throw new Error(`AI generation failed: ${geminiError.message}`);
+    } catch (error) {
+        console.error('❌ OpenAI generation failed:', error.message);
+        throw new Error(`AI generation failed: ${error.message}`);
     }
 };
 
@@ -222,90 +187,6 @@ const generateWithOpenAI = async (systemPrompt, userPrompt) => {
         model: OPENAI_MODEL,
         provider: 'openai'
     };
-};
-
-/**
- * Generate summaries using Gemini
- */
-const generateWithGemini = async (systemPrompt, userPrompt, documentText, fileName) => {
-    const estimatedTokens = estimateTokens(documentText);
-    
-    const model = genAI.getGenerativeModel({ 
-        model: GEMINI_MODEL,
-        generationConfig: {
-            temperature: TEMPERATURE,
-            maxOutputTokens: MAX_TOKENS_GEMINI,
-            responseMimeType: "application/json"
-        },
-        safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ]
-    });
-
-    const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    
-    // Check for MAX_TOKENS truncation
-    if (response.candidates && response.candidates[0]) {
-        const finishReason = response.candidates[0].finishReason;
-        if (finishReason === 'MAX_TOKENS') {
-            console.warn('⚠️  Response truncated due to MAX_TOKENS. Attempting JSON repair...');
-        }
-    }
-    
-    let responseText = response.text().trim();
-    
-    // Clean markdown code blocks
-    if (responseText.startsWith('```json')) {
-        responseText = responseText.replace(/^```json\s*/i, '').replace(/\s*```$/, '');
-    } else if (responseText.startsWith('```')) {
-        responseText = responseText.replace(/^```\s*/, '').replace(/\s*```$/, '');
-    }
-    
-    responseText = responseText.trim();
-    
-    let summaries;
-    try {
-        summaries = JSON.parse(responseText);
-    } catch (parseError) {
-        console.warn('JSON Parse Error, attempting repair:', parseError.message);
-        try {
-            const repairedText = repairTruncatedJSON(responseText);
-            summaries = JSON.parse(repairedText);
-            console.log('✓ JSON repaired successfully');
-        } catch (repairError) {
-            throw new Error(`Failed to parse Gemini response: ${parseError.message}`);
-        }
-    }
-
-    return {
-        summaries,
-        usage: {
-            promptTokens: estimatedTokens,
-            completionTokens: estimateTokens(responseText),
-            totalTokens: estimatedTokens + estimateTokens(responseText)
-        },
-        model: GEMINI_MODEL,
-        provider: 'gemini'
-    };
-};
-
-/**
- * Check if error is due to quota/rate limits
- */
-const isQuotaError = (error) => {
-    const errorMessage = error.message.toLowerCase();
-    return (
-        errorMessage.includes('quota') ||
-        errorMessage.includes('rate limit') ||
-        errorMessage.includes('insufficient_quota') ||
-        error.status === 429 ||
-        error.code === 'insufficient_quota'
-    );
 };
 
 /**
@@ -697,21 +578,24 @@ WRONG Extraction (DO NOT DO THIS):
 };
 
 /**
- * Process large documents with chunking (OpenAI and Gemini)
+ * Process large documents with chunking (OpenAI only)
  * @param {String} documentText - Document text to chunk
  * @param {String} fileName - File name
- * @param {String} provider - 'openai' or 'gemini'
  */
-const processLargeDocument = async (documentText, fileName, provider = 'gemini') => {
-    // Use different chunk sizes based on provider
-    const chunkSize = provider === 'openai' ? CHUNK_SIZE_OPENAI : CHUNK_SIZE_GEMINI;
+const processLargeDocument = async (documentText, fileName) => {
+    if (!openai) {
+        throw new Error('OpenAI client not initialized. Please check your OPENAI_API_KEY.');
+    }
+    
+    // Use OpenAI chunk size
+    const chunkSize = CHUNK_SIZE_OPENAI;
     const chunks = [];
 
     for (let i = 0; i < documentText.length; i += chunkSize) {
         chunks.push(documentText.slice(i, i + chunkSize));
     }
 
-    console.log(`📄 Processing large document with ${provider.toUpperCase()} in ${chunks.length} chunks (${chunkSize} chars each)...`);
+    console.log(`📄 Processing large document with OpenAI in ${chunks.length} chunks (${chunkSize} chars each)...`);
 
     const chunkResults = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -814,12 +698,8 @@ For bidManagement.riskFactors.certifications: Extract ALL mentions of:
 
                 const userPrompt = buildUserPrompt(chunks[i], `${fileName} (Part ${i + 1}/${chunks.length})`);
                 
-                let result;
-                if (provider === 'openai' && openai) {
-                    result = await generateWithOpenAI(systemPrompt, userPrompt);
-                } else {
-                    result = await generateWithGemini(systemPrompt, userPrompt, chunks[i], `${fileName} (Part ${i + 1}/${chunks.length})`);
-                }
+                // Use OpenAI for all chunks
+                const result = await generateWithOpenAI(systemPrompt, userPrompt);
                 
                 chunkResults.push(result.summaries);
                 success = true;
@@ -853,8 +733,8 @@ For bidManagement.riskFactors.certifications: Extract ALL mentions of:
         summaries: finalSummaries,
         chunked: true,
         chunkCount: chunks.length,
-        model: provider === 'openai' ? OPENAI_MODEL : GEMINI_MODEL,
-        provider: provider
+        model: OPENAI_MODEL,
+        provider: 'openai'
     };
 };
 

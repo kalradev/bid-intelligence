@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, ExternalLink, FileText } from "lucide-react";
+import PageViewer from "./PageViewer";
 
 interface SourceReference {
   pageNumber?: string;
   fileName?: string;
   snippet?: string;
   relevance?: number;
+  query?: string;
 }
 
 interface SourceReferenceModalProps {
@@ -24,6 +26,16 @@ export default function SourceReferenceModal({
   isLoading = false,
 }: SourceReferenceModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const [pageViewer, setPageViewer] = useState<{
+    isOpen: boolean;
+    fileHash: string;
+    pageNumber: number;
+    query?: string;
+  }>({
+    isOpen: false,
+    fileHash: '',
+    pageNumber: 0,
+  });
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -61,7 +73,9 @@ export default function SourceReferenceModal({
 
   if (!isOpen) return null;
 
-  const handlePageClick = (pageNumber: string, fileName?: string) => {
+  const handlePageClick = (pageNumber: string, fileName?: string, queryText?: string) => {
+    console.log('🔍 handlePageClick called:', { pageNumber, fileName, queryText });
+    
     const currentDoc = localStorage.getItem("currentDocument");
     let fileHash = null;
     let docFileName = fileName;
@@ -71,6 +85,7 @@ export default function SourceReferenceModal({
         const doc = JSON.parse(currentDoc);
         fileHash = doc.fileHash;
         docFileName = docFileName || doc.fileName;
+        console.log('✅ Found fileHash from currentDocument:', fileHash?.substring(0, 16));
       } catch (e) {
         console.error("Error parsing currentDocument:", e);
       }
@@ -84,6 +99,7 @@ export default function SourceReferenceModal({
           const rfp = JSON.parse(recentRfp);
           fileHash = rfp.fileHash;
           docFileName = docFileName || rfp.fileName || "document.pdf";
+          console.log('✅ Found fileHash from recentRfpAnalysis:', fileHash?.substring(0, 16));
         } catch (e) {
           console.error("Error parsing recentRfpAnalysis:", e);
         }
@@ -98,20 +114,44 @@ export default function SourceReferenceModal({
           const data = JSON.parse(analysisData);
           fileHash = data?.data?.fileHash;
           docFileName = docFileName || data?.data?.fileName || "document.pdf";
+          console.log('✅ Found fileHash from analysisData:', fileHash?.substring(0, 16));
         } catch (e) {
           console.error("Error parsing analysisData:", e);
         }
       }
     }
     
-    if (fileHash) {
-      // Open PDF directly in browser's native viewer with page anchor
-      const directPdfUrl = `http://localhost:3000/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(docFileName || "document.pdf")}#page=${pageNumber}`;
-      window.open(directPdfUrl, "_blank", "noopener,noreferrer");
-    } else {
-      console.error("No document found in localStorage");
+    if (!fileHash) {
+      console.error("❌ No fileHash found in localStorage");
+      console.error("   Checked: currentDocument, recentRfpAnalysis, analysisData");
       alert("No document found. Please upload and analyze an RFP document first.");
+      return;
     }
+    
+    const pageNum = parseInt(pageNumber);
+    if (isNaN(pageNum) || pageNum <= 0) {
+      console.error("❌ Invalid page number:", pageNumber);
+      alert(`Invalid page number: ${pageNumber}`);
+      return;
+    }
+    
+    // Ensure fileHash is clean (no extra data)
+    const cleanFileHash = fileHash.trim().split('?')[0].split('/').pop() || fileHash.trim();
+    
+    console.log('📄 Opening page viewer:', { 
+      originalFileHash: fileHash.substring(0, 20), 
+      cleanFileHash: cleanFileHash.substring(0, 20),
+      pageNumber: pageNum, 
+      query: queryText || query 
+    });
+    
+    // Open page viewer with highlight
+    setPageViewer({
+      isOpen: true,
+      fileHash: cleanFileHash,
+      pageNumber: pageNum,
+      query: queryText || query || undefined,
+    });
   };
 
   return (
@@ -335,7 +375,15 @@ export default function SourceReferenceModal({
                       </div>
                       {source.pageNumber && (
                         <button
-                          onClick={() => handlePageClick(source.pageNumber!, source.fileName)}
+                          onClick={() => {
+                            console.log('🔘 Page button clicked:', { 
+                              pageNumber: source.pageNumber, 
+                              fileName: source.fileName, 
+                              query: query,
+                              source: source 
+                            });
+                            handlePageClick(source.pageNumber!, source.fileName, query);
+                          }}
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -426,6 +474,15 @@ export default function SourceReferenceModal({
           }
         }
       `}</style>
+      
+      {/* Page Viewer */}
+      <PageViewer
+        isOpen={pageViewer.isOpen}
+        onClose={() => setPageViewer({ isOpen: false, fileHash: '', pageNumber: 0 })}
+        fileHash={pageViewer.fileHash}
+        pageNumber={pageViewer.pageNumber}
+        query={pageViewer.query}
+      />
     </>
   );
 }

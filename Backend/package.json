@@ -34,6 +34,7 @@
     "multer": "^2.0.2",
     "openai": "^6.9.1",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.16.3",
     "tesseract.js": "^5.1.1",
     "textract": "^2.5.0",
     "xlsx": "^0.18.5"
