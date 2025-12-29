@@ -8,3 +8,16 @@ uploads/
 *.pdf
 *.docx
 *.doc
+# Runtime / generated data
+Backend/data/pageTexts/
+Backend/Backend/data/pageTexts/
+*.db
+*.db-shm
+*.db-wal
+
+# OCR / ML assets (download at runtime)
+*.traineddata
+
+# Uploads / temp
+uploads/
+data/temp/
