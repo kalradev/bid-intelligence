@@ -1,0 +1,16 @@
+langchain==0.3.26
+flask==3.1.1 
+flask-cors==4.0.0
+sentence-transformers==4.1.0
+pypdf==5.6.1 
+python-dotenv==1.1.0
+pinecone>=5.0.0
+langchain-pinecone==0.2.8 
+langchain-openai==0.3.24
+langchain-community==0.3.26
+langchain-core>=0.3.75,<0.3.77
+langchain-text-splitters>=0.3.0
+numpy>=1.26.4
+requests>=2.31.0
+chromadb>=0.4.22
+-e .
