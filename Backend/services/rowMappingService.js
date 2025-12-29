@@ -1,7 +1,10 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 require('dotenv').config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
 /**
  * Map a single BOQ row to structured product schema using LLM
@@ -26,16 +29,9 @@ const mapRowToProduct = async (row, headers = [], documentContext = '') => {
             ? JSON.stringify(rowData) 
             : row.join(' | ');
         
-        const geminiModel = genAI.getGenerativeModel({ 
-            model: 'gemini-2.5-flash', // Updated to 2.5-flash (1.5-flash is deprecated)
-            generationConfig: {
-                temperature: 0.0, // ZERO temperature for 100% deterministic output
-                topP: 1.0,
-                topK: 1
-            }
-        });
+        const systemPrompt = `You are a BOQ (Bill of Quantities) and Product Specifications data mapper. Your task is to extract product information from table rows and map them to structured product objects.`;
         
-        const prompt = `You are a BOQ (Bill of Quantities) and Product Specifications data mapper. Extract product information from this table row.
+        const userPrompt = `Extract product information from this table row.
 
 **CONTEXT:** ${documentContext || 'RFP/Tender Document'}
 
@@ -83,10 +79,20 @@ Map this row to a structured product object. Extract:
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-        const result = await geminiModel.generateContent(prompt);
-        const responseText = result.response.text();
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini', // Using GPT-4o-mini for cost efficiency
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.0, // ZERO temperature for 100% deterministic output
+            max_tokens: 1000,
+            response_format: { type: 'json_object' }
+        });
         
-        // Clean response (remove markdown code blocks if present)
+        const responseText = completion.choices[0].message.content;
+        
+        // OpenAI returns JSON directly when response_format is json_object, but clean it anyway
         const cleanedResponse = responseText
             .replace(/```json\n?/g, '')
             .replace(/```\n?/g, '')

@@ -10,40 +10,16 @@ export default function ProductMappingPage() {
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
-      try {
-        const parsed = JSON.parse(storedData);
-        console.log("📊 Analysis Data Loaded:", parsed);
-        console.log("📦 Product Mapping:", parsed?.data?.departmentalSummaries?.productMapping);
-        setAnalysisData(parsed);
-      } catch (error) {
-        console.error("❌ Error parsing analysis data:", error);
-      }
-    } else {
-      console.warn("⚠️ No analysis data found in localStorage");
-      console.log("💡 Please upload a document first to see product mapping data");
+      const parsed = JSON.parse(storedData);
+      setAnalysisData(parsed);
     }
     setTimeout(() => setAnimate(true), 60);
   }, []);
 
   if (!analysisData) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <p style={{ fontSize: 18, color: "#666" }}>No analysis data found</p>
-        <button
-          onClick={() => navigate("/upload")}
-          style={{
-            background: "#06b6d4",
-            color: "#fff",
-            padding: "12px 24px",
-            borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
-            fontSize: 16,
-            fontWeight: 600
-          }}
-        >
-          Upload Document
-        </button>
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p>Loading...</p>
       </div>
     );
   }
@@ -268,7 +244,7 @@ export default function ProductMappingPage() {
                           fontSize: 13,
                           color: "#374151"
                         }}>
-                          {item.model || item.productName || "Standard Model"}
+                          {item.model || "N/A"}
                         </td>
                         <td style={{
                           padding: 10,

@@ -2,12 +2,54 @@
  * Model Matching Service
  * Finds specific OEM models that match product specifications
  * Supports both single and multiple OEMs
+ * Uses OpenAI API for model matching (paid account with generous limits)
  */
 
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const OpenAI = require('openai');
 require('dotenv').config();
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+/**
+ * Process items in batches with rate limiting to avoid API quota issues
+ * Processes max 10 items in parallel (OpenAI paid account), then waits 60 seconds before next batch
+ * @param {Array} items - Array of items to process
+ * @param {Function} processFn - Async function to process each item: (item) => Promise<result>
+ * @param {String} itemLabel - Label for logging (e.g., "OEMs", "products")
+ * @returns {Promise<Array>} - Array of results in same order as items
+ */
+const processInBatchesWithDelay = async (items, processFn, itemLabel = 'items') => {
+    if (items.length === 0) return [];
+    
+    const BATCH_SIZE = 10; // Maximum 10 parallel API calls (OpenAI paid account)
+    const DELAY_MS = 60000; // 60 seconds delay between batches
+    
+    const results = [];
+    const totalBatches = Math.ceil(items.length / BATCH_SIZE);
+    
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+        const batch = items.slice(i, i + BATCH_SIZE);
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+        
+        console.log(`   📦 Processing batch ${batchNumber}/${totalBatches} (${batch.length} ${itemLabel})...`);
+        
+        // Process batch in parallel (max 10 at a time for OpenAI)
+        const batchPromises = batch.map(item => processFn(item));
+        const batchResults = await Promise.all(batchPromises);
+        results.push(...batchResults);
+        
+        // Wait 60 seconds before next batch (except for the last batch)
+        if (i + BATCH_SIZE < items.length) {
+            console.log(`   ⏳ Waiting 60 seconds before next batch to avoid rate limits...`);
+            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+    }
+    
+    return results;
+};
 
 /**
  * Find model that matches specifications for a given OEM
@@ -21,44 +63,21 @@ const findModelForOEM = async (productName, oem, specifications, category) => {
     try {
         console.log(`   🔍 Finding model for: ${productName} (OEM: ${oem})`);
         
-        const model = genAI.getGenerativeModel({ 
-            model: 'gemini-2.5-flash',
-            generationConfig: {
-                temperature: 0.0, // Deterministic matching
-                topP: 1.0,
-                topK: 1
-            }
-        });
+        const systemPrompt = `You are a product specification expert. Your task is to find specific product models that match given requirements. Always return actual model numbers that exist in the market. Never return generic names like "Standard Model".`;
         
-        const prompt = `You are a product specification expert. Find the specific model from ${oem} that matches these requirements.
+        const userPrompt = `Find the specific ${oem} model/product number that best matches these requirements:
 
 **PRODUCT:** ${productName}
 **OEM/MANUFACTURER:** ${oem}
 **CATEGORY:** ${category}
 **SPECIFICATIONS:** ${specifications || 'Not specified'}
 
-**TASK:**
-Find the specific ${oem} model/product number that best matches these specifications.
-
-**CRITICAL: MATCH MODEL FROM SPECIFICATIONS**
-- Analyze the specifications carefully to identify the exact model
-- Look for key indicators:
-  * "IPS Throughput: 110 Gbps, NGFW Throughput: 90 Gbps" → FortiGate 600E or similar
-  * "Hardware Accelerated 40/100 GE QSFP28 Slots: 4" → High-end network switch
-  * "Concurrent Sessions: 120 Million" → Enterprise firewall
-  * "SSL Inspection Throughput: 66 Gbps" → Next-gen firewall
-- Match throughput, ports, sessions, and other specs to actual product models
-- Use specifications to narrow down to the exact model number
-
 **CRITICAL INSTRUCTIONS:**
 1. ALWAYS return a SPECIFIC model number/name (NEVER return "Standard Model" or generic names)
 2. Use actual product model numbers that exist in the market
-3. Match specifications to real product models (e.g., "110 Gbps IPS" → FortiGate 600E, "90 Gbps NGFW" → FortiGate 600E)
-4. If specifications are minimal, suggest the most popular/standard model from that OEM
-5. The model MUST match the product category and OEM
-6. Return actual model numbers like "FortiGate 600E", "Cisco Catalyst 2960-X", "PA-5220", NOT generic names
-
-**MANDATORY: Your response MUST contain a specific model number. Generic responses are NOT acceptable.**
+3. If specifications are minimal, suggest the most popular/standard model from that OEM
+4. The model MUST match the product category and OEM
+5. Return actual model numbers like "FortiGate 600E", "Cisco Catalyst 2960-X", NOT generic names
 
 **EXAMPLES OF CORRECT OUTPUTS:**
 - Product: "Firewall", OEM: "Fortinet" → "FortiGate 600E" ✅
@@ -83,12 +102,20 @@ Find the specific ${oem} model/product number that best matches these specificat
   "reasoning": "string (brief explanation of why this model)"
 }
 
-**CRITICAL: Do NOT use isValid field. Always assume the OEM makes this product and return the best matching model.**
-
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini', // Using GPT-4o-mini for cost efficiency while maintaining quality
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.0, // Deterministic matching
+            max_tokens: 500,
+            response_format: { type: 'json_object' }
+        });
+        
+        const responseText = completion.choices[0].message.content;
         
         // Clean response
         const cleanedResponse = responseText
@@ -151,16 +178,16 @@ const findModelsForMultipleOEMs = async (productName, oemsString, specifications
         
         console.log(`   🎯 Finding models for ${oems.length} OEMs: ${oems.join(', ')}`);
         
-        // Find model for each OEM in parallel
-        const modelPromises = oems.map(async (oem) => {
+        // Find model for each OEM in batches (max 3 parallel, 60s delay between batches)
+        const processOEM = async (oem) => {
             const modelInfo = await findModelForOEM(productName, oem, specifications, category);
             return {
                 oem: oem,
                 ...modelInfo
             };
-        });
+        };
         
-        const allModels = await Promise.all(modelPromises);
+        const allModels = await processInBatchesWithDelay(oems, processOEM, 'OEMs');
         
         // Find the best model (highest confidence)
         const bestModel = allModels.reduce((best, current) => {
@@ -184,22 +211,11 @@ const findModelsForMultipleOEMs = async (productName, oemsString, specifications
         
     } catch (error) {
         console.error(`   ❌ Multi-OEM model matching error:`, error.message);
-        // CRITICAL: Never return "Standard Model" - use intelligent fallback
-        const fallbackModels = oems.map(oem => 
-            getQuickModelFallback(productName, oem, category)
-        );
         return {
-            model: fallbackModels.join(' / '),
-            bestModel: fallbackModels[0],
-            bestOEM: oems[0],
-            confidence: 60,
+            model: 'Standard Model',
+            confidence: 50,
             source: 'error-fallback',
-            allModels: oems.map((oem, i) => ({
-                oem: oem,
-                model: fallbackModels[i],
-                confidence: 60
-            })),
-            reasoning: 'Using intelligent fallback for multiple OEMs'
+            reasoning: 'Error matching models for multiple OEMs'
         };
     }
 };
@@ -213,25 +229,15 @@ const findModelsForMultipleOEMs = async (productName, oemsString, specifications
  */
 const searchOEMAndModel = async (productName, specifications, category) => {
     try {
-        console.log(`   🌐 Web searching OEM + Model for: ${productName}`);
+        console.log(`   🌐 Searching OEM + Model for: ${productName}`);
         
-        const model = genAI.getGenerativeModel({ 
-            model: 'gemini-2.5-flash',
-            generationConfig: {
-                temperature: 0.0,
-                topP: 1.0,
-                topK: 1
-            }
-        });
+        const systemPrompt = `You are a product research expert. Your task is to recommend the best OEM (manufacturer) and specific model number for products based on specifications. Always return real, established manufacturers and actual model numbers that exist in the market.`;
         
-        const prompt = `You are a product research expert. Find the best OEM and model for this product based on specifications.
+        const userPrompt = `Find the best OEM and model for this product based on specifications:
 
 **PRODUCT:** ${productName}
 **CATEGORY:** ${category}
 **SPECIFICATIONS:** ${specifications || 'Standard specifications'}
-
-**TASK:**
-Based on your knowledge, recommend the most suitable OEM (manufacturer) and specific model number for this product.
 
 **CRITERIA:**
 1. OEM must be a real, established manufacturer in this category
@@ -260,9 +266,20 @@ Based on your knowledge, recommend the most suitable OEM (manufacturer) and spec
 
 Return ONLY valid JSON. No markdown, no explanation.`;
 
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-4o-mini', // Using GPT-4o-mini for cost efficiency
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.0,
+            max_tokens: 800,
+            response_format: { type: 'json_object' }
+        });
         
+        const responseText = completion.choices[0].message.content;
+        
+        // OpenAI returns JSON directly when response_format is json_object, but clean it anyway
         const cleanedResponse = responseText
             .replace(/```json\n?/g, '')
             .replace(/```\n?/g, '')
@@ -393,28 +410,11 @@ const enrichProductWithModel = async (product) => {
 const enrichProductsWithModels = async (products) => {
     console.log(`\n🏭 Starting OEM + Model enrichment for ${products.length} products...`);
     
-    const enrichedProducts = [];
-    const batchSize = 5; // Process 5 products at a time (slower to avoid rate limits)
-    
-    for (let i = 0; i < products.length; i += batchSize) {
-        const batch = products.slice(i, i + batchSize);
-        
-        console.log(`\n📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(products.length / batchSize)}`);
-        
-        // Process batch in parallel
-        const batchPromises = batch.map(product => 
-            enrichProductWithModel(product)
-        );
-        
-        const batchResults = await Promise.all(batchPromises);
-        enrichedProducts.push(...batchResults);
-        
-        // Rate limiting: wait 2 seconds between batches
-        if (i + batchSize < products.length) {
-            console.log('   ⏳ Waiting 2s before next batch...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-        }
-    }
+    // Use batching utility (max 10 parallel, 60s delay between batches)
+    // Each product enrichment may trigger multiple OpenAI API calls internally,
+    // so we limit product-level parallelism to 10 for OpenAI paid account
+    const processProduct = async (product) => enrichProductWithModel(product);
+    const enrichedProducts = await processInBatchesWithDelay(products, processProduct, 'products');
     
     console.log(`\n✅ Model enrichment complete! ${enrichedProducts.length} products processed`);
     
@@ -940,35 +940,285 @@ const getQuickModelFallback = (productName, oem, category) => {
     }
     
     // ============================================
-    // FALLBACK: Category-based intelligent guess
+    // CIVIL / CONSTRUCTION / HVAC
     // ============================================
     
+    // VOLTAS (Indian AC manufacturer)
+    if (oemLower.includes('voltas')) {
+        if (productLower.includes('ac') || productLower.includes('air condition') || productLower.includes('split')) {
+            if (productLower.includes('1.5') || productLower.includes('1.5 ton')) return 'Voltas 1.5 Ton Split AC';
+            if (productLower.includes('2') || productLower.includes('2 ton')) return 'Voltas 2 Ton Split AC';
+            return 'Voltas 1.5 Ton Split AC';
+        }
+        return 'Voltas AC';
+    }
+    
+    // BLUE STAR (Indian AC manufacturer)
+    if (oemLower.includes('blue star') || oemLower.includes('bluestar')) {
+        if (productLower.includes('ac') || productLower.includes('air condition')) {
+            if (productLower.includes('2') || productLower.includes('2 ton')) return 'Blue Star 2 Ton Split AC';
+            return 'Blue Star 1.5 Ton Split AC';
+        }
+        return 'Blue Star AC';
+    }
+    
+    // CARRIER (Global AC manufacturer)
+    if (oemLower.includes('carrier')) {
+        if (productLower.includes('ac') || productLower.includes('air condition')) {
+            if (productLower.includes('2') || productLower.includes('2 ton')) return 'Carrier 2 Ton Split AC';
+            return 'Carrier 1.5 Ton Split AC';
+        }
+        return 'Carrier AC';
+    }
+    
+    // ARMSTRONG (Ceiling manufacturer)
+    if (oemLower.includes('armstrong')) {
+        if (productLower.includes('ceiling') || productLower.includes('false ceiling')) {
+            return 'Armstrong Ultima Ceiling Tile';
+        }
+        return 'Armstrong Ceiling Panel';
+    }
+    
+    // LG / SAMSUNG (Interactive panels/displays)
+    if (oemLower.includes('lg') && (productLower.includes('panel') || productLower.includes('interactive') || productLower.includes('display'))) {
+        if (productLower.includes('55') || productLower.includes('55 inch')) return 'LG 55" Interactive Touch Panel';
+        if (productLower.includes('65') || productLower.includes('65 inch')) return 'LG 65" Interactive Touch Panel';
+        return 'LG 55" Interactive Touch Panel';
+    }
+    
+    if (oemLower.includes('samsung') && (productLower.includes('panel') || productLower.includes('interactive') || productLower.includes('display'))) {
+        if (productLower.includes('55') || productLower.includes('55 inch')) return 'Samsung 55" Interactive Display';
+        if (productLower.includes('65') || productLower.includes('65 inch')) return 'Samsung 65" Interactive Display';
+        return 'Samsung 55" Interactive Display';
+    }
+    
+    // ============================================
+    // FALLBACK: Try to infer from product name + category
+    // ============================================
+    
+    // For civil work items without specific OEM matches
+    if (categoryLower.includes('civil') || categoryLower.includes('construction')) {
+        // Try to extract size/type from product name
+        if (productLower.includes('acoustic')) return 'Acoustic Panel 600x600mm';
+        if (productLower.includes('ceiling')) return 'False Ceiling Tile 600x600mm';
+        if (productLower.includes('panel')) return 'Acoustic Panel';
+        // Return product name itself if it's specific enough
+        if (productName && productName.length < 50 && /[a-z]/i.test(productName)) {
+            return productName;
+        }
+    }
+    
+    // For cooling/AC systems
+    if (categoryLower.includes('cooling') || categoryLower.includes('hvac')) {
+        if (productLower.includes('2 ton') || productLower.includes('2-ton')) return '2 Ton Split AC';
+        if (productLower.includes('1.5 ton') || productLower.includes('1.5-ton')) return '1.5 Ton Split AC';
+        if (productLower.includes('split')) return '1.5 Ton Split AC';
+        return 'Split AC';
+    }
+    
+    // For interactive panels/displays
+    if (categoryLower.includes('it equipment') && (productLower.includes('panel') || productLower.includes('interactive'))) {
+        if (productLower.includes('55')) return '55" Interactive Touch Panel';
+        if (productLower.includes('65')) return '65" Interactive Touch Panel';
+        if (productLower.includes('75')) return '75" Interactive Touch Panel';
+        return '55" Interactive Touch Panel';
+    }
+    
+    // For workstations
+    if (productLower.includes('workstation') || (categoryLower.includes('it') && productLower.includes('computer'))) {
+        if (oemLower.includes('hp')) return 'HP Z2 Tower G9';
+        if (oemLower.includes('dell')) return 'Dell Precision 3660';
+        if (oemLower.includes('lenovo')) return 'Lenovo ThinkStation P350';
+        return 'Workstation';
+    }
+    
+    // Generic fallbacks with actual model-like names (not "Edition")
     if (categoryLower.includes('firewall') || productLower.includes('firewall')) {
-        return `${oem} Next-Gen Firewall`;
+        return 'Next-Gen Firewall';
     }
     
     if (categoryLower.includes('server') || productLower.includes('server')) {
-        return `${oem} Enterprise Server`;
+        return 'Server System';
     }
     
     if (categoryLower.includes('switch') || productLower.includes('switch')) {
-        return `${oem} Enterprise Switch`;
+        return 'Network Switch';
     }
     
     if (categoryLower.includes('security software') || categoryLower.includes('endpoint')) {
-        return `${oem} Enterprise Security Suite`;
+        return 'Security Suite';
     }
     
     if (categoryLower.includes('siem') || productLower.includes('siem')) {
-        return `${oem} SIEM Platform`;
+        return 'SIEM Platform';
     }
     
     if (categoryLower.includes('storage') || productLower.includes('storage')) {
-        return `${oem} Enterprise Storage`;
+        return 'Storage System';
     }
     
-    // Final fallback - at least include product type
-    return `${oem} ${category || 'Enterprise'} Edition`;
+    // Final fallback - use product name if reasonable, otherwise generic
+    if (productName && productName.length > 3 && productName.length < 100) {
+        return productName;
+    }
+    
+    return 'Standard Model';
+};
+
+/**
+ * Get multiple OEM+Model options when no perfect match is found
+ * Returns 2-3 OEM options with their respective models
+ * @param {String} productName - Product name
+ * @param {String} specifications - Product specifications
+ * @param {String} category - Product category
+ * @returns {Promise<Object>} - Multiple OEM+Model options
+ */
+const getMultipleOEMModelOptions = async (productName, specifications, category) => {
+    try {
+        console.log(`   🔍 Getting multiple OEM+Model options for: ${productName}`);
+        
+        // Get category OEMs
+        const { getCategoryOEMs, classifyMIIStatus } = require('../data/miiDatabase');
+        const categoryOEMs = getCategoryOEMs(category || 'Other');
+        
+        // Select 2-3 OEM options
+        const allOEMs = [
+            ...(categoryOEMs.global || []),
+            ...(categoryOEMs.indian || [])
+        ];
+        
+        // If we have category OEMs, use them; otherwise use generic options
+        let oemOptions = allOEMs.length > 0 ? allOEMs : [];
+        
+        if (oemOptions.length === 0) {
+            // Fallback to generic OEMs based on category
+            const categoryLower = (category || '').toLowerCase();
+            if (categoryLower.includes('civil') || categoryLower.includes('construction')) {
+                oemOptions = ['Armstrong', 'Supreme Industries', 'L&T Construction'];
+            } else if (categoryLower.includes('cooling') || categoryLower.includes('hvac') || categoryLower.includes('ac')) {
+                oemOptions = ['Voltas', 'Blue Star', 'Carrier'];
+            } else if (categoryLower.includes('it equipment') && (productName.toLowerCase().includes('panel') || productName.toLowerCase().includes('interactive'))) {
+                oemOptions = ['LG', 'Samsung', 'Microsoft'];
+            } else if (categoryLower.includes('it equipment') && productName.toLowerCase().includes('workstation')) {
+                oemOptions = ['HP', 'Dell', 'Lenovo'];
+            } else if (categoryLower.includes('network') || categoryLower.includes('switch') || categoryLower.includes('router')) {
+                oemOptions = ['Cisco', 'Juniper Networks', 'HPE Aruba'];
+            } else if (categoryLower.includes('security') || categoryLower.includes('firewall')) {
+                oemOptions = ['Fortinet', 'Palo Alto', 'Check Point'];
+            } else if (categoryLower.includes('server') || categoryLower.includes('hardware')) {
+                oemOptions = ['Dell', 'HP', 'Lenovo'];
+            } else if (categoryLower.includes('software') || categoryLower.includes('license')) {
+                oemOptions = ['Microsoft', 'Oracle', 'IBM'];
+            } else {
+                oemOptions = ['Cisco', 'Dell', 'Microsoft'];
+            }
+        }
+        
+        // Select 2-3 OEMs deterministically
+        const hash = productName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        const selectedOEMs = [];
+        const numOptions = Math.min(3, oemOptions.length);
+        
+        for (let i = 0; i < numOptions; i++) {
+            const index = (hash + i) % oemOptions.length;
+            if (!selectedOEMs.includes(oemOptions[index])) {
+                selectedOEMs.push(oemOptions[index]);
+            }
+        }
+        
+        // Ensure at least 2 options
+        if (selectedOEMs.length < 2 && oemOptions.length >= 2) {
+            selectedOEMs.push(oemOptions[(hash + selectedOEMs.length) % oemOptions.length]);
+        }
+        
+        // Clean OEM names - remove "or equivalent"
+        const cleanedOEMs = selectedOEMs.map(oem => {
+            return oem.replace(/\s+or\s+equivalent/gi, '').replace(/or\s+equivalent/gi, '').trim();
+        }).filter(oem => oem.length > 0);
+        
+        // Find models for each OEM in batches (max 3 parallel, 60s delay between batches)
+        const processOEMModel = async (oem) => {
+            try {
+                // Try to find model using AI first
+                const modelInfo = await findModelForOEM(productName, oem, specifications, category);
+                const miiStatus = classifyMIIStatus(oem, category);
+                
+                // Use the model if it's valid (not generic "Edition" style)
+                let model = modelInfo.model;
+                if (!model || 
+                    model.toLowerCase().includes('edition') ||
+                    model.toLowerCase().includes('standard model') ||
+                    model.toLowerCase().includes('enterprise')) {
+                    // Use intelligent fallback instead
+                    model = getQuickModelFallback(productName, oem, category);
+                }
+                
+                return {
+                    oem: oem,
+                    model: model,
+                    confidence: modelInfo.confidence || 65,
+                    miiStatus: miiStatus,
+                    source: 'multi-option-match'
+                };
+            } catch (error) {
+                console.warn(`   ⚠️ Failed to get model for ${oem}, using fallback`);
+                const miiStatus = classifyMIIStatus(oem, category);
+                const fallbackModel = getQuickModelFallback(productName, oem, category);
+                return {
+                    oem: oem,
+                    model: fallbackModel,
+                    confidence: 60,
+                    miiStatus: miiStatus,
+                    source: 'multi-option-fallback'
+                };
+            }
+        };
+        
+        const oemModelOptions = await processInBatchesWithDelay(cleanedOEMs, processOEMModel, 'OEMs');
+        
+        // Format OEM string (join with " / ") - already cleaned
+        const oemString = oemModelOptions.map(opt => opt.oem).join(' / ');
+        
+        // Format model string (join with " / ") - one model per OEM
+        const modelString = oemModelOptions.map(opt => opt.model).join(' / ');
+        
+        // Determine overall MII status
+        const indianCount = oemModelOptions.filter(opt => opt.miiStatus === 'Indian OEM').length;
+        const globalCount = oemModelOptions.filter(opt => opt.miiStatus === 'Global OEM').length;
+        let overallMiiStatus = 'Global OEM';
+        if (indianCount === oemModelOptions.length) {
+            overallMiiStatus = 'Indian OEM';
+        } else if (indianCount > 0 && globalCount > 0) {
+            overallMiiStatus = `Mixed Options (${globalCount} Global / ${indianCount} Indian)`;
+        }
+        
+        console.log(`   ✅ Multiple options: ${oemString} with models: ${modelString}`);
+        
+        return {
+            oem: oemString,
+            model: modelString,
+            miiStatus: overallMiiStatus,
+            confidence: 65,
+            source: 'multiple-options-provided',
+            multipleOptions: true,
+            options: oemModelOptions, // Array of {oem, model, confidence, miiStatus}
+            optionCount: oemModelOptions.length
+        };
+        
+    } catch (error) {
+        console.error(`   ❌ Error getting multiple OEM+Model options:`, error.message);
+        // Return fallback with single option
+        return {
+            oem: 'Cisco',
+            model: getQuickModelFallback(productName, 'Cisco', category),
+            miiStatus: 'Global OEM',
+            confidence: 50,
+            source: 'error-fallback',
+            multipleOptions: false,
+            options: [],
+            optionCount: 1
+        };
+    }
 };
 
 module.exports = {
@@ -977,5 +1227,6 @@ module.exports = {
     searchOEMAndModel,
     enrichProductWithModel,
     enrichProductsWithModels,
-    getQuickModelFallback
+    getQuickModelFallback,
+    getMultipleOEMModelOptions
 };
