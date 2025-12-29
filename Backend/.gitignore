@@ -1,23 +1,69 @@
+# =====================
+# Node / JS
+# =====================
 node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =====================
+# Environment files
+# =====================
 .env
 .env.local
+*.env
 config/env.config.js
-uploads/
+
+# =====================
+# Logs & OS files
+# =====================
 *.log
 .DS_Store
+Thumbs.db
+
+# =====================
+# Documents / uploads
+# =====================
+uploads/
 *.pdf
-*.docx
 *.doc
-# Runtime / generated data
-Backend/data/pageTexts/
-Backend/Backend/data/pageTexts/
+*.docx
+
+# =====================
+# Databases & cache
+# =====================
 *.db
 *.db-shm
 *.db-wal
 
-# OCR / ML assets (download at runtime)
+# =====================
+# Runtime / generated data
+# =====================
+data/
+data/temp/
+Backend/data/pageTexts/
+Backend/Backend/data/pageTexts/
+
+# =====================
+# OCR / ML assets
+# =====================
 *.traineddata
 
-# Uploads / temp
-uploads/
-data/temp/
+# =====================
+# Python (Chatbot / Build_chat)
+# =====================
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Chroma / Vector DB
+chroma_db/
+*.sqlite3
+*.bin
+*.pickle
+
+# =====================
+# Jupyter
+# =====================
+.ipynb_checkpoints/
