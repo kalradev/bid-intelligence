@@ -216,9 +216,9 @@ router.post('/get-sources', async (req, res) => {
             }
             
             // Filter and process sources - only use accurate ones
-            const MIN_RELEVANCE = 30; // Minimum 30% relevance (lowered for better coverage)
-            const MAX_SOURCES = 3; // Limit to 3 most relevant (user requested 2-3)
-            const MIN_SOURCES = 2; // Always try to return at least 2 sources
+            const MIN_RELEVANCE = 25; // Minimum 25% relevance (lowered to get at least 3 sources)
+            const MAX_SOURCES = 5; // Fetch more candidates
+            const MIN_SOURCES = 3; // Always try to return at least 3 sources (user requirement)
             const seenPages = new Set();
             
             // First pass: collect valid sources above threshold
@@ -264,7 +264,7 @@ router.post('/get-sources', async (req, res) => {
                 .filter(source => source !== null) // Remove null entries
                 .sort((a, b) => b.relevance - a.relevance); // Sort by relevance (highest first)
             
-            let sources = validSources.slice(0, MAX_SOURCES); // Take top 3
+            let sources = validSources.slice(0, 3); // Always return top 3 most relevant
             
             // If we don't have enough sources, try to get more (even if below threshold)
             if (sources.length < MIN_SOURCES && rawSources.length > validSources.length) {
@@ -332,9 +332,9 @@ router.post('/get-sources', async (req, res) => {
                     const results = await queryRFPDocument(documentId, query, 5);
                     
                     // Filter and process sources - only use accurate ones
-                    const MIN_RELEVANCE = 30; // Minimum 30% relevance
-                    const MAX_SOURCES = 3; // Limit to 3 most relevant
-                    const MIN_SOURCES = 2; // Always try to return at least 2 sources
+                    const MIN_RELEVANCE = 25; // Minimum 25% relevance
+                    const MAX_SOURCES = 5; // Fetch more candidates
+                    const MIN_SOURCES = 3; // Always try to return at least 3 sources
                     const seenPages = new Set();
                     
                     // First pass: collect valid sources above threshold
@@ -377,7 +377,7 @@ router.post('/get-sources', async (req, res) => {
                         .filter(source => source !== null) // Remove null entries
                         .sort((a, b) => (b.score || 0) - (a.score || 0)); // Sort by score (highest first)
                     
-                    let sources = validSources.slice(0, MAX_SOURCES); // Take top 3
+                    let sources = validSources.slice(0, 3); // Always return top 3 most relevant
                     
                     // If we don't have enough sources, try to get more (even if below threshold)
                     if (sources.length < MIN_SOURCES && results.length > validSources.length) {

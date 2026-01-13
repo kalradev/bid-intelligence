@@ -126,10 +126,62 @@ const BidManagement = () => {
             const backendUrl = "http://localhost:3000";
             const chatbotUrl = "http://localhost:8080";
             
-            // Try Node.js backend first (preferred)
+            // Use EXACT matching API (deterministic, word-for-word)
             let response;
             let errorMessage = null;
             
+            try {
+                // Use exact matching endpoint
+                console.log(`📡 Calling exact matching API: ${backendUrl}/api/reference/exact-matches`);
+                response = await fetch(`${backendUrl}/api/reference/exact-matches`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        fileHash: documentId,
+                        maxResults: 3
+                    }),
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Exact matching API returned ${response.status}`);
+                }
+                
+                const exactData = await response.json();
+                
+                if (exactData.success && exactData.references && exactData.references.length > 0) {
+                    // Convert exact matches to source format
+                    const sources = exactData.references.map((ref, idx) => ({
+                        pageNumber: ref.page.toString(),
+                        fileName: 'document.pdf', // Will be set from localStorage
+                        snippet: ref.matchedText.substring(0, 300) + (ref.matchedText.length > 300 ? '...' : ''),
+                        relevance: Math.round(ref.confidence * 100), // Convert to percentage
+                        chunkIndex: idx,
+                        matchedText: ref.matchedText, // Store exact matched text for highlighting
+                        matchType: ref.matchType
+                    }));
+                    
+                    console.log(`✅ Found ${sources.length} exact matches`);
+                    
+                    setReferenceModal({
+                        isOpen: true,
+                        sources: sources,
+                        query: query,
+                        isLoading: false,
+                    });
+                    return;
+                } else {
+                    console.warn(`⚠️ No exact matches found for: "${query}"`);
+                    // Fall through to semantic search as fallback
+                }
+            } catch (exactError) {
+                console.warn('Exact matching failed, trying semantic search:', exactError.message);
+                // Fall through to semantic search
+            }
+            
+            // Fallback: Try semantic search (old method)
             try {
                 console.log(`📡 Calling Node.js backend: ${backendUrl}/api/rfp/get-sources`);
                 response = await fetch(`${backendUrl}/api/rfp/get-sources`, {

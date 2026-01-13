@@ -504,7 +504,7 @@ const parseSpecificationTableAlternative = (text) => {
         
         if (rows.length > 0) {
             console.log(`   ✅ Alternative parser found ${rows.length} specification rows`);
-            console.log(`   Sample: ${rows[0]?.[0]} = [${rows[0]?.slice(1, 4).join(', ')}]`);
+            // console.log(`   Sample: ${rows[0]?.[0]} = [${rows[0]?.slice(1, 4).join(', ')}]`);
             
             // Transform if needed
             const transformed = transformTransposedTable(headers, rows);

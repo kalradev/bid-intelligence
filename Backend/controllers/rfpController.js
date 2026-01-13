@@ -1,5 +1,5 @@
 const { extractText } = require('../services/documentExtractor');
-const { generateDepartmentalSummaries } = require('../services/aiService'); // Dual AI: OpenAI → Gemini fallback
+const { generateDepartmentalSummaries } = require('../services/aiService'); // OpenAI only
 const { enrichProducts, getEnrichmentStats } = require('../services/oemEnrichmentService');
 const { extractBOQDeterministic } = require('../services/deterministicBOQService');
 const FileCache = require('../models/fileCache');
@@ -111,6 +111,20 @@ const analyzeRFP = async (req, res, next) => {
 
         console.log(`Extracted ${extractionResult.wordCount} words from ${extractionResult.metadata.pages || 'unknown'} pages`);
         
+        // Step 1.1: Extract page-by-page data for exact matching (for PDFs)
+        if (mimetype === 'application/pdf') {
+            try {
+                const { extractPageByPage, storePageByPageData } = require('../services/pageByPageExtractor');
+                console.log('📄 Extracting page-by-page data for exact matching...');
+                const pageData = await extractPageByPage(buffer, fileHash);
+                await storePageByPageData(fileHash, pageData);
+                console.log(`✅ Stored page-by-page data: ${pageData.length} pages`);
+            } catch (pageError) {
+                console.warn('⚠️  Page-by-page extraction failed (non-critical):', pageError.message);
+                // Continue with analysis even if page extraction fails
+            }
+        }
+        
         // DEBUG: Log first 500 chars to check extraction quality
         console.log('--- EXTRACTED TEXT PREVIEW (First 500 chars) ---');
         console.log(extractionResult.text.substring(0, 500));
@@ -155,8 +169,8 @@ const analyzeRFP = async (req, res, next) => {
             console.log('ℹ️ Non-PDF document, using traditional LLM-based extraction...');
         }
 
-        // Step 2: Generate departmental summaries using Gemini
-        console.log('\nGenerating departmental summaries with Gemini...');
+        // Step 2: Generate departmental summaries using OpenAI
+        console.log('\nGenerating departmental summaries with OpenAI...');
         const aiResult = await generateDepartmentalSummaries(
             extractionResult.text,
             originalname
@@ -399,14 +413,17 @@ const analyzeRFP = async (req, res, next) => {
         let pageTexts = null;
         if (mimetype === 'application/pdf') {
             try {
-                const pdfParse = require('pdf-parse');
-                const pdfData = await pdfParse(buffer);
-                const totalPages = pdfData.numpages || extractionResult.metadata.pages || 1;
+                const { PDFParse } = require('pdf-parse');
+                // pdf-parse v2 API: instantiate PDFParse with data (buffer)
+                const parser = new PDFParse({ data: buffer });
+                const pdfText = await parser.getText();
+                const pages = await parser.getPages();
+                const totalPages = pages.length || extractionResult.metadata.pages || 1;
                 
                 // For pdf-parse, we need to extract pages individually
                 // Since pdf-parse doesn't provide per-page extraction easily,
                 // we'll estimate page boundaries based on text length
-                const fullText = pdfData.text || extractionResult.text;
+                const fullText = pdfText || extractionResult.text;
                 const avgCharsPerPage = fullText.length / totalPages;
                 
                 pageTexts = [];
