@@ -13,8 +13,40 @@
  */
 
 const { classifyMIIStatus, getCategoryOEMs, getAllIndianOEMs, getAllGlobalOEMs } = require('../data/miiDatabase');
-const { findModelForOEM, findModelsForMultipleOEMs, getQuickModelFallback } = require('./modelMatchingService');
+const { findModelForOEM, findModelsForMultipleOEMs, getQuickModelFallback, getMultipleOEMModelOptions } = require('./modelMatchingService');
 const { inferOEMFromSpecs, inferModelFromSpecs } = require('./specificationAnalyzer');
+
+/**
+ * Clean OEM name by removing unwanted text like "or equivalent"
+ * @param {string} oemName - OEM name to clean
+ * @returns {string} - Cleaned OEM name
+ */
+const cleanOEMName = (oemName) => {
+    if (!oemName || typeof oemName !== 'string') return oemName;
+    
+    // First, handle "or equivalent" at the end
+    let cleaned = oemName
+        .replace(/\s+or\s+equivalent/gi, '')
+        .replace(/or\s+equivalent/gi, '')
+        .replace(/equivalent\s+to/gi, '')
+        .replace(/\s+equivalent/gi, '')
+        .trim();
+    
+    // If multiple OEMs separated by "/" or " / ", clean each one
+    const separator = cleaned.includes(' / ') ? ' / ' : (cleaned.includes('/') ? '/' : null);
+    if (separator) {
+        const parts = cleaned.split(separator).map(part => {
+            // Remove "or equivalent" from each part
+            part = part.replace(/\s+or\s+equivalent/gi, '').trim();
+            // Remove trailing "or equivalent" that might still be there
+            part = part.replace(/or\s+equivalent/gi, '').trim();
+            return part;
+        }).filter(part => part.length > 0);
+        cleaned = parts.join(' / '); // Always use " / " as separator for consistency
+    }
+    
+    return cleaned;
+};
 
 /**
  * Generate deterministic hash from string (for consistent OEM selection)
@@ -869,7 +901,12 @@ const enrichProducts = async (products) => {
                 };
             }
             
-            // ✅ STEP 1: Try to infer OEM from specifications FIRST (for specification tables)
+            // ✅ STEP 1: Clean OEM name - remove "or equivalent" text
+            if (product.oem) {
+                product.oem = cleanOEMName(product.oem);
+            }
+            
+            // ✅ STEP 2: Try to infer OEM from specifications FIRST (for specification tables)
             const specsInferredOEM = inferOEMFromSpecs(product.specifications || '', product.productName);
             if (specsInferredOEM && (!product.oem || product.oem === 'Unspecified' || product.oem === 'N/A')) {
                 console.log(`   🎯 Inferred OEM from specifications: ${specsInferredOEM.oem} (${specsInferredOEM.confidence}% confidence)`);
@@ -896,11 +933,11 @@ const enrichProducts = async (products) => {
                     product.productName
                 );
                 
-                if (specsInferredModel && specsInferredModel.model) {
+                if (specsInferredModel && specsInferredModel.model && specsInferredModel.confidence >= 60) {
                     console.log(`   🎯 Inferred model from specifications: ${specsInferredModel.model} (${specsInferredModel.confidence}% confidence)`);
                     modelInfo = specsInferredModel;
                 } else {
-                    // Fallback to standard model matching
+                    // If model inference failed or low confidence, try standard model matching
                     try {
                         if (isMultipleOEMs) {
                             // Handle multiple OEMs - find model for each (2-3 OEMs with models)
@@ -982,15 +1019,56 @@ const enrichProducts = async (products) => {
             
             // Search for OEM online
             console.log(`[${i+1}/${products.length}] Searching OEM + Model for: ${product.productName}`);
+            
+            // ✅ STEP: Try to infer model from specifications first, even if no OEM found
+            const specsInferredModelNoOEM = await inferModelFromSpecs(
+                product.specifications || '',
+                '', // No OEM provided
+                product.productName
+            );
+            
+            // If no OEM but we can infer model, get multiple OEM+Model options
+            if (!product.oem || product.oem === 'Unspecified' || product.oem === 'N/A') {
+                if (!specsInferredModelNoOEM || specsInferredModelNoOEM.confidence < 60) {
+                    // No good model found - provide multiple OEM+Model options
+                    console.log(`   🔍 No perfect match found, providing multiple OEM+Model options...`);
+                    const multipleOptions = await getMultipleOEMModelOptions(
+                        product.productName,
+                        product.specifications || '',
+                        product.category || 'Other'
+                    );
+                    
+                    return {
+                        ...product,
+                        oem: multipleOptions.oem,
+                        model: multipleOptions.model,
+                        miiStatus: multipleOptions.miiStatus,
+                        modelConfidence: multipleOptions.confidence,
+                        modelSource: multipleOptions.source,
+                        enriched: true,
+                        confidence: multipleOptions.confidence,
+                        source: 'multiple-options-provided',
+                        allOEMModels: multipleOptions.options,
+                        multipleOptions: true
+                    };
+                }
+            }
+            
             const oemInfo = await searchOEMOnline(product.productName, product.category || '');
             
-            // ✅ ENSURE OEM IS NEVER EMPTY
-            const finalOEM = oemInfo.oem && oemInfo.oem !== 'Unspecified' && oemInfo.oem.trim() !== '' 
+            // ✅ ENSURE OEM IS NEVER EMPTY and clean it
+            let finalOEM = oemInfo.oem && oemInfo.oem !== 'Unspecified' && oemInfo.oem.trim() !== '' 
                 ? oemInfo.oem 
                 : getCategoryOEMs(product.category || 'Unknown').global[0] || 'Cisco';
             
+            // Clean OEM name - remove "or equivalent"
+            finalOEM = cleanOEMName(finalOEM);
+            
             // ✅ STEP 4: For generic product names with specifications, ALWAYS infer model from specs
             let finalModelInfo = null;
+            const hasSpecs = product.specifications && product.specifications.trim().length > 0;
+            const isGenericProductName = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.productName || '');
+            
             if (hasSpecs && isGenericProductName && finalOEM) {
                 console.log(`   🔍 Generic product name detected - inferring model from specifications...`);
                 const specsInferredModel = await inferModelFromSpecs(
@@ -999,7 +1077,7 @@ const enrichProducts = async (products) => {
                     product.productName
                 );
                 
-                if (specsInferredModel && specsInferredModel.model) {
+                if (specsInferredModel && specsInferredModel.model && specsInferredModel.confidence >= 60) {
                     console.log(`   ✅ Found actual model from specs: ${specsInferredModel.model}`);
                     finalModelInfo = specsInferredModel;
                 } else {
@@ -1012,7 +1090,8 @@ const enrichProducts = async (products) => {
                             product.category || 'Other'
                         );
                     } catch (e) {
-                        console.warn(`   ⚠️ Model matching failed`);
+                        console.warn(`   ⚠️ Model matching failed, will provide multiple options`);
+                        finalModelInfo = null; // Will trigger multiple options below
                     }
                 }
             } else {
@@ -1034,8 +1113,33 @@ const enrichProducts = async (products) => {
                         );
                     }
                 } catch (e) {
-                    console.warn(`   ⚠️ Model matching failed`);
+                    console.warn(`   ⚠️ Model matching failed, will provide multiple options`);
+                    finalModelInfo = null; // Will trigger multiple options below
                 }
+            }
+            
+            // ✅ STEP 4.5: If model matching failed or returned low confidence, provide multiple OEM+Model options
+            if (!finalModelInfo || !finalModelInfo.model || (finalModelInfo.confidence && finalModelInfo.confidence < 60)) {
+                console.log(`   🔍 No perfect model match found, providing multiple OEM+Model options...`);
+                const multipleOptions = await getMultipleOEMModelOptions(
+                    product.productName,
+                    product.specifications || '',
+                    product.category || 'Other'
+                );
+                
+                return {
+                    ...product,
+                    oem: multipleOptions.oem,
+                    model: multipleOptions.model,
+                    miiStatus: multipleOptions.miiStatus,
+                    modelConfidence: multipleOptions.confidence,
+                    modelSource: multipleOptions.source,
+                    enriched: true,
+                    confidence: multipleOptions.confidence,
+                    source: 'multiple-options-provided',
+                    allOEMModels: multipleOptions.options,
+                    multipleOptions: true
+                };
             }
             
             // ✅ ENSURE MII STATUS IS VALID
@@ -1075,39 +1179,89 @@ const enrichProducts = async (products) => {
                 }
             }
             
+            // ✅ CRITICAL: Validate model - check if it's a specification keyword (not a real model)
+            const invalidModelKeywords = [
+                'width', 'height', 'length', 'depth', 'capacity', 'size', 'dimension',
+                'inches', 'inch', 'cm', 'mm', 'based', 'type', 'standard', 'model',
+                'make', 'manufacturer', 'brand', 'color', 'weight', 'warranty'
+            ];
+            
+            const isValidModel = (modelStr) => {
+                if (!modelStr || modelStr.trim() === '' || modelStr === 'N/A') return false;
+                const modelLower = modelStr.toLowerCase();
+                // Check if it's a generic name
+                if (/^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(modelStr)) return false;
+                // Check if it's a specification keyword
+                if (invalidModelKeywords.some(keyword => modelLower === keyword || modelLower.includes(keyword))) return false;
+                // Must contain numbers or be alphanumeric code (like "CAT-3850")
+                if (!/\d/.test(modelStr) && !/^[a-z]{2,}\d/i.test(modelStr)) return false;
+                return true;
+            };
+            
             // ✅ CRITICAL: If product name is generic, NEVER use it as model - always use inferred model
-            const isGenericProductName = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.productName || '');
-            const existingModel = product.model && 
-                                product.model !== 'N/A' && 
-                                product.model.trim() !== '' &&
-                                !isGenericProductName && // Don't use if it's a generic name
-                                !/^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.model);
+            const isGenericProductNameCheck = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(product.productName || '');
+            const existingModel = product.model && isValidModel(product.model);
             
             // CRITICAL: Always return a model, never "N/A" or "Standard Model" or generic names
             let finalModel = null;
             
-            if (isGenericProductName && modelInfo && modelInfo.model) {
+            if (isGenericProductNameCheck && modelInfo && modelInfo.model && isValidModel(modelInfo.model)) {
                 // Product name is generic - ALWAYS use the inferred model from specifications
                 console.log(`   ✅ Replacing generic product name "${product.productName}" with actual model: ${modelInfo.model}`);
                 finalModel = modelInfo.model;
             } else if (existingModel) {
-                // Use existing model if it's not generic
+                // Use existing model if it's valid
                 finalModel = product.model;
-            } else if (modelInfo && modelInfo.model) {
-                // Use inferred model
+            } else if (modelInfo && modelInfo.model && isValidModel(modelInfo.model)) {
+                // Use inferred model if it's valid
                 finalModel = modelInfo.model;
             } else {
-                // Fallback
-                finalModel = getQuickModelFallback(product.productName, finalOEM, product.category);
+                // If no valid model found, provide multiple OEM+Model options instead
+                console.log(`   🔍 No valid model found, providing multiple OEM+Model options...`);
+                const multipleOptions = await getMultipleOEMModelOptions(
+                    product.productName,
+                    product.specifications || '',
+                    product.category || 'Other'
+                );
+                
+                return {
+                    ...product,
+                    oem: multipleOptions.oem,
+                    model: multipleOptions.model,
+                    miiStatus: multipleOptions.miiStatus,
+                    modelConfidence: multipleOptions.confidence,
+                    modelSource: multipleOptions.source,
+                    enriched: true,
+                    confidence: multipleOptions.confidence,
+                    source: 'multiple-options-provided',
+                    allOEMModels: multipleOptions.options,
+                    multipleOptions: true
+                };
             }
             
-            // Ensure model is never empty, generic, or "N/A"
-            if (!finalModel || 
-                finalModel === 'N/A' || 
-                finalModel.toLowerCase().includes('standard model') ||
-                /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(finalModel)) {
-                // Last resort fallback
-                finalModel = getQuickModelFallback(product.productName, finalOEM, product.category);
+            // Final validation - ensure model is valid
+            if (!isValidModel(finalModel)) {
+                // Last resort - provide multiple options
+                console.log(`   🔍 Final model validation failed, providing multiple OEM+Model options...`);
+                const multipleOptions = await getMultipleOEMModelOptions(
+                    product.productName,
+                    product.specifications || '',
+                    product.category || 'Other'
+                );
+                
+                return {
+                    ...product,
+                    oem: multipleOptions.oem,
+                    model: multipleOptions.model,
+                    miiStatus: multipleOptions.miiStatus,
+                    modelConfidence: multipleOptions.confidence,
+                    modelSource: multipleOptions.source,
+                    enriched: true,
+                    confidence: multipleOptions.confidence,
+                    source: 'multiple-options-provided',
+                    allOEMModels: multipleOptions.options,
+                    multipleOptions: true
+                };
             }
             
             return {

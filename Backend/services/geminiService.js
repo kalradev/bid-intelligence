@@ -1,14 +1,20 @@
-const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
+/**
+ * @deprecated This file is deprecated. Use aiService.js instead which uses OpenAI.
+ * This file is kept for backward compatibility but now uses OpenAI API.
+ */
+
+const OpenAI = require('openai');
 const { getAllIndianOEMs, getAllGlobalOEMs } = require('../data/miiDatabase');
 
-// Initialize Gemini client
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize OpenAI client (replaced Gemini)
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
 
-// Model configuration
-// Using gemini-2.5-flash which supports larger context windows
-const MODEL = 'gemini-2.5-flash'; // Free tier model
+// Model configuration - Using OpenAI instead of Gemini
+const MODEL = 'gpt-4o-mini'; // OpenAI model
 const TEMPERATURE = 0.3;
-const MAX_TOKENS = 8192; // Gemini max output tokens (8192 is safe limit)
+const MAX_TOKENS = 16384; // OpenAI max tokens
 
 /**
  * Generate departmental summaries from RFP document
@@ -64,19 +70,14 @@ CRITICAL: DEDUPLICATION & CONSOLIDATION
 7. Extract product/material items from whichever source (BOQ or BOM) is available in the document.
 8. INFER "category" based on the item type (e.g., Hardware, Software, Civil, Electrical, Furniture, HVAC, Security).
 
-9. **CRITICAL: EXTRACT PRODUCTS FROM SPECIFICATION TABLES**
-   - **SPECIFICATION TABLES**: If document has a "Specifications" table with "Model 1", "Model 2", "Model 3" as column headers, extract EACH MODEL as a separate product
-   - **SPECIFICATION TABLE FORMAT**: 
-     * Title: "Specifications" or "Technical Specifications"
-     * Headers: "Model 1", "Model 2", "Model 3", etc. (or "Product A", "Product B", etc.)
-     * Rows: Specification names in first column, values in subsequent columns
-   - **EXTRACT ALL MODELS**: If you see "Model 2" with specifications like "IPS Throughput: 110 Gbps", "NGFW Throughput: 90 Gbps", extract "Model 2" as a product
-   - **COMBINE SPECIFICATIONS**: For each model, combine ALL specifications into the specifications field (e.g., "IPS Throughput: 110 Gbps; NGFW Throughput: 90 Gbps; Hardware Accelerated 40/100 GE QSFP28 Slots: 4")
-   - **EXTRACT FROM ANY TABLE**: Look for specification tables, comparison tables, product comparison charts, technical specification sheets
+9. **CRITICAL: EXTRACT ONLY ACTUAL PRODUCTS FROM THE DOCUMENT**
    - **NO HALLUCINATIONS**: Only extract products that are explicitly mentioned in the document
    - **NO GENERIC ITEMS**: Do not add generic items like "Miscellaneous", "Others" unless explicitly listed
    - **NO N/A PRODUCTS**: NEVER create products with name "N/A" or empty names
-   - **REAL NAMES ONLY**: Each product must have a specific, identifiable name from the document (Model 2, Model 1, Product A, etc. are VALID names)
+   - **VERIFY EACH PRODUCT**: Each product must have a corresponding entry in the BOQ/BOM/product list
+   - **ACCURACY OVER QUANTITY**: Better to extract fewer accurate products than many incorrect ones
+   - **INVALID PRODUCT NAMES**: Do NOT extract products named: "N/A", "Not Applicable", "TBD", "To Be Decided", "Miscellaneous", "Others", "Various"
+   - **REAL NAMES ONLY**: Each product must have a specific, identifiable name from the document
 
 10. **CRITICAL: OEM (Original Equipment Manufacturer) EXTRACTION & INTELLIGENT SUGGESTION**
    - **STEP 1: AGGRESSIVELY SEARCH** for brand names in document:
@@ -84,19 +85,8 @@ CRITICAL: DEDUPLICATION & CONSOLIDATION
      - A separate "Approved Makes", "Preferred Brands", or "List of Makes" section/annexure
      - Technical specifications columns
      - Look for "Make:", "Brand:", "Mfr:", "Model:", "or equivalent"
-   - **STEP 2: INFER OEM FROM SPECIFICATIONS** (CRITICAL for specification tables):
-     * If specifications mention "FortiGate", "Fortinet", "FortiOS" → OEM: "Fortinet"
-     * If specifications mention "IPS Throughput", "NGFW Throughput", "SSL Inspection" → Likely "Fortinet" or "Palo Alto Networks"
-     * If specifications mention "Catalyst", "Cisco" → OEM: "Cisco"
-     * If specifications mention "EX Series", "Juniper" → OEM: "Juniper Networks"
-     * If specifications mention "Aruba", "CX Series" → OEM: "Aruba" or "HPE Aruba"
-     * If specifications mention "PA-", "Palo Alto" → OEM: "Palo Alto Networks"
-     * If specifications mention "Check Point", "Smart-1" → OEM: "Check Point"
-     * If specifications mention "PowerEdge", "Dell" → OEM: "Dell PowerEdge"
-     * If specifications mention "ProLiant", "HP" → OEM: "HP ProLiant"
-     * Look for brand-specific terminology in specifications to identify OEM
-   - **STEP 3: IF OEM FOUND** → Extract it (if multiple brands listed like "Havells / Polycab / Anchor", extract ALL as "Havells / Polycab / Anchor")
-   - **STEP 4: IF OEM NOT FOUND** → SUGGEST 2-3 BEST-FIT OEMS based on specifications:
+   - **STEP 2: IF OEM FOUND** → Extract it (if multiple brands listed like "Havells / Polycab / Anchor", extract the **FIRST ONE**)
+   - **STEP 3: IF OEM NOT FOUND** → SUGGEST UNIQUE, PRODUCT-SPECIFIC OEM based on EXACT product type:
    
    **CRITICAL: MATCH OEM TO PRODUCT CATEGORY - DO NOT USE GENERIC OEMS**
    
@@ -354,7 +344,6 @@ Return ONLY a valid JSON object with this EXACT structure:
         "quantity": "string (quantity if mentioned, e.g., '1', '10', 'Lumpsum')",
         "unit": "string (unit if mentioned, e.g., 'Nos', 'Set', 'LS')",
         "oem": "string (CRITICAL: If OEM in document → extract it. If NOT in document → PROVIDE UNIQUE, PRODUCT-SPECIFIC OEM. Match OEM to exact product type. Examples: USB cables → 'Anker' or 'Belkin' or 'Cable Matters', Bluetooth adapter → 'TP-Link' or 'ASUS', DVD writer → 'ASUS' or 'LG', SATA cables → 'StarTech' or 'Sabrent', Identity platform → 'Okta' or 'SailPoint', Firewall → 'Fortinet' or 'Palo Alto Networks'. NEVER reuse same OEM for multiple products. NEVER use generic 'Microsoft/IBM/Oracle' for cables/accessories. NEVER use 'Unspecified', 'N/A', 'TBD')",
-        "model": "string (CRITICAL: Extract specific model number/name from specifications. For specification tables, if product name is 'Model 2', extract the actual model number from specifications. Look for model numbers like 'FortiGate 600E', 'PA-5220', 'Catalyst 2960-X', 'EX4300', 'CX 6300' in the specifications. If specifications mention 'IPS Throughput: 110 Gbps, NGFW Throughput: 90 Gbps' → likely 'FortiGate 600E' or similar. If specifications mention 'Hardware Accelerated 40/100 GE QSFP28 Slots: 4' → likely network switch model. Use specifications to infer the best-fit model. If no model found, use the product name itself as the model. NEVER return 'N/A')",
         "miiStatus": "string (Classification: 'Indian OEM', 'Global OEM', 'MII-Compliant', 'Likely Indian', 'Requires Review')"
       }
     ]
@@ -362,15 +351,9 @@ Return ONLY a valid JSON object with this EXACT structure:
 }
 
 CRITICAL INSTRUCTIONS FOR PRODUCT MAPPING:
-- **PRIORITY 1: SPECIFICATION TABLES** - If document contains a "Specifications" table with "Model 1", "Model 2", "Model 3" columns, extract EACH MODEL as a separate product with ALL its specifications combined.
-- **PRIORITY 2: BOQ/BOM** - Extract products/items from the BOQ or BOM section.
+- Extract products/items from the BOQ or BOM section.
 - **LIMIT**: Extract up to 40 most important/representative products per chunk to balance completeness with output limits.
 - For each product, search the document chunk for Brand names.
-- **SPECIFICATION TABLE EXTRACTION**: When you see a specification table:
-  * Extract each model (Model 1, Model 2, etc.) as a product
-  * Combine ALL specifications for that model into one specifications field
-  * Infer OEM from specifications (e.g., "IPS Throughput", "NGFW" → Fortinet; "Catalyst" → Cisco)
-  * Infer model number from specifications (e.g., "110 Gbps IPS" → FortiGate 600E or similar)
 - Populate the miiProductStatus array with the products found (max 40 per chunk).
 
 **CRITICAL CONSISTENCY RULE:**
@@ -441,39 +424,19 @@ IMPORTANT:
             return await processLargeDocument(documentText, fileName);
         }
 
-        // Get the generative model
-        const model = genAI.getGenerativeModel({ 
+        // Use OpenAI API (replaced Gemini)
+        const completion = await openai.chat.completions.create({
             model: MODEL,
-            generationConfig: {
-                temperature: TEMPERATURE,
-                maxOutputTokens: MAX_TOKENS,
-                responseMimeType: "application/json"
-            },
-            safetySettings: [
-                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            ]
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+            ],
+            temperature: TEMPERATURE,
+            max_tokens: MAX_TOKENS,
+            response_format: { type: 'json_object' }
         });
-
-        // Combine system and user prompts for Gemini
-        const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
-        // Make API call to Gemini
-        const result = await model.generateContent(fullPrompt);
-        const response = await result.response;
         
-        // Check if response was truncated due to MAX_TOKENS
-        if (response.candidates && response.candidates[0]) {
-            const finishReason = response.candidates[0].finishReason;
-            if (finishReason === 'MAX_TOKENS') {
-                console.warn('⚠️  Response truncated due to MAX_TOKENS. Attempting to repair JSON...');
-                // Don't throw error - let the repair logic handle it
-            }
-        }
-        
-        let responseText = response.text();
+        let responseText = completion.choices[0].message.content;
         
         // Log the raw response for debugging
         console.log('Raw response length:', responseText.length);
@@ -493,7 +456,7 @@ IMPORTANT:
         
         // Validate we have content
         if (!responseText) {
-            throw new Error('Gemini returned an empty response');
+            throw new Error('OpenAI returned an empty response');
         }
         
         // Parse JSON with better error handling
@@ -510,22 +473,22 @@ IMPORTANT:
                 console.error('JSON Repair Failed:', repairError.message);
                 console.error('Response text (first 500 chars):', responseText.substring(0, 500));
                 console.error('Response text (last 500 chars):', responseText.substring(Math.max(0, responseText.length - 500)));
-                throw new Error(`Failed to parse Gemini response as JSON: ${parseError.message}. Response length: ${responseText.length}`);
+                throw new Error(`Failed to parse OpenAI response as JSON: ${parseError.message}. Response length: ${responseText.length}`);
             }
         }
 
         return {
             summaries,
             usage: {
-                promptTokens: estimatedTokens,
-                completionTokens: estimateTokens(responseText),
-                totalTokens: estimatedTokens + estimateTokens(responseText)
+                promptTokens: completion.usage.prompt_tokens,
+                completionTokens: completion.usage.completion_tokens,
+                totalTokens: completion.usage.total_tokens
             },
             model: MODEL
         };
 
     } catch (error) {
-        console.error('Gemini API Error:', error);
+        console.error('OpenAI API Error:', error);
         throw new Error(`Failed to generate summaries: ${error.message}`);
     }
 };
@@ -538,7 +501,7 @@ IMPORTANT:
  */
 const processLargeDocument = async (documentText, fileName) => {
     // ✅ Larger chunks = fewer API calls = faster processing
-    // Gemini 2.5 Flash supports 1M token context window, so we can use larger chunks
+    // OpenAI supports large context windows, so we can use larger chunks
     const chunkSize = 120000; // Increased to 120k characters (~30k tokens) for faster processing
     const chunks = [];
 
@@ -599,26 +562,9 @@ const processLargeDocument = async (documentText, fileName) => {
         }
     }
 
-    // Get the generative model for consolidation
-    const model = genAI.getGenerativeModel({ 
-        model: MODEL,
-        generationConfig: {
-            temperature: TEMPERATURE,
-            maxOutputTokens: MAX_TOKENS,
-            responseMimeType: "application/json"
-        },
-        safetySettings: [
-            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-        ]
-    });
-
-    // Merge results with a consolidation pass
-    const consolidationPrompt = `You are an expert at consolidating document summaries into ULTRA-CONCISE outputs.
-
-Consolidate the following departmental summaries from multiple chunks of the same RFP document.
+    // Merge results with a consolidation pass using OpenAI
+    const consolidationSystemPrompt = `You are an expert at consolidating document summaries into ULTRA-CONCISE outputs.`;
+    const consolidationPrompt = `Consolidate the following departmental summaries from multiple chunks of the same RFP document.
 
 ${JSON.stringify(chunkResults, null, 2)}
 
@@ -737,29 +683,22 @@ IMPORTANT:
 
     let finalSummaries;
     try {
-        const consolidation = await model.generateContent(consolidationPrompt);
-        const consolidationResponse = await consolidation.response;
+        // Use OpenAI for consolidation
+        const consolidationCompletion = await openai.chat.completions.create({
+            model: MODEL,
+            messages: [
+                { role: 'system', content: consolidationSystemPrompt },
+                { role: 'user', content: consolidationPrompt }
+            ],
+            temperature: TEMPERATURE,
+            max_tokens: MAX_TOKENS,
+            response_format: { type: 'json_object' }
+        });
         
-        // Check finish reason first
-        if (consolidationResponse.candidates && consolidationResponse.candidates[0]) {
-            const finishReason = consolidationResponse.candidates[0].finishReason;
-            console.log('Consolidation finish reason:', finishReason);
-            
-            if (finishReason === 'MAX_TOKENS') {
-                console.warn('Consolidation exceeded MAX_TOKENS. Using naive merge instead.');
-                throw new Error('Consolidation response exceeded maximum token limit');
-            }
-        }
-        
-        let consolidationText = consolidationResponse.text();
+        let consolidationText = consolidationCompletion.choices[0].message.content;
         
         // Check for empty response
         if (!consolidationText) {
-            console.warn('Consolidation returned empty response. Checking finish reason...');
-            if (consolidationResponse.candidates && consolidationResponse.candidates.length > 0) {
-                console.warn('Finish Reason:', consolidationResponse.candidates[0].finishReason);
-                console.warn('Safety Ratings:', JSON.stringify(consolidationResponse.candidates[0].safetyRatings));
-            }
             throw new Error('Empty response from consolidation step');
         }
 

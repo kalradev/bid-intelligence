@@ -1,335 +1,206 @@
 /**
- * Specification Analyzer Service
- * Analyzes product specifications to infer OEM and model
- * Uses pattern matching and AI to identify products from specs
+ * Specification Analyzer
+ * Analyzes product specifications to infer OEM and model information
  */
-
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-require('dotenv').config();
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 /**
- * Infer OEM from specifications using pattern matching
- * @param {String} specifications - Product specifications text
- * @param {String} productName - Product name
- * @returns {Object} - Inferred OEM information
+ * Infer OEM from product specifications
+ * @param {string} specifications - Product specifications text
+ * @param {string} productName - Product name
+ * @returns {object|null} - OEM information with oem, confidence, and source, or null if no inference
  */
-const inferOEMFromSpecs = (specifications, productName) => {
-    if (!specifications || specifications.trim() === '') {
+function inferOEMFromSpecs(specifications, productName) {
+    if (!specifications || typeof specifications !== 'string') {
         return null;
     }
-    
+
     const specsLower = specifications.toLowerCase();
     const productLower = (productName || '').toLowerCase();
-    const combinedText = `${specsLower} ${productLower}`;
-    
-    // Fortinet indicators
-    if (combinedText.includes('fortigate') || 
-        combinedText.includes('fortinet') ||
-        combinedText.includes('fortios') ||
-        (combinedText.includes('ips throughput') && combinedText.includes('ngfw throughput')) ||
-        (combinedText.includes('ssl inspection') && combinedText.includes('threat protection'))) {
-        return {
-            oem: 'Fortinet',
-            confidence: 85,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Fortinet product characteristics'
-        };
+
+    // Common OEM indicators in specifications
+    const oemPatterns = {
+        'cisco': ['cisco', 'catalyst', 'nexus', 'asa', 'ucs'],
+        'microsoft': ['microsoft', 'windows', 'azure', 'office 365', 'sharepoint', 'active directory'],
+        'dell': ['dell', 'poweredge', 'optiplex', 'latitude', 'precision'],
+        'hp': ['hp', 'hewlett packard', 'proliant', 'elitebook', 'probook'],
+        'hpe': ['hpe', 'hewlett packard enterprise', 'aruba', 'nimble'],
+        'lenovo': ['lenovo', 'thinkpad', 'thinkcentre', 'thinkstation'],
+        'ibm': ['ibm', 'power systems', 'system x', 'thinkpad'],
+        'vmware': ['vmware', 'vsphere', 'vcenter', 'esxi'],
+        'oracle': ['oracle', 'sun', 'sparc', 'exadata'],
+        'juniper': ['juniper', 'junos', 'mx series', 'ex series'],
+        'aruba': ['aruba', 'clearpass', 'airwave'],
+        'fortinet': ['fortinet', 'fortigate', 'fortimanager'],
+        'palo alto': ['palo alto', 'pan-os', 'panorama'],
+        'check point': ['check point', 'gaia os'],
+        'polycab': ['polycab', 'polycab cables'],
+        'havells': ['havells', 'havells india'],
+        'luminous': ['luminous', 'luminous india'],
+        'su-kam': ['su-kam', 'sukam'],
+        'matrix': ['matrix', 'matrix comsec'],
+        'tata': ['tata', 'tata communications'],
+        'reliance': ['reliance', 'reliance jio'],
+        'bharti': ['bharti', 'airtel']
+    };
+
+    // Check for OEM mentions in specifications
+    for (const [oem, patterns] of Object.entries(oemPatterns)) {
+        for (const pattern of patterns) {
+            if (specsLower.includes(pattern) || productLower.includes(pattern)) {
+                // Capitalize each word in OEM name
+                const formattedOEM = oem.split(' ').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' ');
+                return {
+                    oem: formattedOEM,
+                    confidence: 75,
+                    source: 'specification_analysis'
+                };
+            }
+        }
     }
-    
-    // Palo Alto indicators
-    if (combinedText.includes('palo alto') ||
-        combinedText.includes('pa-') ||
-        combinedText.includes('pan-os') ||
-        (combinedText.includes('app-id') && combinedText.includes('wildfire'))) {
-        return {
-            oem: 'Palo Alto Networks',
-            confidence: 85,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Palo Alto Networks product characteristics'
-        };
+
+    // Check for model numbers that might indicate OEM
+    const modelPatterns = {
+        'cisco': /\b(cat|ws-|nexus|asa-|ucs-)\d+/i,
+        'dell': /\b(poweredge|optiplex|latitude|precision)\s*\d+/i,
+        'hp': /\b(proliant|elitebook|probook)\s*\d+/i,
+        'lenovo': /\b(thinkpad|thinkcentre|thinkstation)\s*\d+/i,
+        'ibm': /\b(system\s*x|power\s*systems?|thinkpad)\s*\d+/i
+    };
+
+    for (const [oem, pattern] of Object.entries(modelPatterns)) {
+        if (pattern.test(specifications) || pattern.test(productName)) {
+            // Capitalize each word in OEM name
+            const formattedOEM = oem.split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
+            return {
+                oem: formattedOEM,
+                confidence: 70,
+                source: 'model_pattern_analysis'
+            };
+        }
     }
-    
-    // Cisco indicators
-    if (combinedText.includes('catalyst') ||
-        combinedText.includes('cisco ios') ||
-        combinedText.includes('cisco asa') ||
-        combinedText.includes('cisco firepower') ||
-        (combinedText.includes('qsfp28') && combinedText.includes('sfp28'))) {
-        return {
-            oem: 'Cisco',
-            confidence: 80,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Cisco product characteristics'
-        };
-    }
-    
-    // Juniper indicators
-    if (combinedText.includes('juniper') ||
-        combinedText.includes('junos') ||
-        combinedText.includes('ex series') ||
-        combinedText.includes('ex4300') ||
-        combinedText.includes('ex3300')) {
-        return {
-            oem: 'Juniper Networks',
-            confidence: 85,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Juniper Networks product characteristics'
-        };
-    }
-    
-    // Aruba/HPE indicators
-    if (combinedText.includes('aruba') ||
-        combinedText.includes('cx series') ||
-        combinedText.includes('cx 6300') ||
-        combinedText.includes('arubaos')) {
-        return {
-            oem: 'HPE Aruba',
-            confidence: 85,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Aruba product characteristics'
-        };
-    }
-    
-    // Check Point indicators
-    if (combinedText.includes('check point') ||
-        combinedText.includes('gaia') ||
-        combinedText.includes('smart-1')) {
-        return {
-            oem: 'Check Point',
-            confidence: 80,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications match Check Point product characteristics'
-        };
-    }
-    
-    // Network switch indicators (generic)
-    if (combinedText.includes('qsfp28') || 
-        combinedText.includes('sfp28') ||
-        combinedText.includes('sfp+') ||
-        (combinedText.includes('hardware accelerated') && combinedText.includes('slots'))) {
-        // Could be Cisco, Juniper, Aruba, etc.
-        return {
-            oem: 'Cisco / Juniper Networks / HPE Aruba',
-            confidence: 70,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications indicate high-end network switch'
-        };
-    }
-    
-    // Firewall indicators (generic)
-    if ((combinedText.includes('ips throughput') || combinedText.includes('ngfw throughput')) &&
-        (combinedText.includes('ssl inspection') || combinedText.includes('threat protection'))) {
-        return {
-            oem: 'Fortinet / Palo Alto Networks / Check Point',
-            confidence: 75,
-            source: 'spec-pattern-match',
-            reasoning: 'Specifications indicate next-gen firewall'
-        };
-    }
-    
+
     return null;
-};
-
-/**
- * Infer model from specifications using AI with web search knowledge
- * @param {String} specifications - Product specifications
- * @param {String} oem - OEM name
- * @param {String} productName - Product name
- * @returns {Promise<Object>} - Inferred model information
- */
-const inferModelFromSpecs = async (specifications, oem, productName) => {
-    try {
-        if (!specifications || specifications.trim() === '') {
-            return null;
-        }
-        
-        // If product name is generic (Model 1, Model 2, Product A, etc.), be more aggressive
-        const isGenericName = /^(model\s*\d+|product\s*[a-z]|variant\s*[a-z])$/i.test(productName || '');
-        
-        const model = genAI.getGenerativeModel({ 
-            model: 'gemini-2.5-flash',
-            generationConfig: {
-                temperature: 0.0,
-                topP: 1.0,
-                topK: 1
-            }
-        });
-        
-        const prompt = `You are a product research expert. Analyze these specifications and identify the EXACT ${oem} model number using your knowledge of real products.
-
-**PRODUCT NAME:** ${productName}${isGenericName ? ' (NOTE: This is a generic name - you MUST find the actual model number from specifications)' : ''}
-**OEM:** ${oem}
-**SPECIFICATIONS:**
-${specifications}
-
-**CRITICAL TASK:**
-${isGenericName 
-    ? 'The product name "' + productName + '" is generic. You MUST identify the ACTUAL model number by matching these specifications to real ' + oem + ' products. DO NOT return "' + productName + '" as the model - find the real model number.'
-    : 'Identify the exact ' + oem + ' model number that matches these specifications.'}
-
-**USE YOUR KNOWLEDGE:**
-- Search your knowledge base for ${oem} products matching these specifications
-- Match key specifications to actual product models
-- Return the SPECIFIC model number (e.g., "FortiGate 600E", "PA-5220", "Catalyst 2960-X", "EX4300")
-- NEVER return generic names like "Model 2", "Product A", or "Standard Model"
-
-**KEY SPECIFICATION INDICATORS:**
-- Hardware Accelerated 40/100 GE QSFP28 Slots: 4, SFP28 Slots: 24 → Network switch (Cisco Catalyst 9300, Juniper EX4300, Aruba CX 6300)
-- IPS Throughput: 110 Gbps, NGFW Throughput: 90 Gbps → FortiGate 600E or FortiGate 700E
-- Concurrent Sessions: 120 Million → Enterprise firewall (FortiGate 600E/700E, PA-5220)
-- SSL Inspection Throughput: 66 Gbps → Next-gen firewall
-- QSFP28 + SFP28 combination → High-end network switch
-
-**OUTPUT FORMAT (JSON only):**
-{
-  "model": "string (SPECIFIC model number like 'FortiGate 600E', 'PA-5220', 'Catalyst 9300-48P', 'EX4300-48MP', 'CX 6300-48P' - NEVER generic names)",
-  "confidence": number (0-100),
-  "reasoning": "string (which specs matched to this specific model)",
-  "alternativeModels": ["array of 2-3 alternative models if multiple matches"]
 }
 
-Return ONLY valid JSON. No markdown, no explanation.`;
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
-        
-        const cleanedResponse = responseText
-            .replace(/```json\n?/g, '')
-            .replace(/```\n?/g, '')
-            .trim();
-        
-        const inferred = JSON.parse(cleanedResponse);
-        
-        // Validate that we got a real model number, not a generic name
-        if (isGenericName && (
-            inferred.model.toLowerCase().includes(productName.toLowerCase()) ||
-            inferred.model.toLowerCase().includes('model') ||
-            inferred.model.toLowerCase().includes('product') ||
-            inferred.model.toLowerCase().includes('variant')
-        )) {
-            console.warn(`   ⚠️ AI returned generic model "${inferred.model}", trying web search...`);
-            // Try web search as fallback
-            return await searchModelFromWeb(specifications, oem, productName);
-        }
-        
-        return {
-            model: inferred.model,
-            confidence: inferred.confidence || 75,
-            source: 'spec-ai-inference',
-            reasoning: inferred.reasoning || 'Inferred from specifications',
-            alternatives: inferred.alternativeModels || []
-        };
-        
-    } catch (error) {
-        console.error(`❌ Error inferring model from specs:`, error.message);
-        // Try web search as fallback
-        return await searchModelFromWeb(specifications, oem, productName);
-    }
-};
-
 /**
- * Search for model number using web search (SERP API or AI-based search)
- * @param {String} specifications - Product specifications
- * @param {String} oem - OEM name
- * @param {String} productName - Product name
- * @returns {Promise<Object>} - Model information from web search
+ * Infer model from product specifications
+ * @param {string} specifications - Product specifications text
+ * @param {string} oem - OEM name
+ * @param {string} productName - Product name
+ * @returns {Promise<object|null>} - Model information with model, confidence, and source, or null if no inference
  */
-const searchModelFromWeb = async (specifications, oem, productName) => {
-    try {
-        console.log(`   🌐 Searching web for model matching specifications...`);
-        
-        // Extract key specs for search query
-        const keySpecs = extractKeySpecsForSearch(specifications);
-        const searchQuery = `${oem} ${keySpecs.join(' ')} model`;
-        
-        const model = genAI.getGenerativeModel({ 
-            model: 'gemini-2.5-flash',
-            generationConfig: {
-                temperature: 0.0,
-                topP: 1.0,
-                topK: 1
-            }
-        });
-        
-        const prompt = `Based on your knowledge of ${oem} products, identify the specific model number that matches these specifications:
-
-**SPECIFICATIONS:**
-${specifications}
-
-**KEY SPECS:**
-${keySpecs.join(', ')}
-
-**TASK:**
-Find the EXACT ${oem} model number that matches these specifications. Use your knowledge of real products.
-
-**OUTPUT FORMAT (JSON only):**
-{
-  "model": "string (specific model number)",
-  "confidence": number (0-100),
-  "reasoning": "string"
-}
-
-Return ONLY valid JSON.`;
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
-        
-        const cleanedResponse = responseText
-            .replace(/```json\n?/g, '')
-            .replace(/```\n?/g, '')
-            .trim();
-        
-        const webResult = JSON.parse(cleanedResponse);
-        
-        return {
-            model: webResult.model,
-            confidence: webResult.confidence || 70,
-            source: 'web-search-inference',
-            reasoning: webResult.reasoning || 'Found via web search knowledge'
-        };
-        
-    } catch (error) {
-        console.error(`❌ Web search error:`, error.message);
+async function inferModelFromSpecs(specifications, oem, productName) {
+    if (!specifications || typeof specifications !== 'string') {
         return null;
     }
-};
 
-/**
- * Extract key specifications for search query
- * @param {String} specifications - Full specifications text
- * @returns {Array<String>} - Key specification terms
- */
-const extractKeySpecsForSearch = (specifications) => {
-    const keyTerms = [];
-    const specsLower = specifications.toLowerCase();
-    
-    // Extract throughput values
-    const throughputMatch = specsLower.match(/(\d+)\s*(gbps|mbps)/gi);
-    if (throughputMatch) {
-        keyTerms.push(...throughputMatch.slice(0, 2));
+    const specsText = specifications;
+    const oemLower = (oem || '').toLowerCase();
+    const productLower = (productName || '').toLowerCase();
+
+    // Common model number patterns by OEM
+    const modelPatterns = {
+        'cisco': [
+            /\b(catalyst|cats?)\s*(\d{4,5}[a-z]?)/i,
+            /\b(nexus|nex-?)\s*(\d{4,5}[a-z]?)/i,
+            /\b(asa|asav?)\s*(\d{4,5}[a-z]?)/i,
+            /\b(ws-|wsc-)([a-z0-9\-]+)/i,
+            /\b(ucs-?)([a-z0-9\-]+)/i
+        ],
+        'microsoft': [
+            /\b(windows\s*server\s*)?(\d{4}|[a-z0-9]+)/i,
+            /\b(office\s*)?(\d{4}|[a-z0-9]+)/i,
+            /\b(azure\s*)?([a-z0-9\-]+)/i
+        ],
+        'dell': [
+            /\b(poweredge|pe-?)(\d{4,5}[a-z]?)/i,
+            /\b(optiplex|op-?)(\d{4,5}[a-z]?)/i,
+            /\b(latitude|lat-?)(\d{4,5}[a-z]?)/i,
+            /\b(precision|pre-?)(\d{4,5}[a-z]?)/i
+        ],
+        'hp': [
+            /\b(proliant|dl|ml|bl)\s*(\d{4,5}[a-z]?)/i,
+            /\b(elitebook|elite-?)\s*(\d{4,5}[a-z]?)/i,
+            /\b(probook|pro-?)\s*(\d{4,5}[a-z]?)/i
+        ],
+        'hpe': [
+            /\b(proliant|dl|ml|bl)\s*(\d{4,5}[a-z]?)/i,
+            /\b(aruba|ap-?)(\d{2,4}[a-z]?)/i,
+            /\b(nimble|af-?)(\d{2,4}[a-z]?)/i
+        ],
+        'lenovo': [
+            /\b(thinkpad|t|p|x|e)\s*(\d{3,5}[a-z]?)/i,
+            /\b(thinkcentre|m|s)\s*(\d{3,5}[a-z]?)/i,
+            /\b(thinkstation|p)\s*(\d{3,5}[a-z]?)/i
+        ]
+    };
+
+    // Try to find model patterns specific to the OEM
+    if (oemLower && modelPatterns[oemLower]) {
+        for (const pattern of modelPatterns[oemLower]) {
+            const match = specsText.match(pattern) || productName.match(pattern);
+            if (match) {
+                // Extract model number (usually the second capture group)
+                const model = match[2] || match[0];
+                if (model && model.length >= 2) {
+                    return {
+                        model: model.trim(),
+                        confidence: 75,
+                        source: 'specification_model_pattern'
+                    };
+                }
+            }
+        }
     }
-    
-    // Extract port/slot counts
-    const portMatch = specsLower.match(/(\d+)\s*(port|slot|interface)/gi);
-    if (portMatch) {
-        keyTerms.push(...portMatch.slice(0, 2));
+
+    // Generic model number patterns (alphanumeric codes)
+    const genericPatterns = [
+        /\b([a-z]{1,3}[-]?\d{3,5}[a-z]?)\b/i,  // e.g., CAT-3850, WS-C2960
+        /\b(model[:\s]+)?([a-z0-9\-]{4,12})\b/i,  // e.g., Model: ABC123
+        /\b(part[:\s]+number[:\s]+)?([a-z0-9\-]{4,12})\b/i  // Part number
+    ];
+
+    // Common specification keywords that should NOT be treated as model numbers
+    const invalidModelKeywords = [
+        'specification', 'product', 'description', 'width', 'height', 'length', 
+        'depth', 'capacity', 'size', 'dimension', 'inches', 'inch', 'cm', 'mm',
+        'based', 'type', 'standard', 'model', 'make', 'manufacturer', 'brand',
+        'color', 'weight', 'warranty', 'installation', 'power', 'voltage',
+        'current', 'frequency', 'rating', 'certification', 'compliance',
+        'approval', 'standard', 'grade', 'class', 'category', 'series',
+        'version', 'edition', 'material', 'finish', 'coating', 'surface'
+    ];
+
+    for (const pattern of genericPatterns) {
+        const match = specsText.match(pattern);
+        if (match) {
+            const model = (match[2] || match[1] || match[0]).trim();
+            const modelLower = model.toLowerCase();
+            
+            // Filter out common false positives (specification attributes, not model numbers)
+            if (model && 
+                model.length >= 3 && 
+                !invalidModelKeywords.includes(modelLower) &&
+                !invalidModelKeywords.some(keyword => modelLower.includes(keyword)) &&
+                // Ensure it looks like a model number (contains numbers or is alphanumeric code)
+                (/\d/.test(model) || /^[a-z]{2,}\d/i.test(model))) {
+                return {
+                    model: model,
+                    confidence: 60,
+                    source: 'generic_model_pattern'
+                };
+            }
+        }
     }
-    
-    // Extract key features
-    if (specsLower.includes('qsfp28')) keyTerms.push('QSFP28');
-    if (specsLower.includes('sfp28')) keyTerms.push('SFP28');
-    if (specsLower.includes('ips')) keyTerms.push('IPS');
-    if (specsLower.includes('ngfw')) keyTerms.push('NGFW');
-    if (specsLower.includes('ssl inspection')) keyTerms.push('SSL Inspection');
-    
-    return keyTerms.slice(0, 5); // Limit to 5 key terms
-};
+
+    return null;
+}
 
 module.exports = {
     inferOEMFromSpecs,
-    inferModelFromSpecs,
-    searchModelFromWeb
+    inferModelFromSpecs
 };
-
