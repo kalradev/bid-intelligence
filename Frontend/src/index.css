@@ -94,3 +94,22 @@ button:focus-visible {
 html, body {
   overflow-x: hidden !important;
 }
+
+/* Animations for progress indicators */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
