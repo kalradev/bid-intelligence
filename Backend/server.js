@@ -18,6 +18,15 @@ const exactReferenceRoutes = require('./routes/exactReferenceRoutes');
 const authRoutes = require('./routes/authRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
+// Initialize PostgreSQL connection if enabled
+if (envConfig.USE_POSTGRES === 'true' || envConfig.USE_POSTGRES === true) {
+    const { initDatabase } = require('./config/postgres');
+    initDatabase().catch(err => {
+        console.error('⚠️ PostgreSQL initialization failed:', err.message);
+        console.log('   Continuing with in-memory storage...');
+    });
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -30,6 +39,26 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/rfp', rfpRoutes);
 app.use('/api/reference', exactReferenceRoutes);
 app.use('/api/auth', authRoutes);
+
+// Log registered routes
+console.log('✅ Routes registered:');
+console.log('   - /api/rfp');
+console.log('   - /api/reference');
+console.log('   - /api/auth (login, register, me, logout)');
+
+// Test endpoint to verify auth routes are working
+app.get('/api/auth/test', (req, res) => {
+    res.json({
+        success: true,
+        message: 'Auth routes are working!',
+        endpoints: {
+            register: 'POST /api/auth/register',
+            login: 'POST /api/auth/login',
+            me: 'GET /api/auth/me',
+            logout: 'POST /api/auth/logout'
+        }
+    });
+});
 
 // Root endpoint
 app.get('/', (req, res) => {

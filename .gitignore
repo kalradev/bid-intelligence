@@ -1,0 +1,78 @@
+# Root .gitignore for Bid-Intelligence.Ai monorepo
+# (Frontend/ and Backend/ have their own .gitignore files too.)
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# --- Logs ---
+*.log
+logs/
+server.log
+server_log.txt
+debug.log
+
+# --- Secrets / env files ---
+.env
+.env.*
+!.env.example
+
+# --- Node / JS (Backend + Frontend) ---
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/.vite/
+**/.parcel-cache/
+**/.turbo/
+**/.next/
+**/.nuxt/
+**/coverage/
+
+# --- Python (Backend_py) ---
+**/__pycache__/
+**/*.py[cod]
+**/*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual envs (your repo currently contains Backend_py/venv/)
+**/venv/
+**/.venv/
+**/env/
+**/.envdir/
+
+# --- Runtime uploads / generated data ---
+Backend/uploads/
+Backend_py/uploads/
+data/temp/
+
+# --- Local databases / caches ---
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.db-shm
+**/*.db-wal
+
+# --- Large documents (usually generated/test data) ---
+**/*.pdf
+**/*.doc
+**/*.docx
+**/*.xls
+**/*.xlsx
+
+# --- Misc ---
+pid_info.txt
+
