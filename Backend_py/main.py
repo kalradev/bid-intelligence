@@ -90,6 +90,28 @@ async def root():
         }
     }
 
+@app.get("/health")
+async def health_check():
+    """Simple health check endpoint"""
+    try:
+        # Test database connection
+        from core.database import get_db_connection
+        conn = get_db_connection()
+        if conn:
+            conn.close()
+            db_status = "connected"
+        else:
+            db_status = "disconnected"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    return {
+        "status": "ok",
+        "service": "Bid Intelligence.ai API",
+        "database": db_status,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=settings.PORT)

@@ -43,7 +43,14 @@ export default function SignupPage() {
                 }),
             });
 
-            const data = await response.json();
+            // Check if response is JSON
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                // If response is not JSON, it might be a connection error
+                throw new Error('Server returned an invalid response. Please check if the backend is running.');
+            }
 
             if (response.ok && data.success) {
                 // Store token if provided
@@ -54,11 +61,19 @@ export default function SignupPage() {
                 // Navigate to home page after successful registration
                 navigate("/home");
             } else {
-                setError(data.message || 'Registration failed. Please try again.');
+                setError(data.message || data.detail || 'Registration failed. Please try again.');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Signup error:', error);
-            setError('Failed to connect to server. Please try again.');
+            
+            // Provide more specific error messages
+            if (error.message && error.message.includes('fetch')) {
+                setError('Cannot connect to server. Please make sure the backend is running on http://localhost:3000');
+            } else if (error.message) {
+                setError(error.message);
+            } else {
+                setError('Failed to connect to server. Please ensure the backend server is running and try again.');
+            }
         } finally {
             setIsLoading(false);
         }
