@@ -31,13 +31,35 @@ export default function UploadPage() {
     useEffect(() => {
         const fetchProjects = async () => {
             try {
-                const response = await fetch("http://localhost:3000/api/rfp/projects");
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    console.error("No authentication token found");
+                    setAllProjects([]);
+                    return;
+                }
+                
+                const response = await fetch("http://localhost:3000/api/rfp/projects", {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.status === 401) {
+                    // Token expired or invalid
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    console.error("Authentication failed");
+                    setAllProjects([]);
+                    return;
+                }
+                
                 const data = await response.json();
                 if (data.success) {
                     setAllProjects(data.projects);
                 }
             } catch (error) {
                 console.error("Error fetching projects:", error);
+                setAllProjects([]);
             }
         };
         fetchProjects();
@@ -96,7 +118,18 @@ export default function UploadPage() {
 
         setIsLoadingStatus(true);
         try {
-            const response = await fetch(`http://localhost:3000/api/rfp/project-status/${encodeURIComponent(name)}`);
+            const token = localStorage.getItem('token');
+            if (!token) {
+                toast.error("Please login to check project status");
+                setIsLoadingStatus(false);
+                return;
+            }
+            
+            const response = await fetch(`http://localhost:3000/api/rfp/project-status/${encodeURIComponent(name)}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
             if (!response.ok) throw new Error("Status check failed");
             const data = await response.json();
 
@@ -141,24 +174,9 @@ export default function UploadPage() {
         if (!projectName) return;
         setIsAnalyzing(true);
         try {
-            const response = await fetch(`http://localhost:3000/api/rfp/get-project-analysis/${encodeURIComponent(projectName)}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || "Failed to fetch project analysis");
-            }
-
-            const result = await response.json();
-            localStorage.setItem("analysisData", JSON.stringify(result));
-
-            if (result.data && result.data.fileHash) {
-                const documentInfo = {
-                    fileHash: result.data.fileHash,
-                    fileName: "Existing Analysis",
-                    projectName: projectName
-                };
-                localStorage.setItem("recentRfpAnalysis", JSON.stringify(documentInfo));
-                localStorage.setItem("currentDocument", JSON.stringify(documentInfo));
-            }
+            const { fetchProjectAnalysis, updateAnalysisData } = await import("../utils/documentAnalysis");
+            const result = await fetchProjectAnalysis(projectName);
+            updateAnalysisData(result, projectName);
 
             toast.success("Project history loaded! 🚀");
             setTimeout(() => navigate("/insights"), 1000);
@@ -299,6 +317,13 @@ export default function UploadPage() {
         }, 4000);
 
         try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                toast.error("Please login to analyze documents");
+                setIsAnalyzing(false);
+                return;
+            }
+            
             const formData = new FormData();
             uploadedFiles.forEach(file => formData.append("files", file));
             formData.append("project_name", projectName);
@@ -308,6 +333,9 @@ export default function UploadPage() {
 
             const response = await fetch("http://localhost:3000/api/rfp/analyze", {
                 method: "POST",
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
                 body: formData,
                 signal: signal,
             });

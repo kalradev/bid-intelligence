@@ -16,22 +16,26 @@ class ProjectService:
         update_type: str,
         file_hash: str,
         file_name: str,
-        extracted_text: str
+        extracted_text: str,
+        user_id: int
     ) -> Dict[str, Any]:
-        # 1. Check if project exists
-        project = ProjectModel.get_by_name(project_name)
+        # 1. Check if project exists (scoped to user)
+        project = ProjectModel.get_by_name(project_name, user_id)
         
         previous_analysis = None
         if not project:
             if update_type != 'BASE_RFP':
                 raise ValueError(f"Project '{project_name}' does not exist. First upload must be BASE_RFP.")
             
-            project_id = ProjectModel.create(project_name, tender_id, client_name)
+            project_id = ProjectModel.create(project_name, tender_id, client_name, user_id)
             if not project_id:
                 raise ValueError("Failed to create new project.")
-            logger.info(f"✨ Created NEW PROJECT: {project_name} (ID: {project_id})")
+            logger.info(f"✨ Created NEW PROJECT: {project_name} (ID: {project_id}) for user {user_id}")
         else:
             project_id = project['id']
+            # Verify the project belongs to this user
+            if project.get('user_id') != user_id:
+                raise ValueError(f"Project '{project_name}' does not belong to you.")
             if update_type == 'BASE_RFP':
                  raise ValueError(f"Project '{project_name}' already has a BASE_RFP. Use CORRIGENDUM or REFERENCE_UPDATE.")
             

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Body, Request, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Body, Request, Form, Depends
 from fastapi.responses import FileResponse, JSONResponse
 import time
 import os
@@ -17,6 +17,7 @@ from services.pinecone_service import store_rfp_in_pinecone
 from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
+from api.auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +28,8 @@ async def analyze_rfp(
     project_name: Optional[str] = Form(None),
     tender_id: Optional[str] = Form(None),
     client_name: Optional[str] = Form(None),
-    update_type: Optional[str] = Form("BASE_RFP")
+    update_type: Optional[str] = Form("BASE_RFP"),
+    current_user: dict = Depends(get_current_user)
 ):
     start_time = time.time()
     try:
@@ -87,7 +89,8 @@ async def analyze_rfp(
                     update_type=update_type,
                     file_hash=combined_hash,
                     file_name=", ".join(filenames),
-                    extracted_text=merged_text
+                    extracted_text=merged_text,
+                    user_id=current_user["id"]
                 )
                 
                 # If everything went well, return the merged analysis
@@ -230,21 +233,23 @@ async def enrich_oems_route(products: List[Dict[str, Any]] = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/projects")
-async def list_projects():
+async def list_projects(current_user: dict = Depends(get_current_user)):
     try:
-        projects = ProjectModel.get_all()
+        projects = ProjectModel.get_all(current_user["id"])
         return {"success": True, "projects": projects}
     except Exception as e:
         logger.error(f"Error listing projects: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve projects: {str(e)}")
 
 @router.get("/project-status/{project_name}")
-async def get_project_status(project_name: str):
+async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
     from core.database import get_db_connection
     from psycopg2.extras import RealDictCursor
     
     try:
-        project = ProjectModel.get_by_name(project_name)
+        project = ProjectModel.get_by_name(project_name, current_user["id"])
+        if project and project.get('user_id') != current_user["id"]:
+            return {"exists": False}
         if project:
             # Also check if it has a base RFP
             conn = get_db_connection()
@@ -273,43 +278,151 @@ async def get_project_status(project_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/get-project-analysis/{project_name}")
-async def get_project_analysis(project_name: str):
+async def get_project_analysis(
+    project_name: str, 
+    document_type: Optional[str] = None,
+    document_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get project analysis. 
+    - If document_type is provided: returns specific document type (BASE_RFP, CORRIGENDUM, REFERENCE_UPDATE)
+    - If document_id is provided: returns specific document by ID
+    - Otherwise: returns latest merged analysis (default behavior)
+    """
     from core.database import get_db_connection
     from psycopg2.extras import RealDictCursor
     
     try:
-        project = ProjectModel.get_by_name(project_name)
+        project = ProjectModel.get_by_name(project_name, current_user["id"])
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
+        if project.get('user_id') != current_user["id"]:
+            raise HTTPException(status_code=403, detail="You don't have access to this project")
             
-        # Get the latest analysis from project_documents
         conn = get_db_connection()
         cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(
-            "SELECT * FROM project_documents WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
-            (project['id'],)
-        )
-        latest_doc = cursor.fetchone()
+        
+        # Get specific document by ID if provided
+        if document_id:
+            cursor.execute(
+                "SELECT * FROM project_documents WHERE id = %s AND project_id = %s",
+                (document_id, project['id'])
+            )
+            doc = cursor.fetchone()
+        # Get specific document type if provided
+        elif document_type:
+            cursor.execute(
+                "SELECT * FROM project_documents WHERE project_id = %s AND update_type = %s ORDER BY created_at DESC LIMIT 1",
+                (project['id'], document_type)
+            )
+            doc = cursor.fetchone()
+        # Otherwise get latest (merged) analysis
+        else:
+            cursor.execute(
+                "SELECT * FROM project_documents WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
+                (project['id'],)
+            )
+            doc = cursor.fetchone()
+        
         conn.close()
         
-        if not latest_doc:
-             raise HTTPException(status_code=404, detail="No analysis found for this project")
+        if not doc:
+            if document_type or document_id:
+                raise HTTPException(status_code=404, detail=f"Document not found for the specified criteria")
+            raise HTTPException(status_code=404, detail="No analysis found for this project")
 
         return {
             "success": True,
             "project_centric": True,
             "data": {
                 "projectName": project_name,
-                "fileHash": latest_doc["file_hash"],
-                "departmentalSummaries": latest_doc["analysis_data"],
+                "fileHash": doc["file_hash"],
+                "departmentalSummaries": doc["analysis_data"],
                 "metadata": {
-                    "lastUpdated": latest_doc["created_at"].isoformat() if hasattr(latest_doc["created_at"], 'isoformat') else str(latest_doc["created_at"]),
-                    "updateType": latest_doc["update_type"]
+                    "lastUpdated": doc["created_at"].isoformat() if hasattr(doc["created_at"], 'isoformat') else str(doc["created_at"]),
+                    "updateType": doc["update_type"],
+                    "documentId": doc["id"],
+                    "fileName": doc["file_name"]
                 }
             }
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting project analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/get-project-documents/{project_name}")
+async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
+    """Get list of all documents for a project with their types and metadata"""
+    from core.database import get_db_connection
+    from psycopg2.extras import RealDictCursor
+    
+    try:
+        project = ProjectModel.get_by_name(project_name, current_user["id"])
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.get('user_id') != current_user["id"]:
+            raise HTTPException(status_code=403, detail="You don't have access to this project")
+            
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor.execute(
+            """SELECT id, file_hash, file_name, update_type, created_at 
+               FROM project_documents 
+               WHERE project_id = %s 
+               ORDER BY 
+                 CASE update_type 
+                   WHEN 'BASE_RFP' THEN 1 
+                   WHEN 'REFERENCE_UPDATE' THEN 2 
+                   WHEN 'CORRIGENDUM' THEN 3 
+                 END,
+                 created_at ASC""",
+            (project['id'],)
+        )
+        documents = list(cursor.fetchall())
+        conn.close()
+        
+        # Group documents by type and number them
+        documents_by_type = {}
+        result = []
+        
+        for doc in documents:
+            doc_type = doc['update_type']
+            if doc_type not in documents_by_type:
+                documents_by_type[doc_type] = 0
+            documents_by_type[doc_type] += 1
+            
+            # Create display name
+            if doc_type == 'BASE_RFP':
+                display_name = "Base RFP"
+            elif doc_type == 'CORRIGENDUM':
+                display_name = f"Corrigendum {documents_by_type[doc_type]}"
+            elif doc_type == 'REFERENCE_UPDATE':
+                display_name = f"Reference Update {documents_by_type[doc_type]}"
+            else:
+                display_name = doc_type
+            
+            result.append({
+                "id": doc['id'],
+                "fileHash": doc['file_hash'],
+                "fileName": doc['file_name'],
+                "updateType": doc_type,
+                "displayName": display_name,
+                "createdAt": doc['created_at'].isoformat() if hasattr(doc['created_at'], 'isoformat') else str(doc['created_at'])
+            })
+        
+        return {
+            "success": True,
+            "projectName": project_name,
+            "documents": result,
+            "totalDocuments": len(result)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting project documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/document/{file_hash}")

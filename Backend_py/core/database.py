@@ -56,8 +56,22 @@ def init_db():
                 project_name TEXT UNIQUE NOT NULL,
                 tender_id TEXT NOT NULL,
                 client_name TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        """)
+        
+        # Add user_id column if it doesn't exist (for existing databases)
+        cursor.execute("""
+            DO $$ 
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name='projects' AND column_name='user_id'
+                ) THEN
+                    ALTER TABLE projects ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+                END IF;
+            END $$;
         """)
         
         # Create project_documents table
@@ -109,6 +123,7 @@ def init_db():
         # Create indices
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_hash_version ON file_cache(file_hash, processing_version);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_name ON projects(project_name);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_user_id ON projects(user_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_analysis_project_section ON analysis_records(project_id, section);")
         
         conn.commit()
