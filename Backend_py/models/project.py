@@ -8,12 +8,15 @@ logger = logging.getLogger(__name__)
 
 class ProjectModel:
     @staticmethod
-    def get_by_name(project_name: str) -> Optional[Dict[str, Any]]:
+    def get_by_name(project_name: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         conn = get_db_connection()
         if not conn: return None
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("SELECT * FROM projects WHERE project_name = %s", (project_name,))
+            if user_id:
+                cursor.execute("SELECT * FROM projects WHERE project_name = %s AND user_id = %s", (project_name, user_id))
+            else:
+                cursor.execute("SELECT * FROM projects WHERE project_name = %s", (project_name,))
             return cursor.fetchone()
         except Exception as e:
             logger.error(f"Error getting project: {str(e)}")
@@ -22,12 +25,12 @@ class ProjectModel:
             conn.close()
 
     @staticmethod
-    def get_all() -> List[Dict[str, Any]]:
+    def get_all(user_id: int) -> List[Dict[str, Any]]:
         conn = get_db_connection()
         if not conn: return []
         try:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute("SELECT * FROM projects ORDER BY project_name ASC")
+            cursor.execute("SELECT * FROM projects WHERE user_id = %s ORDER BY project_name ASC", (user_id,))
             return list(cursor.fetchall())
         except Exception as e:
             logger.error(f"Error getting all projects: {str(e)}")
@@ -36,14 +39,14 @@ class ProjectModel:
             conn.close()
 
     @staticmethod
-    def create(project_name: str, tender_id: str, client_name: str) -> Optional[int]:
+    def create(project_name: str, tender_id: str, client_name: str, user_id: int) -> Optional[int]:
         conn = get_db_connection()
         if not conn: return None
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO projects (project_name, tender_id, client_name) VALUES (%s, %s, %s) RETURNING id",
-                (project_name, tender_id, client_name)
+                "INSERT INTO projects (project_name, tender_id, client_name, user_id) VALUES (%s, %s, %s, %s) RETURNING id",
+                (project_name, tender_id, client_name, user_id)
             )
             project_id = cursor.fetchone()[0]
             conn.commit()
