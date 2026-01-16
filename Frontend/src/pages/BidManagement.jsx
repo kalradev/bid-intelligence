@@ -160,12 +160,8 @@ const BidManagement = () => {
                         relevance: Math.round(ref.confidence * 100), // Convert to percentage
                         chunkIndex: idx,
                         matchedText: ref.matchedText, // Store exact matched text for highlighting
-<<<<<<< HEAD
                         matchType: ref.matchType,
                         query: query // Pass query for highlighting
-=======
-                        matchType: ref.matchType
->>>>>>> convert
                     }));
                     
                     console.log(`✅ Found ${sources.length} exact matches`);
