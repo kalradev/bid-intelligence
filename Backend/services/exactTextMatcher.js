@@ -275,6 +275,7 @@ function findAllExactMatches(query, pageTexts, maxResults = 3) {
     return matches.slice(0, maxResults);
 }
 
+<<<<<<< HEAD
 /**
  * Find text position in page for highlighting
  * @param {string} pageText - Full page text
@@ -344,13 +345,19 @@ function findTextPosition(pageText, sentence, query) {
     };
 }
 
+=======
+>>>>>>> convert
 module.exports = {
     normalizeText,
     extractAtomicUnits,
     calculateWordOverlap,
     extractNumericPatterns,
     findExactMatch,
+<<<<<<< HEAD
     findAllExactMatches,
     findTextPosition
+=======
+    findAllExactMatches
+>>>>>>> convert
 };
 

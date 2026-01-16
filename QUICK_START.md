@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ```markdown
 ## 🚀 Quick Start – Bid-Intelligence.ai
 
@@ -184,6 +185,8 @@ For deterministic BOQ behaviour and OEM/model logic details, see `IMPLEMENTATION
 - **Technical deep dive & feature details** → `IMPLEMENTATION_SUMMARY.md`
 ```
 
+=======
+>>>>>>> convert
 # ⚡ QUICK START - OEM Auto-Enrichment System
 
 ## 🚀 Ready to Use in 3 Steps
