@@ -1,14 +1,47 @@
 import { Download } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DepartmentCard from "../components/DepartmentCard";
 import FeatureCard from "../components/FeatureCard";
 import InteractiveBackground from "../components/InteractiveBackground";
+import DocumentFilter from "../components/DocumentFilter";
 import { departments, features } from "../data/uiData";
 import { generateSummaryPDF } from "../utils/summaryPdfExport";
+import { fetchProjectAnalysis, updateAnalysisData } from "../utils/documentAnalysis";
+import toast from "react-hot-toast";
 
 export default function InsightsPage() {
   const navigate = useNavigate();
+  const [projectName, setProjectName] = useState<string>("");
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Get project name from localStorage
+  useEffect(() => {
+    const currentDoc = localStorage.getItem("currentDocument");
+    if (currentDoc) {
+      try {
+        const doc = JSON.parse(currentDoc);
+        setProjectName(doc.projectName || "");
+        setSelectedDocumentId(doc.documentId || null);
+      } catch (e) {
+        console.error("Error parsing currentDocument:", e);
+      }
+    }
+    
+    // Also check analysisData for project name
+    const analysisData = localStorage.getItem("analysisData");
+    if (analysisData && !projectName) {
+      try {
+        const data = JSON.parse(analysisData);
+        if (data.data?.projectName) {
+          setProjectName(data.data.projectName);
+        }
+      } catch (e) {
+        console.error("Error parsing analysisData:", e);
+      }
+    }
+  }, []);
 
   // Handle scroll to section on page load if hash is present
   useEffect(() => {
@@ -22,6 +55,24 @@ export default function InsightsPage() {
       }, 100);
     }
   }, []);
+
+  const handleDocumentChange = async (documentId: number | null, documentType: string | null, displayName: string) => {
+    if (!projectName) return;
+    
+    setIsLoading(true);
+    try {
+      const result = await fetchProjectAnalysis(projectName, documentId, documentType);
+      updateAnalysisData(result, projectName);
+      setSelectedDocumentId(documentId);
+      
+      // Reload the page to update all department pages
+      window.location.reload();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load document analysis");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleDownloadSummary = () => {
     const analysisData = localStorage.getItem("analysisData");
@@ -45,6 +96,15 @@ export default function InsightsPage() {
         <div className="navbar-title">Bid Intelligence.AI</div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Document Filter */}
+          {projectName && (
+            <DocumentFilter
+              projectName={projectName}
+              onDocumentChange={handleDocumentChange}
+              currentDocumentId={selectedDocumentId}
+            />
+          )}
+          
           {/* Download Summary Button */}
           <button
             className="navbar-btn-icon"
@@ -114,6 +174,29 @@ export default function InsightsPage() {
               India opportunities, and dive deeper into product mapping, global
               research, and cost estimation.
             </p>
+            
+            {/* Document Type Indicator */}
+            {projectName && (
+              <div style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 16px",
+                background: "rgba(99, 102, 241, 0.1)",
+                borderRadius: "20px",
+                fontSize: "14px",
+                fontWeight: "600",
+                color: "#4f46e5",
+                marginTop: "16px"
+              }}>
+                <span>📄</span>
+                <span>
+                  {selectedDocumentId 
+                    ? `Viewing: ${localStorage.getItem("currentDocument") ? JSON.parse(localStorage.getItem("currentDocument") || "{}").displayName || "Document" : "Document"}`
+                    : "Viewing: Merged View"}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ===== FEATURE CARDS ===== */}

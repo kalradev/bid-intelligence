@@ -7,7 +7,11 @@
 
 const express = require('express');
 const router = express.Router();
+<<<<<<< HEAD
 const { findExactMatch, findAllExactMatches, findTextPosition } = require('../services/exactTextMatcher');
+=======
+const { findExactMatch, findAllExactMatches } = require('../services/exactTextMatcher');
+>>>>>>> convert
 const { loadPageByPageData } = require('../services/pageByPageExtractor');
 const { getStoredFilePath } = require('../utils/fileStorage');
 const fs = require('fs');
@@ -68,6 +72,7 @@ router.post('/exact-match', async (req, res) => {
         if (match && match.confidence >= 0.85) {
             console.log(`✅ Exact match found: Page ${match.page}, Confidence: ${match.confidence}`);
             
+<<<<<<< HEAD
             // Find highlight position
             const pageData = pageTexts.find(p => p.pageNumber === match.page);
             let highlightInfo = null;
@@ -82,14 +87,20 @@ router.post('/exact-match', async (req, res) => {
                 };
             }
             
+=======
+>>>>>>> convert
             return res.json({
                 success: true,
                 reference: {
                     matchedText: match.matchedText,
                     page: match.page,
                     confidence: match.confidence,
+<<<<<<< HEAD
                     matchType: match.matchType,
                     ...highlightInfo
+=======
+                    matchType: match.matchType
+>>>>>>> convert
                 }
             });
         } else {
@@ -168,6 +179,7 @@ router.post('/exact-matches', async (req, res) => {
         if (matches.length > 0) {
             console.log(`✅ Found ${matches.length} exact matches`);
             
+<<<<<<< HEAD
             // Add highlight positions to each match
             const enrichedMatches = matches.map(m => {
                 const pageData = pageTexts.find(p => p.pageNumber === m.page);
@@ -187,6 +199,16 @@ router.post('/exact-matches', async (req, res) => {
             return res.json({
                 success: true,
                 references: enrichedMatches
+=======
+            return res.json({
+                success: true,
+                references: matches.map(m => ({
+                    matchedText: m.matchedText,
+                    page: m.page,
+                    confidence: m.confidence,
+                    matchType: m.matchType
+                }))
+>>>>>>> convert
             });
         } else {
             console.log(`⚠️  No exact matches found`);
@@ -208,6 +230,7 @@ router.post('/exact-matches', async (req, res) => {
     }
 });
 
+<<<<<<< HEAD
 /**
  * GET /api/reference/test
  * Test endpoint to verify route is working
@@ -342,5 +365,7 @@ router.get('/page/:fileHash/:pageNumber', async (req, res) => {
     }
 });
 
+=======
+>>>>>>> convert
 module.exports = router;
 

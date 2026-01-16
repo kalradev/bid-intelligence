@@ -5,7 +5,7 @@ export default function Navbar() {
 
   return (
     <div className="w-full sticky top-0 z-50 bg-white border-b border-gray-300 py-4 px-8 shadow-sm flex items-center justify-between">
-      <h1 
+      <h1
         className="text-2xl font-bold text-gray-800 cursor-pointer"
         onClick={() => navigate("/")}
       >
@@ -21,6 +21,12 @@ export default function Navbar() {
         </button>
         <button onClick={() => navigate("/global-intelligence")} className="text-gray-700 hover:text-blue-600 font-medium">
           Global Intelligence
+        </button>
+        <button
+          onClick={() => navigate("/")}
+          className="text-red-600 hover:text-red-700 font-semibold ml-4"
+        >
+          Logout
         </button>
       </div>
     </div>

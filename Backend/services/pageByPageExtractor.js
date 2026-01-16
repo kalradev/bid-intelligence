@@ -7,7 +7,10 @@
 
 const { PDFParse } = require('pdf-parse');
 const fs = require('fs');
+<<<<<<< HEAD
 const path = require('path');
+=======
+>>>>>>> convert
 
 /**
  * Extract text from PDF page by page
@@ -187,14 +190,22 @@ function extractAtomicUnits(text) {
  */
 async function storePageByPageData(fileHash, pageData, storagePath) {
     try {
+<<<<<<< HEAD
         const storageDir = storagePath || path.join(__dirname, '../data/pageTexts');
+=======
+        const storageDir = storagePath || './Backend/data/pageTexts';
+>>>>>>> convert
         
         // Ensure directory exists
         if (!fs.existsSync(storageDir)) {
             fs.mkdirSync(storageDir, { recursive: true });
         }
         
+<<<<<<< HEAD
         const filePath = path.join(storageDir, `${fileHash}.json`);
+=======
+        const filePath = `${storageDir}/${fileHash}.json`;
+>>>>>>> convert
         
         const dataToStore = {
             fileHash: fileHash,
@@ -226,6 +237,7 @@ async function storePageByPageData(fileHash, pageData, storagePath) {
  */
 async function loadPageByPageData(fileHash, storagePath) {
     try {
+<<<<<<< HEAD
         const storageDir = storagePath || path.join(__dirname, '../data/pageTexts');
         const filePath = path.join(storageDir, `${fileHash}.json`);
         
@@ -233,14 +245,26 @@ async function loadPageByPageData(fileHash, storagePath) {
         
         if (!fs.existsSync(filePath)) {
             console.log(`⚠️  Page data file not found: ${filePath}`);
+=======
+        const storageDir = storagePath || './Backend/data/pageTexts';
+        const filePath = `${storageDir}/${fileHash}.json`;
+        
+        if (!fs.existsSync(filePath)) {
+>>>>>>> convert
             return null;
         }
         
         const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+<<<<<<< HEAD
         console.log(`✅ Loaded page data: ${data.pages?.length || 0} pages`);
         return data.pages || [];
     } catch (error) {
         console.error(`❌ Error loading page-by-page data: ${error.message}`);
+=======
+        return data.pages || [];
+    } catch (error) {
+        console.error(`Error loading page-by-page data: ${error.message}`);
+>>>>>>> convert
         return null;
     }
 }
