@@ -7,7 +7,6 @@ import asyncio
 
 from core.config import settings
 from api.rfp_routes import router as rfp_router
-from api.reference_routes import router as reference_router
 from api.auth_routes import router as auth_router
 
 # Configure logging
@@ -70,12 +69,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Register Routes
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
-app.include_router(reference_router, prefix="/api/reference", tags=["Reference"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
 logger.info("✅ Routes registered:")
 logger.info("   - /api/rfp")
-logger.info("   - /api/reference")
 logger.info("   - /api/auth (login, register, me, logout)")
 
 @app.get("/")
@@ -85,8 +82,7 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "analyze": "POST /api/rfp/analyze",
-            "health": "GET /api/rfp/health",
-            "reference": "POST /api/reference/exact-match"
+            "health": "GET /api/rfp/health"
         }
     }
 

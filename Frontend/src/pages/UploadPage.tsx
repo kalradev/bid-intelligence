@@ -10,9 +10,9 @@ export default function UploadPage() {
     const [analysisStage, setAnalysisStage] = useState<string>("");
     const [progressPercent, setProgressPercent] = useState(0);
     const abortControllerRef = useRef<AbortController | null>(null);
-    const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const timerIntervalRef = useRef<number | null>(null);
     const startTimeRef = useRef<number | null>(null);
-    const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const progressIntervalRef = useRef<number | null>(null);
 
     const [projectName, setProjectName] = useState("");
     const [tenderId, setTenderId] = useState("");
@@ -104,6 +104,38 @@ export default function UploadPage() {
         }
     }, [isDropdownOpen]);
 
+    // Format date to show actual time and date
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const isToday = date.toDateString() === now.toDateString();
+        const isThisYear = date.getFullYear() === now.getFullYear();
+        
+        const timeStr = date.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            hour12: true 
+        });
+        
+        if (isToday) {
+            // Today: just show time "2:30 PM"
+            return timeStr;
+        } else if (isThisYear) {
+            // This year: "Jan 19, 2:30 PM"
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric'
+            }) + ', ' + timeStr;
+        } else {
+            // Other years: "Jan 19, 2024, 2:30 PM"
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            }) + ', ' + timeStr;
+        }
+    };
+
     // Filter projects based on search term
     const filteredProjects = allProjects.filter((p: any) =>
         p.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase())
@@ -157,6 +189,9 @@ export default function UploadPage() {
     };
 
     const handleProjectSelect = (selectedName: string) => {
+        console.log("🔵 handleProjectSelect called:", selectedName);
+        console.log("   Previous projectName:", projectName);
+        
         if (!selectedName) {
             setProjectName("");
             setProjectExists(null);
@@ -164,9 +199,17 @@ export default function UploadPage() {
             setIsDropdownOpen(false);
             return;
         }
+        
+        // Clear previous project state when switching to a different project
+        setProjectExists(null);
+        setTenderId("");
+        setClientName("");
+        
         setProjectName(selectedName);
-        setProjectSearchTerm(selectedName);
+        // Don't set projectSearchTerm - it should only be used for search filtering
         setIsDropdownOpen(false);
+        
+        console.log("✅ Project changed to:", selectedName);
         checkProjectStatus(selectedName);
     };
 
@@ -702,7 +745,11 @@ export default function UploadPage() {
                                                         filteredProjects.map((p: any) => (
                                                             <div
                                                                 key={p.id}
-                                                                onClick={() => handleProjectSelect(p.project_name)}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    console.log("🟢 Project item clicked:", p.project_name);
+                                                                    handleProjectSelect(p.project_name);
+                                                                }}
                                                                 style={{
                                                                     padding: "12px 16px",
                                                                     cursor: "pointer",
@@ -710,7 +757,11 @@ export default function UploadPage() {
                                                                     color: "#111827",
                                                                     transition: "all 0.2s ease",
                                                                     borderBottom: "1px solid rgba(99, 102, 241, 0.05)",
-                                                                    backgroundColor: projectName === p.project_name ? "rgba(99, 102, 241, 0.12)" : "#ffffff"
+                                                                    backgroundColor: projectName === p.project_name ? "rgba(99, 102, 241, 0.12)" : "#ffffff",
+                                                                    display: "flex",
+                                                                    justifyContent: "space-between",
+                                                                    alignItems: "center",
+                                                                    gap: "12px"
                                                                 }}
                                                                 onMouseEnter={(e) => {
                                                                     if (projectName !== p.project_name) {
@@ -723,7 +774,15 @@ export default function UploadPage() {
                                                                     }
                                                                 }}
                                                             >
-                                                                {p.project_name}
+                                                                <span style={{ flex: 1, fontWeight: "500" }}>{p.project_name}</span>
+                                                                <span style={{ 
+                                                                    fontSize: "11px", 
+                                                                    color: "#6b7280", 
+                                                                    whiteSpace: "nowrap",
+                                                                    fontWeight: "400"
+                                                                }}>
+                                                                    {p.created_at ? formatDate(p.created_at) : ''}
+                                                                </span>
                                                             </div>
                                                         ))
                                                     ) : (

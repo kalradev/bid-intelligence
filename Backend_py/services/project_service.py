@@ -63,6 +63,18 @@ class ProjectService:
         ai_result = await generate_departmental_summaries(extracted_text, file_name)
         new_summaries = ai_result['summaries']
         
+        # Debug: Log product mapping extraction
+        if new_summaries.get("productMapping"):
+            pm = new_summaries["productMapping"]
+            product_count = len(pm.get("miiProductStatus", []))
+            logger.info(f"📦 Product Mapping extracted: {product_count} products found")
+            if product_count > 0:
+                logger.info(f"   Sample product: {pm['miiProductStatus'][0]}")
+            else:
+                logger.warning("⚠️ No products extracted from document! Check if document contains BOQ/BOM.")
+        else:
+            logger.warning("⚠️ No productMapping section in AI response!")
+        
         # 3. Merge with previous analysis if it exists
         if previous_analysis:
             from services.ai_service import naive_merge_summaries
@@ -74,6 +86,19 @@ class ProjectService:
 
         # Perform OEM Enrichment on the merged result
         await ProjectService._enrich_and_sync_summaries(merged_summaries, [file_name])
+        
+        # Validate EMD vs Bid Value
+        merged_summaries = ProjectService._validate_emd_vs_bid_value(merged_summaries)
+        
+        # Debug: Log final product mapping after enrichment
+        if merged_summaries.get("productMapping"):
+            pm = merged_summaries["productMapping"]
+            product_count = len(pm.get("miiProductStatus", []))
+            logger.info(f"✅ Final Product Mapping after enrichment: {product_count} products")
+            logger.info(f"   Total Items: {pm.get('totalItems', 0)}")
+            logger.info(f"   Products Mapped: {pm.get('productsMapped', 0)}")
+        else:
+            logger.error("❌ productMapping missing after enrichment!")
 
         # 4. Store document
         doc_id = ProjectModel.add_document(
@@ -86,6 +111,16 @@ class ProjectService:
         # 6. Return both merged analysis and auditable trace
         final_data = ProjectService.get_final_analysis(project_id)
         final_data['departmentalSummaries'] = merged_summaries
+        final_data['project_id'] = project_id  # Include project_id for document lookup
+        
+        # Debug: Final check of product mapping
+        if merged_summaries.get("productMapping"):
+            pm = merged_summaries["productMapping"]
+            product_count = len(pm.get("miiProductStatus", []))
+            logger.info(f"✅ Final return: {product_count} products in productMapping.miiProductStatus")
+        else:
+            logger.error("❌ CRITICAL: productMapping missing in final merged_summaries!")
+        
         return final_data
 
     @staticmethod
@@ -143,6 +178,42 @@ class ProjectService:
             else:
                 return None
         return data
+
+    @staticmethod
+    def _validate_emd_vs_bid_value(departmental_summaries: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate that EMD and Bid Value are not the same (EMD should be much smaller)"""
+        project_overview = departmental_summaries.get("projectOverview", {})
+        emd = project_overview.get("emd", "")
+        bid_value = project_overview.get("bidValue", "")
+        
+        # If both exist and appear to be the same value, flag it
+        if emd and bid_value and emd != "N/A" and bid_value != "N/A":
+            # Extract numeric values (remove currency symbols, commas, etc.)
+            import re
+            emd_clean = emd.replace(',', '').replace('₹', '').replace('Rs.', '').replace('Rs', '').strip()
+            bid_clean = bid_value.replace(',', '').replace('₹', '').replace('Rs.', '').replace('Rs', '').strip()
+            
+            emd_num = re.findall(r'[\d.]+', emd_clean)
+            bid_num = re.findall(r'[\d.]+', bid_clean)
+            
+            if emd_num and bid_num:
+                try:
+                    emd_val = float(emd_num[0])
+                    bid_val = float(bid_num[0])
+                    
+                    # If they're exactly the same or very close, this is likely wrong
+                    if abs(emd_val - bid_val) < 0.01 or (emd_val == bid_val):
+                        logger.warning(f"⚠️ VALIDATION ERROR: EMD ({emd}) and Bid Value ({bid_value}) appear to be the same!")
+                        logger.warning("   EMD should typically be 1-2% of Bid Value")
+                        logger.warning("   This suggests incorrect extraction - please verify in source document")
+                        # Mark bidValue as potentially incorrect if EMD seems reasonable
+                        if emd_val < 10000000:  # If EMD is less than 1 crore, it's probably correct
+                            logger.warning(f"   EMD ({emd}) seems reasonable - Bid Value might be incorrectly extracted")
+                            project_overview["bidValue"] = "N/A"  # Mark as unknown to force re-extraction
+                except (ValueError, IndexError):
+                    pass
+        
+        return departmental_summaries
 
     @staticmethod
     def _ensure_stats_consistency(departmental_summaries: Dict[str, Any]):
