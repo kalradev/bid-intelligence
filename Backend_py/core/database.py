@@ -120,11 +120,33 @@ def init_db():
         # Create index on email for faster lookups
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);")
         
+        # Create eligibility_checklist table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS eligibility_checklist (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                document_id INTEGER REFERENCES project_documents(id) ON DELETE CASCADE,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                criteria_text TEXT NOT NULL,
+                is_checked BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        
+        # Create unique index that handles NULL document_id properly
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_eligibility_unique 
+            ON eligibility_checklist(project_id, COALESCE(document_id, -1), user_id, criteria_text);
+        """)
+        
         # Create indices
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_hash_version ON file_cache(file_hash, processing_version);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_name ON projects(project_name);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_user_id ON projects(user_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_analysis_project_section ON analysis_records(project_id, section);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_project_doc ON eligibility_checklist(project_id, document_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_user ON eligibility_checklist(user_id);")
         
         conn.commit()
         cursor.close()

@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "12345"  # Match your PostgreSQL password
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "Bid "  # Your existing database name (with space)
+    POSTGRES_DB: str = "Bid2"  # Main database for Bid Intelligence project
     DATABASE_URL: Optional[str] = None
     
     # Versioning

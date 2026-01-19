@@ -6,6 +6,7 @@ import hashlib
 import logging
 import asyncio
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 import aiofiles
 import httpx
 
@@ -17,6 +18,7 @@ from services.pinecone_service import store_rfp_in_pinecone
 from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
+from models.eligibility_checklist import EligibilityChecklistModel
 from api.auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -93,6 +95,43 @@ async def analyze_rfp(
                     user_id=current_user["id"]
                 )
                 
+                # Get the document ID that was just created
+                from core.database import get_db_connection
+                from psycopg2.extras import RealDictCursor
+                conn = get_db_connection()
+                doc_id = None
+                if conn:
+                    try:
+                        cursor = conn.cursor(cursor_factory=RealDictCursor)
+                        project_id = result_data.get("project_id")
+                        if not project_id:
+                            # Try to get project_id from project name
+                            from models.project import ProjectModel
+                            project = ProjectModel.get_by_name(project_name, current_user["id"])
+                            if project:
+                                project_id = project["id"]
+                        
+                        if project_id:
+                            cursor.execute(
+                                "SELECT id, created_at, update_type FROM project_documents WHERE project_id = %s AND file_hash = %s ORDER BY created_at DESC LIMIT 1",
+                                (project_id, combined_hash)
+                            )
+                        else:
+                            logger.warning("Could not determine project_id for document lookup")
+                        doc = cursor.fetchone()
+                        if doc:
+                            doc_id = doc["id"]
+                            logger.info(f"✅ Found document ID: {doc_id} for project {project_name}")
+                    except Exception as e:
+                        logger.error(f"Error fetching document ID: {str(e)}")
+                    finally:
+                        conn.close()
+                
+                # Debug: Log product mapping in response
+                pm = result_data["departmentalSummaries"].get("productMapping", {})
+                product_count = len(pm.get("miiProductStatus", []))
+                logger.info(f"📦 Returning analysis with {product_count} products in productMapping")
+                
                 # If everything went well, return the merged analysis
                 return {
                     "success": True,
@@ -105,7 +144,11 @@ async def analyze_rfp(
                         "departmentalSummaries": result_data["departmentalSummaries"],
                         "metadata": {
                             "processingTime": f"{time.time() - start_time:.2f}s",
-                            "fileCount": len(files)
+                            "fileCount": len(files),
+                            "documentId": doc_id,
+                            "updateType": update_type,
+                            "fileName": ", ".join(filenames),
+                            "lastUpdated": datetime.now().isoformat() if 'datetime' in dir() else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                         }
                     }
                 }
@@ -507,6 +550,117 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
     except Exception as e:
         logger.error(f"Error in get_sources: {str(e)}")
         return JSONResponse(content={"sources": [], "error": str(e)}, status_code=200)
+
+@router.get("/eligibility-checklist/{project_name}")
+async def get_eligibility_checklist(
+    project_name: str,
+    document_id: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get eligibility checklist for a project/document"""
+    try:
+        user_id = current_user["id"]
+        
+        # Get project
+        project = ProjectModel.get_by_name(project_name, user_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_id = project["id"]
+        
+        # Get checklist from database
+        checklist = EligibilityChecklistModel.get_by_project_and_document(
+            project_id, document_id, user_id
+        )
+        
+        return {
+            "success": True,
+            "checklist": checklist,
+            "project_id": project_id,
+            "document_id": document_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting eligibility checklist: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/eligibility-checklist/{project_name}")
+async def save_eligibility_checklist(
+    project_name: str,
+    checklist: Dict[str, bool] = Body(...),
+    document_id: Optional[int] = Body(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """Save eligibility checklist for a project/document"""
+    try:
+        user_id = current_user["id"]
+        
+        # Get project
+        project = ProjectModel.get_by_name(project_name, user_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_id = project["id"]
+        
+        # Save checklist to database
+        success = EligibilityChecklistModel.save_checklist(
+            project_id, document_id, user_id, checklist
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Eligibility checklist saved successfully",
+                "project_id": project_id,
+                "document_id": document_id
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to save eligibility checklist")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving eligibility checklist: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/eligibility-checklist/{project_name}/item")
+async def update_eligibility_item(
+    project_name: str,
+    criteria_text: str = Body(...),
+    is_checked: bool = Body(...),
+    document_id: Optional[int] = Body(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a single eligibility checklist item"""
+    try:
+        user_id = current_user["id"]
+        
+        # Get project
+        project = ProjectModel.get_by_name(project_name, user_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_id = project["id"]
+        
+        # Update item in database
+        success = EligibilityChecklistModel.update_item(
+            project_id, document_id, user_id, criteria_text, is_checked
+        )
+        
+        if success:
+            return {
+                "success": True,
+                "message": "Eligibility checklist item updated successfully",
+                "criteria_text": criteria_text,
+                "is_checked": is_checked
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update eligibility checklist item")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating eligibility checklist item: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/health")
 async def health_check():
