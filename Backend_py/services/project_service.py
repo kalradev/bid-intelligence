@@ -17,7 +17,7 @@ class ProjectService:
         file_hash: str,
         file_name: str,
         extracted_text: str,
-        user_id: int
+        user_id  # Can be int (for migration) or str (MongoDB ObjectId)
     ) -> Dict[str, Any]:
         # 1. Check if project exists (scoped to user)
         project = ProjectModel.get_by_name(project_name, user_id)
@@ -40,22 +40,20 @@ class ProjectService:
                  raise ValueError(f"Project '{project_name}' already has a BASE_RFP. Use CORRIGENDUM or REFERENCE_UPDATE.")
             
             # Fetch latest document's analysis to merge with
-            from core.database import get_db_connection
-            from psycopg2.extras import RealDictCursor
-            conn = get_db_connection()
-            if conn:
+            from core.mongodb import get_mongodb, str_to_objectid
+            db = get_mongodb()
+            if db is not None:
                 try:
-                    cursor = conn.cursor(cursor_factory=RealDictCursor)
-                    cursor.execute(
-                        "SELECT analysis_data FROM project_documents WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
-                        (project_id,)
+                    project_oid = str_to_objectid(project_id) if isinstance(project_id, str) else project_id
+                    doc = db.project_documents.find_one(
+                        {"project_id": project_oid},
+                        sort=[("created_at", -1)]  # Latest first
                     )
-                    row = cursor.fetchone()
-                    if row and row['analysis_data']:
-                        previous_analysis = row['analysis_data']
+                    if doc and doc.get('analysis_data'):
+                        previous_analysis = doc['analysis_data']
                         logger.info(f"🔄 Found previous analysis for project {project_id} to merge with.")
-                finally:
-                    conn.close()
+                except Exception as e:
+                    logger.error(f"Error fetching previous analysis: {str(e)}")
 
             logger.info(f"📁 Adding to EXISTING PROJECT: {project_name} (ID: {project_id}, Type: {update_type})")
 
@@ -124,7 +122,7 @@ class ProjectService:
         return final_data
 
     @staticmethod
-    def _store_granular_records(project_id: int, doc_id: int, source_type: str, file_name: str, file_hash: str, summaries: Dict[str, Any]):
+    def _store_granular_records(project_id, doc_id, source_type: str, file_name: str, file_hash: str, summaries: Dict[str, Any]):
         """Breaks down the AI summary into auditable records."""
         sections_to_extract = [
             ('projectOverview', 'Project Overview'),
@@ -279,7 +277,7 @@ class ProjectService:
                 ]
 
     @staticmethod
-    def get_final_analysis(project_id: int) -> Dict[str, Any]:
+    def get_final_analysis(project_id) -> Dict[str, Any]:
         """Produces the merged 'FINAL VISIBLE ANALYSIS'."""
         records = ProjectModel.get_merged_analysis(project_id)
         

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Body, Request, Form, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Body, Request, Form, Depends, Query
 from fastapi.responses import FileResponse, JSONResponse
 import time
 import os
@@ -96,13 +96,11 @@ async def analyze_rfp(
                 )
                 
                 # Get the document ID that was just created
-                from core.database import get_db_connection
-                from psycopg2.extras import RealDictCursor
-                conn = get_db_connection()
+                from core.mongodb import get_mongodb, str_to_objectid
                 doc_id = None
-                if conn:
+                db = get_mongodb()
+                if db is not None:
                     try:
-                        cursor = conn.cursor(cursor_factory=RealDictCursor)
                         project_id = result_data.get("project_id")
                         if not project_id:
                             # Try to get project_id from project name
@@ -112,20 +110,18 @@ async def analyze_rfp(
                                 project_id = project["id"]
                         
                         if project_id:
-                            cursor.execute(
-                                "SELECT id, created_at, update_type FROM project_documents WHERE project_id = %s AND file_hash = %s ORDER BY created_at DESC LIMIT 1",
-                                (project_id, combined_hash)
+                            project_oid = str_to_objectid(project_id) if isinstance(project_id, str) else project_id
+                            doc = db.project_documents.find_one(
+                                {"project_id": project_oid, "file_hash": combined_hash},
+                                sort=[("created_at", -1)]
                             )
+                            if doc:
+                                doc_id = str(doc["_id"])
+                                logger.info(f"✅ Found document ID: {doc_id} for project {project_name}")
                         else:
                             logger.warning("Could not determine project_id for document lookup")
-                        doc = cursor.fetchone()
-                        if doc:
-                            doc_id = doc["id"]
-                            logger.info(f"✅ Found document ID: {doc_id} for project {project_name}")
                     except Exception as e:
                         logger.error(f"Error fetching document ID: {str(e)}")
-                    finally:
-                        conn.close()
                 
                 # Debug: Log product mapping in response
                 pm = result_data["departmentalSummaries"].get("productMapping", {})
@@ -286,23 +282,25 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
 
 @router.get("/project-status/{project_name}")
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
-    from core.database import get_db_connection
-    from psycopg2.extras import RealDictCursor
+    from core.mongodb import get_mongodb, str_to_objectid
     
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
-        if project and project.get('user_id') != current_user["id"]:
+        if project and str(project.get('user_id')) != str(current_user["id"]):
             return {"exists": False}
         if project:
             # Also check if it has a base RFP
-            conn = get_db_connection()
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            cursor.execute(
-                "SELECT * FROM project_documents WHERE project_id = %s AND update_type = 'BASE_RFP' ORDER BY created_at DESC LIMIT 1",
-                (project['id'],)
-            )
-            base_doc = cursor.fetchone()
-            conn.close()
+            from core.mongodb import convert_id_to_str
+            db = get_mongodb()
+            base_doc = None
+            if db is not None:
+                project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
+                base_doc_raw = db.project_documents.find_one(
+                    {"project_id": project_oid, "update_type": "BASE_RFP"},
+                    sort=[("created_at", -1)]
+                )
+                if base_doc_raw:
+                    base_doc = convert_id_to_str(base_doc_raw)
             
             return {
                 "exists": True,
@@ -311,7 +309,7 @@ async def get_project_status(project_name: str, current_user: dict = Depends(get
                     "tenderId": project["tender_id"],
                     "clientName": project["client_name"],
                     "hasBaseRfp": base_doc is not None,
-                    "baseRfpHash": base_doc["file_hash"] if base_doc else None
+                    "baseRfpHash": base_doc.get("file_hash") if base_doc else None
                 }
             }
         else:
@@ -323,8 +321,8 @@ async def get_project_status(project_name: str, current_user: dict = Depends(get
 @router.get("/get-project-analysis/{project_name}")
 async def get_project_analysis(
     project_name: str, 
-    document_type: Optional[str] = None,
-    document_id: Optional[int] = None,
+    document_type: Optional[str] = Query(None),
+    document_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
     """
@@ -333,47 +331,47 @@ async def get_project_analysis(
     - If document_id is provided: returns specific document by ID
     - Otherwise: returns latest merged analysis (default behavior)
     """
-    from core.database import get_db_connection
-    from psycopg2.extras import RealDictCursor
+    from core.mongodb import get_mongodb, str_to_objectid, convert_id_to_str
     
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if project.get('user_id') != current_user["id"]:
+        if str(project.get('user_id')) != str(current_user["id"]):
             raise HTTPException(status_code=403, detail="You don't have access to this project")
             
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        db = get_mongodb()
+        if db is None:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
         
         # Get specific document by ID if provided
         if document_id:
-            cursor.execute(
-                "SELECT * FROM project_documents WHERE id = %s AND project_id = %s",
-                (document_id, project['id'])
-            )
-            doc = cursor.fetchone()
+            doc_oid = str_to_objectid(document_id) if isinstance(document_id, (str, int)) else document_id
+            doc = db.project_documents.find_one({
+                "_id": doc_oid,
+                "project_id": project_oid
+            })
         # Get specific document type if provided
         elif document_type:
-            cursor.execute(
-                "SELECT * FROM project_documents WHERE project_id = %s AND update_type = %s ORDER BY created_at DESC LIMIT 1",
-                (project['id'], document_type)
+            doc = db.project_documents.find_one(
+                {"project_id": project_oid, "update_type": document_type},
+                sort=[("created_at", -1)]
             )
-            doc = cursor.fetchone()
         # Otherwise get latest (merged) analysis
         else:
-            cursor.execute(
-                "SELECT * FROM project_documents WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
-                (project['id'],)
+            doc = db.project_documents.find_one(
+                {"project_id": project_oid},
+                sort=[("created_at", -1)]
             )
-            doc = cursor.fetchone()
-        
-        conn.close()
         
         if not doc:
             if document_type or document_id:
                 raise HTTPException(status_code=404, detail=f"Document not found for the specified criteria")
             raise HTTPException(status_code=404, detail="No analysis found for this project")
+        
+        doc = convert_id_to_str(doc)
 
         return {
             "success": True,
@@ -381,10 +379,10 @@ async def get_project_analysis(
             "data": {
                 "projectName": project_name,
                 "fileHash": doc["file_hash"],
-                "departmentalSummaries": doc["analysis_data"],
+                "departmentalSummaries": doc.get("analysis_data", {}),
                 "metadata": {
                     "lastUpdated": doc["created_at"].isoformat() if hasattr(doc["created_at"], 'isoformat') else str(doc["created_at"]),
-                    "updateType": doc["update_type"],
+                    "updateType": doc.get("update_type"),
                     "documentId": doc["id"],
                     "fileName": doc["file_name"]
                 }
@@ -399,33 +397,36 @@ async def get_project_analysis(
 @router.get("/get-project-documents/{project_name}")
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
-    from core.database import get_db_connection
-    from psycopg2.extras import RealDictCursor
+    from core.mongodb import get_mongodb, str_to_objectid, convert_id_to_str
     
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if project.get('user_id') != current_user["id"]:
+        if str(project.get('user_id')) != str(current_user["id"]):
             raise HTTPException(status_code=403, detail="You don't have access to this project")
             
-        conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute(
-            """SELECT id, file_hash, file_name, update_type, created_at 
-               FROM project_documents 
-               WHERE project_id = %s 
-               ORDER BY 
-                 CASE update_type 
-                   WHEN 'BASE_RFP' THEN 1 
-                   WHEN 'REFERENCE_UPDATE' THEN 2 
-                   WHEN 'CORRIGENDUM' THEN 3 
-                 END,
-                 created_at ASC""",
-            (project['id'],)
+        db = get_mongodb()
+        if db is None:
+            raise HTTPException(status_code=500, detail="Database connection failed")
+        
+        project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
+        
+        # Get all documents and sort them
+        documents_raw = list(db.project_documents.find({"project_id": project_oid}))
+        
+        # Sort by update_type priority and created_at
+        type_priority = {'BASE_RFP': 1, 'REFERENCE_UPDATE': 2, 'CORRIGENDUM': 3}
+        documents = sorted(
+            documents_raw,
+            key=lambda x: (
+                type_priority.get(x.get('update_type', ''), 99),
+                x.get('created_at', datetime.min)
+            )
         )
-        documents = list(cursor.fetchall())
-        conn.close()
+        
+        # Convert ObjectIds to strings
+        documents = [convert_id_to_str(doc) for doc in documents]
         
         # Group documents by type and number them
         documents_by_type = {}
@@ -554,7 +555,7 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
 @router.get("/eligibility-checklist/{project_name}")
 async def get_eligibility_checklist(
     project_name: str,
-    document_id: Optional[int] = None,
+    document_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Get eligibility checklist for a project/document"""
@@ -589,7 +590,7 @@ async def get_eligibility_checklist(
 async def save_eligibility_checklist(
     project_name: str,
     checklist: Dict[str, bool] = Body(...),
-    document_id: Optional[int] = Body(None),
+    document_id: Optional[str] = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Save eligibility checklist for a project/document"""
@@ -628,7 +629,7 @@ async def update_eligibility_item(
     project_name: str,
     criteria_text: str = Body(...),
     is_checked: bool = Body(...),
-    document_id: Optional[int] = Body(None),
+    document_id: Optional[str] = Body(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Update a single eligibility checklist item"""
