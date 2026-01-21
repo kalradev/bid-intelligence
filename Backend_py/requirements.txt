@@ -5,21 +5,21 @@ python-multipart>=0.0.7
 
 # Configuration & Environment
 python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic>=2.11.1,<3.0.0
+pydantic-settings>=2.5.0
 
 # AI & LLM Services
 openai>=1.24.0,<2.0.0
 google-generativeai==0.3.1
 
-# LangChain Ecosystem (compatible versions)
+# LangChain Ecosystem (aligned)
 langchain==0.1.20
 langchain-core==0.1.52
 langchain-openai==0.1.7
 langchain-community==0.0.38
 langchain-pinecone==0.2.13
 
-# Pinecone SDK (v6+ - required by langchain-pinecone 0.2.13)
+# Pinecone SDK
 pinecone>=6.0.0,<7.0.0
 
 # Document Processing
@@ -34,6 +34,7 @@ mammoth==1.6.0
 # Data Processing
 pandas==2.2.0
 httpx==0.26.0
+numpy<2.0.0
 
 # Database
 sqlalchemy==2.0.25
