@@ -3,7 +3,7 @@ services:
     name: bid-intelligence-backend
     env: python
     plan: free
-    buildCommand: cd Backend_py && pip install -r requirements.txt
+    buildCommand: cd Backend_py && pip install --upgrade pip && pip install -r requirements.txt
     startCommand: cd Backend_py && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2
     envVars:
       - key: PYTHON_VERSION
