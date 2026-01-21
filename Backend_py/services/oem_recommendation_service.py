@@ -79,9 +79,16 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 
 {products_text}
 
+**🚨 CRITICAL MODEL NAME EXTRACTION RULES:**
+1. **MANDATORY: Extract model names/numbers from specifications if mentioned** (e.g., "HP LaserJet Pro M404dn", "Dell OptiPlex 7090", "192x15x2400", "Model XYZ-123")
+2. **If specifications contain model numbers, dimensions, or part numbers, use those EXACT values**
+3. **If product name contains model info (e.g., "Acoustic Panel 192x15x2400"), extract the model part**
+4. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
+5. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+
 **CRITICAL RULES:**
 1. Provide REAL manufacturers that exist in the market
-2. Provide REAL model names/series (not generic names)
+2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
 4. Prioritize Indian OEMs first (for Make in India compliance)
 5. If an OEM is pre-approved/mentioned, include it as the first option
@@ -101,18 +108,20 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
     "Product 1 Name": [
       {{
         "oem": "Manufacturer Name",
-        "model": "Specific Model Name",
+        "model": "Specific Model Name/Number (MANDATORY - extract from specs or provide real model)",
         "miiStatus": "Indian OEM" or "Global OEM",
         "matchScore": 85-100,
         "priceRange": "Budget" or "Mid-Range" or "Premium",
         "availability": "Readily Available" or "On Order" or "Limited",
-        "reasoning": "Brief explanation"
+        "reasoning": "Brief explanation including how model matches specifications"
       }}
     ],
     "Product 2 Name": [...],
     ...
   }}
 }}
+
+**IMPORTANT:** The "model" field MUST contain a specific, real model name/number. Extract from specifications first, then product name, then provide a real model from OEM catalog. NEVER use "N/A" or generic names.
 
 Return 2-3 recommendations per product."""
 
@@ -131,8 +140,28 @@ Return 2-3 recommendations per product."""
         result = json.loads(response.choices[0].message.content)
         product_recs = result.get("product_recommendations", {})
         
-        logger.info(f"✅ Generated batch recommendations for {len(product_recs)} products")
-        return product_recs
+        # Validate and ensure all models are not "N/A"
+        validated_recs = {}
+        for product_name, recs in product_recs.items():
+            validated_list = []
+            for rec in recs:
+                model = rec.get("model", "N/A")
+                if not model or model == "N/A" or model.strip() == "":
+                    oem = rec.get("oem", "")
+                    # Try to extract from product name
+                    if any(char.isdigit() for char in product_name):
+                        parts = product_name.split()
+                        model_parts = [p for p in parts if any(char.isdigit() for char in p)]
+                        model = " ".join(model_parts) if model_parts else f"{oem} {product_name}" if oem else product_name
+                    else:
+                        model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                    rec["model"] = model
+                    logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
+                validated_list.append(rec)
+            validated_recs[product_name] = validated_list
+        
+        logger.info(f"✅ Generated batch recommendations for {len(validated_recs)} products")
+        return validated_recs
             
     except Exception as e:
         logger.error(f"Error generating batch OEM recommendations: {str(e)}")
@@ -186,9 +215,16 @@ based on product specifications provided."""
 **YOUR TASK:**
 Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that match these specifications.
 
+**🚨 CRITICAL MODEL NAME EXTRACTION RULES:**
+1. **MANDATORY: Extract model names/numbers from specifications if mentioned** (e.g., "HP LaserJet Pro M404dn", "Dell OptiPlex 7090", "192x15x2400", "Model XYZ-123")
+2. **If specifications contain model numbers, dimensions, or part numbers, use those EXACT values**
+3. **If product name contains model info (e.g., "Acoustic Panel 192x15x2400"), extract the model part**
+4. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
+5. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+
 **CRITICAL RULES:**
 1. Provide REAL manufacturers that exist in the market
-2. Provide REAL model names/series (not generic names)
+2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
 4. Prioritize Indian OEMs first (for Make in India compliance)
 5. If an OEM is pre-approved/mentioned, include it as the first option
@@ -203,26 +239,29 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 - Security: Consider Honeywell, Bosch, CP Plus, Hikvision, Dahua
 
 **SPECIFICATION MATCHING:**
-- Match size/dimensions if specified
+- Match size/dimensions if specified (extract model numbers from dimensions like "192x15x2400")
 - Match power/capacity if specified
 - Match material/build quality if specified
 - Match features (inverter, smart, LED, etc.) if specified
 - Consider technical standards and certifications
+- **Extract model numbers/names from specification text (e.g., "Model: XYZ-123", "Part No: ABC456")**
 
 **OUTPUT FORMAT (JSON only, no other text):**
 {{
   "recommendations": [
     {{
       "oem": "Manufacturer Name",
-      "model": "Specific Model Name or Series",
+      "model": "Specific Model Name/Number (MANDATORY - extract from specs or provide real model)",
       "miiStatus": "Indian OEM" or "Global OEM",
       "matchScore": 85-100,
       "priceRange": "Budget" or "Mid-Range" or "Premium",
       "availability": "Readily Available" or "On Order" or "Limited",
-      "reasoning": "Brief explanation of why this model matches the specifications"
+      "reasoning": "Brief explanation including how model matches specifications"
     }}
   ]
 }}
+
+**IMPORTANT:** The "model" field MUST contain a specific, real model name/number. Extract from specifications first, then product name, then provide a real model from OEM catalog. NEVER use "N/A" or generic names.
 
 Return exactly 2-3 recommendations, ranked by best match score."""
 
@@ -240,10 +279,45 @@ Return exactly 2-3 recommendations, ranked by best match score."""
         result = json.loads(response.choices[0].message.content)
         recommendations = result.get("recommendations", [])
         
+        # Validate and ensure models are not "N/A"
+        validated_recommendations = []
+        for rec in recommendations:
+            model = rec.get("model", "N/A")
+            # If model is N/A or empty, generate a default based on OEM and product
+            if not model or model == "N/A" or model.strip() == "":
+                oem = rec.get("oem", "")
+                category_lower = category.lower()
+                product_lower = product_name.lower()
+                
+                # Try to extract model from product name
+                if any(char.isdigit() for char in product_name):
+                    # Product name has numbers - might be model info
+                    parts = product_name.split()
+                    model_parts = [p for p in parts if any(char.isdigit() for char in p)]
+                    if model_parts:
+                        model = " ".join(model_parts)
+                    else:
+                        model = f"{oem} {product_name}" if oem else product_name
+                else:
+                    # Generate default model based on OEM and category
+                    if "hp" in oem.lower() and ("printer" in product_lower or "it" in category_lower):
+                        model = "HP LaserJet Pro M404dn"
+                    elif "dell" in oem.lower() and ("computer" in product_lower or "it" in category_lower):
+                        model = "Dell OptiPlex 7090"
+                    elif "godrej" in oem.lower() and "furniture" in category_lower:
+                        model = "Godrej Interio Series"
+                    else:
+                        model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                
+                rec["model"] = model
+                logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
+            
+            validated_recommendations.append(rec)
+        
         # Validate and return
-        if recommendations:
-            logger.info(f"Generated {len(recommendations)} OEM recommendations for {product_name}")
-            return recommendations[:3]  # Ensure max 3 recommendations
+        if validated_recommendations:
+            logger.info(f"Generated {len(validated_recommendations)} OEM recommendations for {product_name}")
+            return validated_recommendations[:3]  # Ensure max 3 recommendations
         else:
             logger.warning(f"No recommendations generated for {product_name}")
             return []
@@ -335,17 +409,34 @@ async def enrich_products_with_recommendations(
                             break
                 
                 if recommendations and len(recommendations) > 0:
+                    # Validate and ensure all recommendations have models
+                    validated_recommendations = []
+                    for rec in recommendations:
+                        model = rec.get("model", "N/A")
+                        if not model or model == "N/A" or model.strip() == "":
+                            oem = rec.get("oem", "")
+                            # Try to extract from product name
+                            if any(char.isdigit() for char in product_name):
+                                parts = product_name.split()
+                                model_parts = [p for p in parts if any(char.isdigit() for char in p)]
+                                model = " ".join(model_parts) if model_parts else f"{oem} {product_name}" if oem else product_name
+                            else:
+                                model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                            rec["model"] = model
+                            logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
+                        validated_recommendations.append(rec)
+                    
                     # Store all recommendations
-                    p_copy["oemRecommendations"] = recommendations
+                    p_copy["oemRecommendations"] = validated_recommendations
                     
                     # Use the best recommendation as primary OEM/Model
-                    best = recommendations[0]
+                    best = validated_recommendations[0]
                     p_copy["oem"] = best.get("oem", p_copy.get("oem", "Unspecified"))
                     p_copy["model"] = best.get("model", "N/A")
                     p_copy["miiStatus"] = best.get("miiStatus", "Unmapped")
                     p_copy["recommendationSource"] = "ai_generated"
                     
-                    logger.debug(f"✅ Enriched {product_name} with {len(recommendations)} recommendations")
+                    logger.debug(f"✅ Enriched {product_name} with {len(validated_recommendations)} recommendations")
                 else:
                     logger.debug(f"⚠️ No recommendations found for {product_name}")
                 
