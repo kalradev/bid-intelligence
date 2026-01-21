@@ -1,7 +1,7 @@
 # Web Framework
 fastapi==0.109.0
 uvicorn==0.27.0
-python-multipart==0.0.6
+python-multipart>=0.0.7
 
 # Configuration & Environment
 python-dotenv==1.0.0
@@ -9,7 +9,7 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 
 # AI & LLM Services
-openai==1.10.0
+openai>=1.24.0,<2.0.0
 google-generativeai==0.3.1
 
 # LangChain Ecosystem (compatible versions)
@@ -19,8 +19,8 @@ langchain-openai==0.1.7
 langchain-community==0.0.38
 langchain-pinecone==0.2.13
 
-# Pinecone SDK (v5+ - uses 'from pinecone import Pinecone')
-pinecone==5.4.0
+# Pinecone SDK (v6+ - required by langchain-pinecone 0.2.13)
+pinecone>=6.0.0,<7.0.0
 
 # Document Processing
 pdfplumber==0.10.3
@@ -38,7 +38,7 @@ httpx==0.26.0
 # Database
 sqlalchemy==2.0.25
 pymongo==4.6.1
-motor==3.3.2
+motor>=3.4.0
 
 # Authentication & Security
 bcrypt==4.1.2
