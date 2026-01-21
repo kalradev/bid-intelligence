@@ -12,11 +12,11 @@ pydantic-settings>=2.5.0
 openai>=1.24.0,<2.0.0
 google-generativeai==0.3.2
 
-# LangChain Ecosystem (ALL ALIGNED – VERY IMPORTANT)
-langchain==0.2.16
-langchain-core==0.2.38
-langchain-community==0.2.16
-langchain-openai==0.1.23
+# LangChain Ecosystem (0.3.x - compatible with langchain-pinecone 0.2.13)
+langchain-core>=0.3.34,<0.4.0
+langchain>=0.3.0,<0.4.0
+langchain-community>=0.3.0,<0.4.0
+langchain-openai>=0.3.0,<0.4.0
 langchain-pinecone==0.2.13
 
 # Vector DB
