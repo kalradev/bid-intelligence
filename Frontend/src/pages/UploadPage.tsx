@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { RefreshCw, LogOut } from "lucide-react";
 
 export default function UploadPage() {
     const navigate = useNavigate();
@@ -211,6 +212,30 @@ export default function UploadPage() {
         
         console.log("✅ Project changed to:", selectedName);
         checkProjectStatus(selectedName);
+    };
+
+    const handleResetProject = () => {
+        setProjectName("");
+        setProjectExists(null);
+        setTenderId("");
+        setClientName("");
+        setHasBaseRfp(false);
+        setUpdateType("BASE_RFP");
+        setProjectSearchTerm("");
+        setIsDropdownOpen(false);
+        toast.success("Project selection reset! Choose a new project.", { icon: '🔄', duration: 2000 });
+    };
+
+    const handleLogout = () => {
+        // Clear all auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('analysisData');
+        localStorage.removeItem('currentDocument');
+        localStorage.removeItem('recentRfpAnalysis');
+        
+        toast.success("Logged out successfully!");
+        navigate("/login");
     };
 
     const handleViewOldAnalysis = async () => {
@@ -441,6 +466,44 @@ export default function UploadPage() {
 
     return (
         <div className="universal-page-wrapper">
+            {/* Logout Button - Floating Top Right */}
+            <button
+                onClick={handleLogout}
+                title="Logout"
+                style={{
+                    position: 'fixed',
+                    top: '20px',
+                    right: '20px',
+                    zIndex: 1000,
+                    background: '#dc2626',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '12px 20px',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+                }}
+                onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#b91c1c';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                    e.currentTarget.style.background = '#dc2626';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
+                }}
+            >
+                <LogOut size={18} />
+                <span>Logout</span>
+            </button>
+
             <div className="universal-background">
                 <div className="universal-bg-gradient-1"></div>
                 <div className="universal-bg-gradient-2"></div>
@@ -544,9 +607,39 @@ export default function UploadPage() {
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                                <label style={{ fontSize: "13px", fontWeight: "700", color: "#4f46e5", letterSpacing: "0.3px" }}>
-                                    {isExistingMode ? "Search and Select Project *" : "Project Name *"}
-                                </label>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                                    <label style={{ fontSize: "13px", fontWeight: "700", color: "#4f46e5", letterSpacing: "0.3px" }}>
+                                        {isExistingMode ? "Search and Select Project *" : "Project Name *"}
+                                    </label>
+                                    {isExistingMode && projectName && (
+                                        <button
+                                            onClick={handleResetProject}
+                                            title="Reset project selection"
+                                            style={{
+                                                background: "transparent",
+                                                border: "none",
+                                                color: "#6366f1",
+                                                cursor: "pointer",
+                                                padding: "4px",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                borderRadius: "6px",
+                                                transition: "all 0.2s ease"
+                                            }}
+                                            onMouseOver={(e) => {
+                                                e.currentTarget.style.background = "rgba(99, 102, 241, 0.1)";
+                                                e.currentTarget.style.color = "#4f46e5";
+                                            }}
+                                            onMouseOut={(e) => {
+                                                e.currentTarget.style.background = "transparent";
+                                                e.currentTarget.style.color = "#6366f1";
+                                            }}
+                                        >
+                                            <RefreshCw size={16} />
+                                        </button>
+                                    )}
+                                </div>
 
                                 {isExistingMode ? (
                                     <>

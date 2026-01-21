@@ -1,11 +1,62 @@
-import { ChevronRight, Cpu, FileSearch, Globe2, LineChart } from "lucide-react";
+import { ChevronRight, Cpu, FileSearch, Globe2, LineChart, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 
 export default function LandingPage() {
   const navigate = useNavigate();
 
+  const handleLogout = () => {
+    // Clear all auth data
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('analysisData');
+    localStorage.removeItem('currentDocument');
+    localStorage.removeItem('recentRfpAnalysis');
+    
+    toast.success("Logged out successfully!");
+    navigate("/login");
+  };
+
   return (
     <div className="universal-page-wrapper">
+      {/* Logout Button - Floating Top Right */}
+      <button
+        onClick={handleLogout}
+        title="Logout"
+        style={{
+          position: 'fixed',
+          top: '20px',
+          right: '20px',
+          zIndex: 1000,
+          background: '#dc2626',
+          color: 'white',
+          border: 'none',
+          borderRadius: '12px',
+          padding: '12px 20px',
+          fontSize: '15px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.background = '#b91c1c';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.background = '#dc2626';
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
+        }}
+      >
+        <LogOut size={18} />
+        <span>Logout</span>
+      </button>
+
       {/* Background Animation */}
       <div className="universal-background">
         <div className="universal-bg-gradient-1"></div>
