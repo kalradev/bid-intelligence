@@ -76,3 +76,7 @@ data/temp/
 # --- Misc ---
 pid_info.txt
 
+# --- Deployment artifacts ---
+deployment-package/
+bid-intelligence-production.zip
+*.zip
