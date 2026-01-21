@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import logging
 import time
 import asyncio
+import os
 
 from core.config import settings
 from api.rfp_routes import router as rfp_router
@@ -71,9 +73,46 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
+# Serve static files from frontend build (if exists)
+# Check both Backend_py parent directory and current directory
+FRONTEND_BUILD_PATH = os.path.join(settings.BASE_DIR, "..", "frontend-build")
+FRONTEND_BUILD_PATH_ALT = os.path.join(settings.BASE_DIR, "frontend-build")
+
+if os.path.exists(FRONTEND_BUILD_PATH):
+    FRONTEND_DIR = FRONTEND_BUILD_PATH
+elif os.path.exists(FRONTEND_BUILD_PATH_ALT):
+    FRONTEND_DIR = FRONTEND_BUILD_PATH_ALT
+else:
+    FRONTEND_DIR = None
+
+if FRONTEND_DIR:
+    # Mount static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
+    
+    # Serve static files from root of frontend-build
+    @app.get("/{path:path}")
+    async def serve_frontend(path: str, request: Request):
+        # Don't interfere with API routes
+        if path.startswith("api/") or path == "health":
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Try to serve the requested file
+        file_path = os.path.join(FRONTEND_DIR, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # For React Router - serve index.html for all routes
+        index_path = os.path.join(FRONTEND_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        
+        raise HTTPException(status_code=404, detail="Not found")
+
 logger.info("✅ Routes registered:")
 logger.info("   - /api/rfp")
 logger.info("   - /api/auth (login, register, me, logout)")
+if os.path.exists(FRONTEND_BUILD_PATH):
+    logger.info("   - Frontend static files: enabled")
 
 @app.get("/")
 async def root():

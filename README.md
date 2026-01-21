@@ -13,10 +13,30 @@ Users upload bid documents, and the system processes them through AI providers (
 ## 📚 Main Documentation (Start Here)
 
 - `QUICK_START.md` – install, configure AI keys, run backend + frontend, optional PostgreSQL.
+- `DEPLOYMENT.md` – **Production deployment guide** - one-click deployment to GitHub and cloud platforms.
+- `QUICK_START.md` – Quick deployment reference.
 - `IMPLEMENTATION_SUMMARY.md` – technical overview of deterministic BOQ, OEM/model enrichment, and the processing pipeline.
 - `SECURITY_MEASURES.md` – security hardening, data handling, and deployment considerations.
 
 You can treat these as the **main docs**; other `.md` files are detailed/internal notes.
+
+## 🚀 Quick Deployment
+
+**One-Click GitHub Deployment:**
+1. Push to GitHub → Automated build starts
+2. Configure GitHub Secrets (API keys)
+3. Download production ZIP from Actions
+
+**Or build locally:**
+```bash
+# Windows
+.\deploy.ps1
+
+# Linux/Mac
+./deploy.sh
+```
+
+See `DEPLOYMENT.md` for complete instructions.
 
 ---
 
@@ -149,7 +169,8 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 | AI         | OpenAI API                |
 | Storage    | AWS S3 or local           |
 | Database   | PostgreSQL / MongoDB      |
-| Deployment | Docker / CI-CD (optional) |
+| Deployment | GitHub Actions / Heroku / Railway / Render / AWS |
+| CI/CD | GitHub Actions (automated) |
 
 ---
 
