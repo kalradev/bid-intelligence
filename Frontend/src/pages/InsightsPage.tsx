@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { Download, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DepartmentCard from "../components/DepartmentCard";
@@ -83,6 +83,18 @@ export default function InsightsPage() {
     }
   };
 
+  const handleLogout = () => {
+    // Clear all auth data
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('analysisData');
+    localStorage.removeItem('currentDocument');
+    localStorage.removeItem('recentRfpAnalysis');
+    
+    toast.success("Logged out successfully!");
+    navigate("/login");
+  };
+
   return (
     <div className="universal-page-wrapper" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* 🌟 NAVBAR START */}
@@ -133,9 +145,34 @@ export default function InsightsPage() {
           {/* Analysis Button */}
           <button className="navbar-btn" onClick={() => {
             window.scrollTo({ top: 0, behavior: "instant" });
-            navigate("/");
+            navigate("/upload");
           }}>
             Analysis
+          </button>
+
+          {/* Logout Button */}
+          <button
+            className="navbar-btn-icon"
+            onClick={handleLogout}
+            title="Logout"
+            style={{
+              background: '#dc2626',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '10px 16px',
+              fontSize: '16px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: '0.3s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}
+            onMouseOver={(e) => (e.currentTarget.style.background = '#b91c1c')}
+            onMouseOut={(e) => (e.currentTarget.style.background = '#dc2626')}
+          >
+            <LogOut size={20} />
           </button>
         </div>
       </nav>

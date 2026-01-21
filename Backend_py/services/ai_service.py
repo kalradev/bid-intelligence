@@ -35,7 +35,7 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 async def generate_departmental_summaries(document_text: str, file_name: str) -> Dict[str, Any]:
-    logger.info(f"🔍 Starting product extraction for: {file_name}")
+    logger.info(f"🔍 Starting analysis for: {file_name}")
     logger.info(f"   Document length: {len(document_text)} characters")
     if not client:
         raise Exception("OpenAI client not initialized. Please check your OPENAI_API_KEY.")
@@ -49,11 +49,49 @@ async def generate_departmental_summaries(document_text: str, file_name: str) ->
     try:
         if document_too_large:
             logger.info(f"⚡ Large document ({estimated_tokens} tokens), using OpenAI chunking strategy...")
-            return await process_large_document(document_text, file_name)
+            result = await process_large_document(document_text, file_name)
+        else:
+            logger.info(f"🤖 Generating summaries with OpenAI ({OPENAI_MODEL})...")
+            result = await generate_with_openai_async(system_prompt, user_prompt)
+            logger.info("✅ OpenAI generation successful")
         
-        logger.info(f"🤖 Generating summaries with OpenAI ({OPENAI_MODEL})...")
-        result = await generate_with_openai_async(system_prompt, user_prompt)
-        logger.info("✅ OpenAI generation successful")
+        # Check if AI extracted any products, if not try fallback
+        summaries = result.get("summaries", {})
+        product_count = len(summaries.get("productMapping", {}).get("miiProductStatus", []))
+        
+        if product_count == 0:
+            logger.info("🔄 AI extracted 0 products - trying fallback BOQ extraction...")
+            from services.fallback_boq_extractor import enhance_analysis_with_fallback_products
+            summaries = enhance_analysis_with_fallback_products(summaries, document_text)
+            result["summaries"] = summaries
+            product_count = len(summaries.get("productMapping", {}).get("miiProductStatus", []))
+        
+        # Enrich products with AI-generated OEM recommendations
+        if product_count > 0:
+            try:
+                logger.info(f"🎯 Enriching {product_count} products with AI OEM recommendations...")
+                from services.oem_recommendation_service import enrich_products_with_recommendations, get_recommendation_stats
+                
+                products = summaries.get("productMapping", {}).get("miiProductStatus", [])
+                enriched_products = await enrich_products_with_recommendations(products)
+                
+                # Update summaries with enriched products
+                if "productMapping" not in summaries:
+                    summaries["productMapping"] = {}
+                summaries["productMapping"]["miiProductStatus"] = enriched_products
+                result["summaries"] = summaries
+                
+                # Log recommendation statistics
+                stats = get_recommendation_stats(enriched_products)
+                logger.info(f"✅ OEM Enrichment Complete:")
+                logger.info(f"   - Products enriched: {stats['productsWithRecommendations']}/{stats['totalProducts']}")
+                logger.info(f"   - Total recommendations: {stats['totalRecommendations']}")
+                logger.info(f"   - Enrichment rate: {stats['enrichmentRate']}%")
+            except Exception as e:
+                logger.error(f"⚠️ OEM enrichment failed, proceeding without recommendations: {str(e)}")
+                logger.info(f"📦 Returning {product_count} products without OEM enrichment")
+                # Don't update result - keep original products without enrichment
+        
         return result
     except Exception as e:
         logger.error(f"❌ OpenAI generation failed: {str(e)}")
@@ -156,51 +194,68 @@ For commercial.pricingBid: Extract ALL mentions of:
 - evaluation criteria, conditions for disqualification, payment terms, taxes & charges
 - If not found, return empty arrays/strings - DO NOT guess or make up information
 
-📋 BID MANAGEMENT EXTRACTION (CRITICAL - MUST POPULATE ALL FIELDS):
-For bidManagement.projectOverview: Extract a comprehensive 2-3 sentence description covering:
-- Project scope, objectives, and key deliverables
+📋 BID MANAGEMENT EXTRACTION (CRITICAL - COMPREHENSIVE EXTRACTION REQUIRED):
+
+For bidManagement.projectOverview: Extract a comprehensive 3-4 sentence description covering:
+- Complete project scope, objectives, and key deliverables
 - Estimated value or contract size if mentioned
-- Timeline or completion period
-- Key stakeholders or departments involved
+- Timeline or completion period with milestones
+- Key stakeholders, departments, or beneficiary organizations involved
+- Project location and implementation areas
+→ Example: "Supply, installation and commissioning of 500 desktop computers with peripherals for XYZ Department across 25 district offices in State. Project includes comprehensive 3-year onsite warranty, training for 100 staff members, and data migration from existing systems. Estimated value: ₹5 crores. Implementation timeline: 90 days from LOI."
 
-For bidManagement.keyDeadlines: Extract ALL critical dates including:
-- Bid submission deadline (date and time)
-- Technical bid opening date
-- Financial bid opening date
-- Pre-bid meeting date
-- Site visit dates
-- Clarification deadline
+For bidManagement.keyDeadlines: Extract ALL critical dates with complete details:
+- Bid submission deadline (exact date, time, and location)
+- Technical bid opening (date, time, venue)
+- Financial bid opening (date, time, venue)
+- Pre-bid meeting (date, time, venue, registration process)
+- Site visit dates (dates, contact person, mandatory/optional)
+- Clarification deadline (last date for queries)
+- Document download deadline
 - Any other milestone dates mentioned
+→ Format: Provide dates in clear format with full context
 
-For bidManagement.strategy: Provide 2-3 sentence strategic recommendation covering:
-- Key winning factors based on evaluation criteria
-- Competitive positioning advice
-- Risk mitigation approach
-- Resource allocation priorities
+For bidManagement.strategy: Provide 3-4 sentence strategic recommendation covering:
+- Key winning factors based on evaluation criteria and weightage
+- Competitive positioning advice (pricing, technical, compliance)
+- Risk mitigation approach for identified risks
+- Resource allocation priorities and timeline management
+- Compliance and documentation strategy
+→ Be specific based on actual tender requirements, not generic advice
 
-For bidManagement.successFactors: Extract 5-10 items per category:
-- Financial: EMD requirements, payment terms, financial guarantees, cost factors
-- Technical: Technical evaluation criteria, scoring methodology, qualification thresholds, compliance requirements
-- Operational: Delivery timelines, installation requirements, support services, manpower needs
-- Compliance: Documentation requirements, certifications needed, regulatory compliance
-- Timeline: Critical deadlines, milestone dates, submission requirements
-- emdExemption: ALL mentions of EMD exemption, MSME exemption, Startup India exemption, EMD waiver
-- technicalEvaluationCriteria: ALL technical evaluation methodology, scoring patterns, weightage, marks allocation
-- preQualificationCriteria: ALL eligibility criteria, PQ requirements, experience requirements, turnover criteria
+For bidManagement.successFactors: Extract 12-20 items per category:
+- Financial: EMD amount & exemptions, payment milestones, advance %, retention %, bank guarantees, turnover requirements, financial eligibility, MSME benefits
+- Technical: Evaluation criteria, scoring methodology, minimum qualifying marks, technical weightage, product specifications, OEM requirements, testing requirements, certifications
+- Operational: Delivery schedule, installation timeline, commissioning period, training requirements, support services, AMC terms, manpower deployment, project management
+- Compliance: Documentation checklist, certifications, registrations, undertakings, affidavits, approvals, regulatory compliance, mandatory submissions
+- Timeline: Bid submission, technical opening, financial opening, pre-bid meeting, clarifications, site visit, contract signing, delivery milestones
+- emdExemption: MSME exemption conditions, Startup India exemption, women entrepreneurs, SC/ST exemptions, specific exemption clauses
+- technicalEvaluationCriteria: Scoring pattern, marks distribution, evaluation parameters, minimum qualifying criteria, comparative methodology, weightage allocation
+- preQualificationCriteria: Experience requirements (similar projects, value, timeline), financial turnover, net worth, registration requirements, blacklisting status
 
-For bidManagement.keyPoints: Extract 5-10 items per category covering:
-- Deadlines: All important dates and time-sensitive requirements
-- Requirements: All mandatory requirements, specifications, and conditions
-- Specifications: Technical specs, standards, certifications, quality requirements
-- Financial: All financial terms, payment schedules, guarantees, penalties
-- Compliance: All compliance requirements, documentation needs, regulatory obligations
+For bidManagement.keyPoints: Extract 20-30 items total across categories:
+- Deadlines: ALL dates with times and locations
+- Requirements: ALL mandatory requirements with specifications
+- Specifications: ALL technical specs with standards and certifications
+- Financial: ALL payment terms, guarantees, penalties with amounts
+- Compliance: ALL documentation and certification needs
+→ Be exhaustive - extract EVERY important point from document
 
-For bidManagement.complianceRequirements: Extract 5-10 items per category covering all compliance aspects
+For bidManagement.complianceRequirements: Extract 12-18 items per category:
+- Financial: Audited financial statements, turnover certificates, net worth certificates, solvency certificates, BG formats
+- Technical: Product certifications, test reports, OEM authorizations, technical compliance certificates, quality certifications
+- Documentation: Company registration, PAN card, GST registration, EPF/ESI registration, tender fee receipt, EMD proof
+- Legal: Power of attorney, non-blacklisting affidavit, integrity pact, undertakings, legal declarations
 
-For bidManagement.riskAreas: Extract 5-10 items per category covering:
-- Financial risks, technical risks, operational risks, timeline risks
+For bidManagement.riskAreas: Extract 10-15 items per category:
+- Financial: Payment delays, retention risks, penalty exposure, BG requirements, turnover shortfall
+- Technical: Specification gaps, testing failures, OEM dependency, integration challenges
+- Operational: Delivery delays, resource constraints, installation challenges, training gaps
+- Timeline: Compressed schedules, dependency risks, milestone pressure, approval delays
 
-For bidManagement.actionItems: Provide 5-10 actionable items for bid preparation
+For bidManagement.actionItems: Provide 15-25 specific actionable items:
+→ Include task, owner, deadline, priority
+→ Example: "Obtain OEM authorization letter (Procurement team, 7 days before submission, High priority)"
 
 ⚠️ BID MANAGEMENT RISK FACTORS EXTRACTION (CRITICAL):
 For bidManagement.riskFactors.liquidatedDamages: Extract ALL mentions of:
@@ -225,7 +280,87 @@ For bidManagement.riskFactors.certifications: Extract ALL mentions of:
 - Return: list of required certificates, issuing authority if mentioned, validity conditions
 - compliance standards
 - Extract exact certificate names and requirements - preserve all specifications
-- If not found, return empty array - DO NOT infer certifications"""
+- If not found, return empty array - DO NOT infer certifications
+
+🔍 DEPARTMENT-SPECIFIC DETAILED EXTRACTION GUIDELINES:
+
+**💼 COMMERCIAL DEPARTMENT - Comprehensive Extraction:**
+- estimatedValue: Search for "estimated cost", "project value", "budget", "tender value", "contract value", "approximate cost", "work value", "total cost"
+  → Extract exact amount with currency
+  → Example: "₹2.5 crores (estimated project value)"
+
+- paymentTerms: Search for "payment", "milestone payment", "advance", "within X days", "MSME payment", "retention", "release schedule", "payment schedule", "payment within"
+  → Combine ALL payment-related info from entire document into one comprehensive statement
+  → Include: advance %, milestone %, retention %, MSME terms, payment timeline
+  → Example: "30% advance on PO, 50% on delivery, 15% on installation, 5% retention for 90 days. MSME vendors: 100% within 45 days. Payment processed within 30 days of invoice submission."
+
+- warranties: Search for "warranty", "guarantee", "DLP", "defect liability period", "maintenance", "AMC", "free service", "OEM warranty", "comprehensive warranty", "onsite warranty", "replacement warranty"
+  → Combine warranty period, coverage, terms, conditions into detailed statement
+  → Include: duration, what's covered, response time, replacement terms, AMC details
+  → Example: "3 years comprehensive OEM warranty covering parts and labor with onsite support. 24-hour response time, 48-hour replacement of defective parts. Optional 2-year AMC at 8% of product cost available after warranty."
+
+- penalties: Search for "liquidated damages", "LD", "penalty", "late delivery penalty", "delay charges", "deduction", "% per week", "% per day", "penalty clause", "performance penalty", "late penalty"
+  → Extract ALL penalty clauses, percentages, rates, maximum caps
+  → Include: rate (% per week/day), maximum cap, trigger conditions
+  → Example: "Liquidated damages: 0.5% per week of delay, maximum 10% of contract value. Penalties applicable beyond 2-week grace period. Deducted from running bills or security deposit."
+
+**💰 FINANCE DEPARTMENT - Comprehensive Extraction:**
+- turnoverRequired: Search for "minimum turnover", "annual turnover", "average turnover", "₹X crores", "last 3 years", "last 3 financial years", "financial requirement", "revenue requirement", "turnover criteria"
+  → Extract exact amounts, time periods, and averaging method
+  → Example: "₹10 crores average annual turnover in last 3 financial years (FY 2021-22, 2022-23, 2023-24). Single year minimum: ₹8 crores required."
+
+- netWorth: Search for "net worth", "minimum net worth", "positive net worth", "financial standing", "capital requirement", "equity", "net worth requirement"
+  → Include amount and time reference
+  → Example: "Positive net worth of minimum ₹5 crores as on last financial year closing"
+
+- bankGuarantee: Search for "performance BG", "PBG", "bank guarantee", "security deposit", "performance security", "% of contract", "performance bond", "BG validity"
+  → Include percentage/amount, duration, conditions, encashment terms
+  → Example: "Performance Bank Guarantee of 10% of contract value, valid for project duration + 60 days. To be submitted within 15 days of LOI. Unconditional and irrevocable."
+
+**⚖️ LEGAL DEPARTMENT - Comprehensive Extraction:**
+- contractType: Search for "contract type", "type of contract", "fixed price", "lump sum", "rate contract", "AMC", "perpetual license", "annual contract", "fixed cost contract", "unit rate contract"
+  → If not explicitly found, infer from payment structure or project nature
+  → Example: "Fixed price lump sum contract" or "Annual rate contract with price escalation"
+
+- disputeResolution: Search for "arbitration", "dispute resolution", "dispute settlement", "jurisdiction", "governing law", "mediation", "courts", "arbitrator", "arbitration clause", "applicable law"
+  → Combine location, method, process, and governing law
+  → Example: "Disputes resolved through arbitration under Indian Arbitration and Conciliation Act, 1996. Single arbitrator appointed mutually. Jurisdiction: Delhi High Court. Governing law: Indian Contract Act."
+
+- liabilityCap: Search for "liability limit", "maximum liability", "limitation of liability", "indemnity limit", "cap on liability", "liability cap", "indemnity clause"
+  → Extract amount or percentage cap
+  → Example: "Liability capped at 100% of contract value. Consequential damages excluded."
+
+**📦 SCM DEPARTMENT - Comprehensive Extraction:**
+- leadTime: Search for "delivery period", "delivery schedule", "completion time", "within X days", "within X weeks", "supply schedule", "supply timeline", "implementation timeline", "completion period", "delivery timeline"
+  → Extract complete delivery/completion timeline with milestones
+  → Example: "Delivery within 45 days from PO, installation within 15 days of delivery, commissioning within 7 days of installation. Total implementation: 67 days maximum."
+
+- miiRequirement: Search for "Make in India", "MII", "Class-I local", "Class-II local", "local content", "indigenous content", "indigenous", "domestic manufacturer", "local supplier", "local content requirement", "% local content"
+  → Extract percentage requirement, compliance criteria, and exemptions
+  → Example: "Minimum 50% local content required for Class-I local supplier status. Preference given to Make in India products. Class-II local supplier: minimum 20% local content."
+
+**📊 BID MANAGEMENT DEPARTMENT - Comprehensive Arrays:**
+- successFactors: Extract 12-20 items per category (not just 5-10):
+  → Financial: ALL financial requirements, guarantees, payment terms, EMD, turnover, BG details
+  → Technical: ALL technical criteria, evaluation marks, scoring methodology, minimum qualifying marks
+  → Operational: ALL delivery timelines, installation requirements, training, support services, manpower
+  → Compliance: ALL documentation, certifications, regulatory compliance, mandatory submissions
+  → Timeline: ALL deadlines, milestones, critical dates, submission windows
+
+- keyPoints: Extract 20-30 items total across all categories (be very comprehensive):
+  → Deadlines: ALL dates and time-sensitive requirements
+  → Requirements: ALL mandatory requirements, specifications, conditions
+  → Specifications: ALL technical specs, standards, certifications, quality requirements
+  → Financial: ALL financial terms, schedules, guarantees, penalties
+  → Compliance: ALL compliance requirements, documentation needs, regulatory obligations
+
+- complianceRequirements: Extract 12-18 items per category:
+  → Financial: Audited statements, turnover certificates, BG formats, solvency certificates
+  → Technical: Test certificates, OEM authorizations, product certifications, compliance certificates
+  → Documentation: Company registration, PAN, GST, EMD proof, tender fee, undertakings
+  → Legal: Power of attorney, non-blacklisting affidavit, integrity pact, legal declarations
+
+- actionItems: Provide 15-25 specific actionable items for bid preparation with deadlines and owners"""
 
 def build_user_prompt(document_text: str, file_name: str) -> str:
     indian_oems = ", ".join(get_all_indian_oems())
@@ -240,43 +375,47 @@ Document: {file_name}
 === END DOCUMENT ===
 
 EXTRACTION RULES:
-1. PRIORITIZE information with NUMERIC values (amounts, % timelines, quantities, thresholds)
-2. INCLUDE all relevant requirements, deadlines, specifications, and critical information
-3. Only EXCLUDE truly generic statements like "bid in INR" if they add no value
-4. Extract BOTH unique requirements AND standard requirements that are explicitly mentioned
-5. Use compact notation for financial data: "EMD: ₹5L (2%)"
-6. Arrays: Include 5-10 items per category to ensure comprehensive coverage
-7. **🚨 CRITICAL: NEVER USE "N/A" - Extract actual information from document**:
-   - Search ENTIRE document using multiple terms and synonyms
-   - Infer from context when exact terms not found
-   - Extract from related sections (e.g., if "Contract Type" not found, look in legal/agreement sections)
-   - Use alternative phrasings (e.g., "Warranty" = "Guarantee", "Defect Liability", "Maintenance Period")
-   - If information truly doesn't exist, OMIT the field entirely (don't include it in JSON)
-   - Extract partial/related information rather than leaving blank
-   - Search tables, annexures, appendices, footnotes for hidden details
-8. **🚨 CRITICAL - NO CALCULATIONS OR ASSUMPTIONS FOR FINANCIAL VALUES**:
-   - ⚠️ For EMD and Bid Value: ONLY extract if EXPLICITLY stated in document
-   - ⚠️ DO NOT calculate missing values using formulas (e.g., don't calculate Bid Value from EMD percentage)
-   - ⚠️ DO NOT assume values based on context or typical patterns
-   - ⚠️ DO NOT infer financial values from other fields
-   - ⚠️ If financial value not found, OMIT that field from JSON response
-   - ✅ BUT: For non-financial fields (technical specs, terms, requirements), DO extract from context and related sections
-9. **🚨 CRITICAL - PRODUCT EXTRACTION MANDATORY**: 
-   - Search ENTIRE document for BOQ/BOM/product lists and extract ALL items found
-   - This is the HIGHEST PRIORITY - you MUST extract products if they exist in the document
-   - ⚠️ ALL products MUST go into productMapping.miiProductStatus array
-   - ⚠️ DO NOT put products in technical.keySpecifications - that's for technical specs text only
-   - If you find ANY product list, table, or item list, extract EVERY item to productMapping.miiProductStatus
-   - Minimum: Extract at least 5-10 products if any product information exists
-   - If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
-9. **CONSISTENCY MANDATE**: The lastSubmissionDate in projectOverview MUST be the same date used in bidManagement.keyDeadlines
-10. **BID VALUE MANDATE**: Extract Bid Value, Estimated Value, Project Value, or Contract Value - use whichever is available
-   - ⚠️ ONLY extract if explicitly mentioned in the document
-   - ⚠️ DO NOT calculate, estimate, or assume Bid Value
-   - ⚠️ If not found, OMIT bidValue field from JSON response
-   - ⚠️ ONLY extract if explicitly mentioned in the document
-   - ⚠️ DO NOT calculate, estimate, or assume Bid Value
-   - ⚠️ If not found, OMIT the field - DO NOT include it in JSON
+1. PRIORITIZE information with NUMERIC values (amounts, percentages, dates, quantities, thresholds)
+2. For ALL departmental fields: Write DETAILED, COMPREHENSIVE summaries (2-4 sentences minimum)
+3. Arrays: Extract MINIMUM 10-15 items per category (more is better - aim for 15-20+)
+4. Combine information from multiple document sections into cohesive summaries
+5. Use alternative search terms and synonyms for every field
+6. Extract from tables, annexures, appendices, footnotes, conditions, clauses, all sections
+
+**🚨 FINANCIAL VALUES (bidValue, EMD) - STRICT RULES:**
+- ONLY extract if EXPLICITLY stated in document
+- DO NOT calculate one from the other
+- DO NOT infer or assume
+- If not found after thorough search, OMIT field from JSON
+
+**🚨 ALL OTHER FIELDS (Non-financial) - AGGRESSIVE EXTRACTION REQUIRED:**
+- NEVER leave fields empty or return simple "N/A"
+- Search using ALL alternative terms and synonyms
+- Extract from related sections and context
+- Infer reasonable values from document content
+- Combine multiple mentions into comprehensive detailed statements
+- Write detailed 2-4 sentence summaries for descriptive fields
+- Extract 10-20+ items for array fields
+- Only say "Not specified in document" if absolutely no related info exists anywhere
+
+**📋 EXAMPLES - Good vs Bad Extraction:**
+❌ BAD: "warranties": "N/A"
+✅ GOOD: "warranties": "Comprehensive 3-year OEM warranty covering all parts and labor, followed by optional 2-year AMC at 8% of product cost. Warranty includes onsite support within 24 hours and replacement of defective parts within 48 hours."
+
+❌ BAD: "paymentTerms": "N/A"
+✅ GOOD: "paymentTerms": "30% advance payment on PO, 60% on delivery and installation, 10% retention released after 3-month warranty period. MSME vendors eligible for 100% payment within 45 days as per MSME Act."
+
+❌ BAD: successFactors.Financial: ["EMD required", "Payment terms"]
+✅ GOOD: successFactors.Financial: ["EMD: ₹2.5 lakhs (2% of estimated value)", "30% advance payment on PO", "60% on delivery and installation", "10% retention for 90 days", "MSME exemption available from EMD", "Payment within 30 days of invoice", "Bank guarantee required for advance payment", "Performance bank guarantee: 10% of contract value", "No EMD for startups registered under Startup India", "Financial turnover: ₹10 crores in last 3 years required"]
+
+**🚨 PRODUCT EXTRACTION MANDATORY**: 
+- Search ENTIRE document for BOQ/BOM/product lists and extract ALL items
+- ⚠️ ALL products MUST go into productMapping.miiProductStatus array
+- Extract at least 10-15 products if any product information exists
+- If NO products found after thorough search, return empty array []
+
+**🚨 CONSISTENCY MANDATE**: 
+- lastSubmissionDate in projectOverview MUST match bidManagement.keyDeadlines
 11. **🚨 CRITICAL - EMD vs BID VALUE DISTINCTION (MANDATORY)**:
    - ⚠️ EMD (Earnest Money Deposit) and Bid Value are DIFFERENT and should NEVER be the same
    - ⚠️ EMD is typically 1-2% of the Bid Value (e.g., if Bid Value is ₹10 Crores, EMD might be ₹2 Lakhs or 0.2%)

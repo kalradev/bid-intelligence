@@ -370,6 +370,10 @@ export default function ProductMappingPage() {
                 <tbody>
                   {miiProductStatus.length > 0 ? (
                     miiProductStatus.map((item: any, index: number) => {
+                      // Check if we have AI-generated recommendations
+                      const recommendations = item.oemRecommendations || [];
+                      const hasRecommendations = recommendations.length > 0;
+                      
                       // Format OEM - show "Unspecified" as "N/A" for better UX
                       const oemDisplay = item.oem && item.oem !== "Unspecified" && item.oem !== "N/A" && item.oem.trim() !== ""
                         ? item.oem 
@@ -391,22 +395,124 @@ export default function ProductMappingPage() {
                         <tr key={index} style={{ borderBottom: "1px solid #e5e7eb" }}>
                           <td style={{ padding: 10, fontWeight: 500 }}>{item.productName || "N/A"}</td>
                           <td style={{ padding: 10 }}>{item.category || "Other"}</td>
-                          <td style={{ padding: 10, color: oemDisplay !== "N/A" ? "#111827" : "#9ca3af" }}>
-                            {oemDisplay}
+                          
+                          {/* OEM Column - Show multiple recommendations if available */}
+                          <td style={{ padding: 10 }}>
+                            {hasRecommendations ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {recommendations.map((rec: any, i: number) => (
+                                  <div 
+                                    key={i} 
+                                    style={{ 
+                                      padding: "6px 8px",
+                                      background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "rgba(107, 114, 128, 0.05)",
+                                      borderRadius: "6px",
+                                      borderLeft: `3px solid ${rec.miiStatus === "Indian OEM" ? "#10b981" : "#3b82f6"}`,
+                                      fontSize: "13px"
+                                    }}
+                                  >
+                                    <div style={{ 
+                                      fontWeight: 600, 
+                                      color: "#111827",
+                                      marginBottom: "2px"
+                                    }}>
+                                      {i + 1}. {rec.oem}
+                                      {i === 0 && (
+                                        <span style={{
+                                          marginLeft: "6px",
+                                          fontSize: "10px",
+                                          background: "#3b82f6",
+                                          color: "white",
+                                          padding: "2px 6px",
+                                          borderRadius: "4px",
+                                          fontWeight: 700
+                                        }}>
+                                          BEST
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div style={{ 
+                                      fontSize: "11px", 
+                                      color: "#6b7280",
+                                      display: "flex",
+                                      gap: "8px",
+                                      alignItems: "center"
+                                    }}>
+                                      <span>{rec.priceRange || "Mid-Range"}</span>
+                                      <span>•</span>
+                                      <span>Match: {rec.matchScore || 90}%</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ color: oemDisplay !== "N/A" ? "#111827" : "#9ca3af" }}>
+                                {oemDisplay}
+                              </span>
+                            )}
                           </td>
-                          <td style={{ 
-                            padding: 10,
-                            fontSize: 13,
-                            color: modelDisplay !== "N/A" ? "#374151" : "#9ca3af"
-                          }}>
-                            {modelDisplay}
+                          
+                          {/* Model Column - Show multiple models if available */}
+                          <td style={{ padding: 10 }}>
+                            {hasRecommendations ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {recommendations.map((rec: any, i: number) => (
+                                  <div 
+                                    key={i} 
+                                    style={{ 
+                                      padding: "6px 8px",
+                                      background: i === 0 ? "rgba(59, 130, 246, 0.05)" : "rgba(243, 244, 246, 0.8)",
+                                      borderRadius: "6px",
+                                      fontSize: "13px"
+                                    }}
+                                  >
+                                    <div style={{ 
+                                      fontWeight: 500, 
+                                      color: "#374151",
+                                      marginBottom: "2px"
+                                    }}>
+                                      {rec.model}
+                                    </div>
+                                    {rec.reasoning && (
+                                      <div style={{ 
+                                        fontSize: "10px", 
+                                        color: "#6b7280",
+                                        fontStyle: "italic",
+                                        lineHeight: 1.3
+                                      }}>
+                                        {rec.reasoning.length > 60 
+                                          ? rec.reasoning.substring(0, 60) + "..." 
+                                          : rec.reasoning}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span style={{ 
+                                fontSize: 13,
+                                color: modelDisplay !== "N/A" ? "#374151" : "#9ca3af"
+                              }}>
+                                {modelDisplay}
+                              </span>
+                            )}
                           </td>
+                          
+                          {/* MII Status Column */}
                           <td style={{
                             padding: 10,
                             color: isMapped ? "#059669" : "#dc2626",
                             fontWeight: 700
                           }}>
-                            {miiStatusDisplay}
+                            {hasRecommendations && recommendations[0] ? (
+                              <span style={{ 
+                                color: recommendations[0].miiStatus === "Indian OEM" ? "#10b981" : "#ef4444" 
+                              }}>
+                                {recommendations[0].miiStatus}
+                              </span>
+                            ) : (
+                              miiStatusDisplay
+                            )}
                           </td>
                         </tr>
                       );

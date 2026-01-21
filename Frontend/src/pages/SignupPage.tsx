@@ -1,6 +1,9 @@
 import { ArrowRight, Lock, Mail, User, UserCircle2, UserPlus, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+// Logo imports
+import womenOwnedLogo from '../assets/women-owned-logo.png';
+import cacheLogo from '../assets/Cache-Logo.png';
 
 export default function SignupPage() {
     const navigate = useNavigate();
@@ -87,103 +90,48 @@ export default function SignupPage() {
     };
 
     return (
-        <div style={{
-            minHeight: '100vh',
-            width: '100%',
-            position: 'relative',
-            overflow: 'hidden',
-            background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e8ba3 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '20px'
-        }}>
-            {/* Elegant Background Pattern */}
-            <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundImage: `
-                    radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
-                    radial-gradient(circle at 75% 75%, rgba(255, 255, 255, 0.08) 0%, transparent 50%)
-                `,
-                opacity: 0.4
-            }} />
+        <div className="auth-page-wrapper">
+            {/* Women Owned Logo - Top Left */}
+            <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
+                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+            </div>
+            {/* Cache Logo - Top Right */}
+            <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
+                <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+            </div>
+
+            {/* Animated Background */}
+            <div className="auth-background">
+                <div className="auth-bg-gradient-1"></div>
+                <div className="auth-bg-gradient-2"></div>
+                <div className="auth-bg-gradient-3"></div>
+            </div>
             
-            {/* Subtle Grid Overlay */}
-            <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                backgroundImage: `
-                    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)
-                `,
-                backgroundSize: '60px 60px'
-            }} />
+            {/* Floating Shapes */}
+            <div className="floating-shapes">
+                <div className="shape shape-1"></div>
+                <div className="shape shape-2"></div>
+                <div className="shape shape-3"></div>
+            </div>
 
             {/* Signup Form Container */}
-            <div style={{
-                position: 'relative',
-                zIndex: 10,
-                width: '100%',
-                maxWidth: '500px',
-                animation: 'fadeInUp 0.6s ease-out'
-            }}>
-                <div style={{
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: '24px',
-                    padding: '48px 40px',
-                    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.5) inset',
-                    border: '1px solid rgba(255, 255, 255, 0.2)'
-                }}>
+            <div className="auth-container">
+                <div className="auth-card">
                     {/* Header */}
-                    <div style={{
-                        textAlign: 'center',
-                        marginBottom: '36px'
-                    }}>
-                        <div style={{
-                            width: '64px',
-                            height: '64px',
-                            margin: '0 auto 20px',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            borderRadius: '16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)'
-                        }}>
-                            <UserPlus style={{ width: '28px', height: '28px', color: '#fff' }} />
+                    <div className="auth-header">
+                        <div className="auth-icon-wrapper">
+                            <UserPlus size={32} />
                         </div>
-                        <h1 style={{
-                            fontSize: '28px',
-                            fontWeight: '700',
-                            color: '#1f2937',
-                            margin: '0 0 8px 0',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            WebkitBackgroundClip: 'text',
-                            WebkitTextFillColor: 'transparent',
-                            backgroundClip: 'text'
-                        }}>
+                        <h1 className="auth-title">
                             Create Account
                         </h1>
-                        <p style={{
-                            fontSize: '14px',
-                            color: '#6b7280',
-                            margin: 0,
-                            fontWeight: '500'
-                        }}>
+                        <p className="auth-subtitle">
                             Join us to streamline your bidding process
                         </p>
                     </div>
 
                     {/* Signup Form */}
-                    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <form onSubmit={handleSubmit} className="auth-form">
                         {/* Full Name Input */}
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <label style={{
