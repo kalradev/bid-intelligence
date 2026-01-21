@@ -156,7 +156,7 @@ export default function SignupPage() {
                                     width: '100%',
                                     padding: '14px 16px',
                                     borderRadius: '12px',
-                                    border: '2px solid rgba(99, 102, 241, 0.2)',
+                                    border: '2px solid rgba(139, 92, 246, 0.15)',
                                     background: 'rgba(255, 255, 255, 0.9)',
                                     fontSize: '15px',
                                     color: '#111827',
@@ -166,10 +166,10 @@ export default function SignupPage() {
                                 }}
                                 onFocus={(e) => {
                                     e.currentTarget.style.borderColor = '#6366f1';
-                                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                                    e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
                                 }}
                                 onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
                                     e.currentTarget.style.boxShadow = 'none';
                                 }}
                             />
@@ -199,7 +199,7 @@ export default function SignupPage() {
                                     width: '100%',
                                     padding: '14px 16px',
                                     borderRadius: '12px',
-                                    border: '2px solid rgba(99, 102, 241, 0.2)',
+                                    border: '2px solid rgba(139, 92, 246, 0.15)',
                                     background: 'rgba(255, 255, 255, 0.9)',
                                     fontSize: '15px',
                                     color: '#111827',
@@ -209,10 +209,10 @@ export default function SignupPage() {
                                 }}
                                 onFocus={(e) => {
                                     e.currentTarget.style.borderColor = '#6366f1';
-                                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                                    e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
                                 }}
                                 onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
                                     e.currentTarget.style.boxShadow = 'none';
                                 }}
                             />
@@ -254,10 +254,10 @@ export default function SignupPage() {
                                     }}
                                     onFocus={(e) => {
                                         e.currentTarget.style.borderColor = '#6366f1';
-                                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                                        e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
                                     }}
                                     onBlur={(e) => {
-                                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
                                         e.currentTarget.style.boxShadow = 'none';
                                     }}
                                 />
@@ -328,10 +328,10 @@ export default function SignupPage() {
                                     }}
                                     onFocus={(e) => {
                                         e.currentTarget.style.borderColor = '#6366f1';
-                                        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                                        e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
                                     }}
                                     onBlur={(e) => {
-                                        e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                                        e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
                                         e.currentTarget.style.boxShadow = 'none';
                                     }}
                                 />
@@ -388,7 +388,7 @@ export default function SignupPage() {
                                     width: '100%',
                                     padding: '14px 16px',
                                     borderRadius: '12px',
-                                    border: '2px solid rgba(99, 102, 241, 0.2)',
+                                    border: '2px solid rgba(139, 92, 246, 0.15)',
                                     background: 'rgba(255, 255, 255, 0.9)',
                                     fontSize: '15px',
                                     color: '#111827',
@@ -399,10 +399,10 @@ export default function SignupPage() {
                                 }}
                                 onFocus={(e) => {
                                     e.currentTarget.style.borderColor = '#6366f1';
-                                    e.currentTarget.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.1)';
+                                    e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
                                 }}
                                 onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.2)';
+                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
                                     e.currentTarget.style.boxShadow = 'none';
                                 }}
                             >
@@ -438,7 +438,7 @@ export default function SignupPage() {
                                 border: 'none',
                                 background: isLoading 
                                     ? '#9ca3af' 
-                                    : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                    : '#6366f1', /* Solid indigo - no gradient */
                                 color: '#fff',
                                 fontSize: '16px',
                                 fontWeight: '600',
@@ -450,19 +450,21 @@ export default function SignupPage() {
                                 transition: 'all 0.3s ease',
                                 boxShadow: isLoading 
                                     ? 'none' 
-                                    : '0 8px 24px rgba(102, 126, 234, 0.4)',
+                                    : '0 8px 24px rgba(99, 102, 241, 0.4)',
                                 marginTop: '8px'
                             }}
                             onMouseEnter={(e) => {
                                 if (!isLoading) {
                                     e.currentTarget.style.transform = 'translateY(-2px)';
-                                    e.currentTarget.style.boxShadow = '0 12px 32px rgba(102, 126, 234, 0.5)';
+                                    e.currentTarget.style.boxShadow = '0 12px 32px rgba(99, 102, 241, 0.5)';
+                                    e.currentTarget.style.background = '#4f46e5'; /* Darker indigo on hover */
                                 }
                             }}
                             onMouseLeave={(e) => {
                                 if (!isLoading) {
                                     e.currentTarget.style.transform = 'translateY(0)';
-                                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(102, 126, 234, 0.4)';
+                                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(99, 102, 241, 0.4)';
+                                    e.currentTarget.style.background = '#6366f1'; /* Return to original indigo */
                                 }
                             }}
                         >
@@ -492,7 +494,7 @@ export default function SignupPage() {
                         marginTop: '28px',
                         textAlign: 'center',
                         paddingTop: '24px',
-                        borderTop: '1px solid rgba(99, 102, 241, 0.1)'
+                        borderTop: '1px solid rgba(139, 92, 246, 0.15)'
                     }}>
                         <p style={{
                             fontSize: '14px',

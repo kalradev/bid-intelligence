@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 import os
 
-from core.database import get_db_connection
+from core.mongodb import get_mongodb, convert_id_to_str, str_to_objectid
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class LoginRequest(BaseModel):
     password: str
 
 class UserResponse(BaseModel):
-    id: int
+    id: str  # Changed to string for MongoDB ObjectId
     fullName: str
     email: str
     role: str
@@ -49,10 +49,10 @@ def verify_password(password: str, hashed: str) -> bool:
     """Verify a password against a hash"""
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
-def create_jwt_token(user_id: int, email: str, role: str) -> str:
+def create_jwt_token(user_id: str, email: str, role: str) -> str:
     """Create a JWT token for a user"""
     payload = {
-        "userId": user_id,
+        "userId": str(user_id),  # Convert to string for MongoDB ObjectId
         "email": email,
         "role": role,
         "exp": datetime.utcnow() + timedelta(days=JWT_EXPIRATION_DAYS),
@@ -75,30 +75,31 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     token = credentials.credentials
     payload = verify_jwt_token(token)
     
-    conn = get_db_connection()
-    if not conn:
+    db = get_mongodb()
+    if db is None:
         raise HTTPException(status_code=500, detail="Database connection failed")
     
     try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, full_name, email, role FROM users WHERE id = %s",
-            (payload["userId"],)
-        )
-        user = cursor.fetchone()
-        cursor.close()
+        user_id = str_to_objectid(payload["userId"])
+        if not user_id:
+            raise HTTPException(status_code=404, detail="Invalid user ID")
+        
+        user = db.users.find_one({"_id": user_id})
         
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
         return {
-            "id": user[0],
-            "fullName": user[1],
-            "email": user[2],
-            "role": user[3]
+            "id": str(user["_id"]),
+            "fullName": user["full_name"],
+            "email": user["email"],
+            "role": user.get("role", "bid_manager")
         }
-    finally:
-        conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting current user: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error")
 
 @router.post("/register")
 async def register(request: RegisterRequest):
@@ -131,24 +132,21 @@ async def register(request: RegisterRequest):
                 detail="Password must be at least 6 characters long"
             )
         
-        conn = get_db_connection()
-        if not conn:
+        db = get_mongodb()
+        if db is None:
             logger.error("❌ Database connection failed")
             raise HTTPException(
                 status_code=500, 
-                detail="Database connection failed. Please check your PostgreSQL server."
+                detail="Database connection failed. Please check your MongoDB server."
             )
         
         try:
-            cursor = conn.cursor()
+            users_collection = db.users
             
             # Check if user already exists
-            cursor.execute("SELECT id, email FROM users WHERE email = %s", (email,))
-            existing_user = cursor.fetchone()
+            existing_user = users_collection.find_one({"email": email})
             
             if existing_user:
-                cursor.close()
-                conn.close()
                 raise HTTPException(
                     status_code=400,
                     detail="User with this email already exists"
@@ -157,27 +155,25 @@ async def register(request: RegisterRequest):
             # Hash password
             hashed_password = hash_password(request.password)
             
-            # Create user
-            cursor.execute(
-                """INSERT INTO users (full_name, email, password, role) 
-                   VALUES (%s, %s, %s, %s) 
-                   RETURNING id, full_name, email, role, created_at""",
-                (request.fullName.strip(), email, hashed_password, request.role or "bid_manager")
-            )
+            # Create user document
+            user_doc = {
+                "full_name": request.fullName.strip(),
+                "email": email,
+                "password": hashed_password,
+                "role": request.role or "bid_manager",
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            }
             
-            user_data = cursor.fetchone()
-            conn.commit()
+            # Insert user
+            result = users_collection.insert_one(user_doc)
+            user_id = str(result.inserted_id)
             
-            user_id = user_data[0]
-            full_name = user_data[1]
-            email = user_data[2]
-            role = user_data[3]
+            # Create unique index on email
+            users_collection.create_index("email", unique=True)
             
             # Generate JWT token
-            token = create_jwt_token(user_id, email, role)
-            
-            cursor.close()
-            conn.close()
+            token = create_jwt_token(user_id, email, user_doc["role"])
             
             logger.info(f"✅ User registered: {email}")
             
@@ -187,19 +183,14 @@ async def register(request: RegisterRequest):
                 "token": token,
                 "user": {
                     "id": user_id,
-                    "fullName": full_name,
+                    "fullName": user_doc["full_name"],
                     "email": email,
-                    "role": role
+                    "role": user_doc["role"]
                 }
             }
         except HTTPException:
-            if conn:
-                conn.close()
             raise
         except Exception as e:
-            if conn:
-                conn.rollback()
-                conn.close()
             logger.error(f"Registration error: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
@@ -219,19 +210,15 @@ async def register(request: RegisterRequest):
 async def login(request: LoginRequest):
     """Login user"""
     try:
-        conn = get_db_connection()
-        if not conn:
+        db = get_mongodb()
+        if db is None:
             raise HTTPException(status_code=500, detail="Database connection failed")
         
         try:
-            cursor = conn.cursor()
+            users_collection = db.users
             
-            # Find user
-            cursor.execute(
-                "SELECT id, full_name, email, password, role FROM users WHERE email = %s",
-                (request.email,)
-            )
-            user = cursor.fetchone()
+            # Find user by email
+            user = users_collection.find_one({"email": request.email.strip().lower()})
             
             if not user:
                 raise HTTPException(
@@ -239,7 +226,11 @@ async def login(request: LoginRequest):
                     detail="Invalid email or password"
                 )
             
-            user_id, full_name, email, hashed_password, role = user
+            user_id = str(user["_id"])
+            full_name = user["full_name"]
+            email = user["email"]
+            hashed_password = user["password"]
+            role = user.get("role", "bid_manager")
             
             # Verify password
             if not verify_password(request.password, hashed_password):
@@ -250,8 +241,6 @@ async def login(request: LoginRequest):
             
             # Generate JWT token
             token = create_jwt_token(user_id, email, role)
-            
-            cursor.close()
             
             logger.info(f"✅ User logged in: {email}")
             
@@ -274,8 +263,6 @@ async def login(request: LoginRequest):
                 status_code=500,
                 detail="Internal server error during login"
             )
-        finally:
-            conn.close()
             
     except HTTPException:
         raise
@@ -306,28 +293,25 @@ async def logout():
 async def test_auth():
     """Test endpoint to verify auth routes are working"""
     # Test database connection
-    conn = get_db_connection()
-    db_status = "connected" if conn else "failed"
+    db = get_mongodb()
+    db_status = "connected" if db is not None else "failed"
     
-    if conn:
+    if db is not None:
         try:
-            cursor = conn.cursor()
-            # Check if users table exists
-            cursor.execute("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'users'
-                );
-            """)
-            table_exists = cursor.fetchone()[0]
-            cursor.close()
-            conn.close()
+            # Check if users collection exists
+            collections = db.list_collection_names()
+            users_exists = "users" in collections
+            
+            # Get user count
+            user_count = db.users.count_documents({}) if users_exists else 0
             
             return {
                 "success": True,
                 "message": "Auth routes are working!",
                 "database": db_status,
-                "users_table_exists": table_exists,
+                "database_type": "MongoDB",
+                "users_collection_exists": users_exists,
+                "user_count": user_count,
                 "endpoints": {
                     "register": "POST /api/auth/register",
                     "login": "POST /api/auth/login",
@@ -336,12 +320,11 @@ async def test_auth():
                 }
             }
         except Exception as e:
-            if conn:
-                conn.close()
             return {
                 "success": True,
                 "message": "Auth routes are working!",
                 "database": db_status,
+                "database_type": "MongoDB",
                 "error": str(e),
                 "endpoints": {
                     "register": "POST /api/auth/register",
@@ -355,7 +338,8 @@ async def test_auth():
         "success": True,
         "message": "Auth routes are working!",
         "database": db_status,
-        "warning": "Database connection failed - check your PostgreSQL settings",
+        "database_type": "MongoDB",
+        "warning": "Database connection failed - check your MongoDB settings",
         "endpoints": {
             "register": "POST /api/auth/register",
             "login": "POST /api/auth/login",

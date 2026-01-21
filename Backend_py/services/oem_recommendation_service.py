@@ -350,8 +350,8 @@ async def enrich_products_with_recommendations(
                     logger.debug(f"⚠️ No recommendations found for {product_name}")
                 
                 enriched_products.append(p_copy)
-                
-        except Exception as e:
+                    
+            except Exception as e:
             logger.error(f"❌ Error processing batch {batch_num}: {str(e)}")
             # Add products without enrichment if batch fails
             enriched_products.extend([p.copy() for p in batch])
