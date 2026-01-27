@@ -158,6 +158,5 @@ def init_db():
             conn.rollback()
             conn.close()
 
-# PostgreSQL initialization disabled - Application now uses MongoDB
-# Uncomment below if you need PostgreSQL for migration scripts only
-# init_db()
+# Initialize PostgreSQL database on import
+init_db()

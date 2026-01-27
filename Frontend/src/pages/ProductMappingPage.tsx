@@ -170,6 +170,11 @@ export default function ProductMappingPage() {
   const miiUnmapped = parseInt(productMapping.makeInIndiaMapping?.unmapped) || 0;
   const miiProductStatus = productMapping.miiProductStatus || [];
 
+  // Count products with a valid model (not N/A, Unspecified, or empty)
+  const productsWithModel = miiProductStatus.filter(
+    (p: any) => p.model && p.model !== "N/A" && p.model !== "Unspecified" && String(p.model).trim() !== ""
+  ).length;
+
   // ✅ Calculate MII compliance percentage - CORRECT calculation
   // Percentage = (Indian OEM products / Total products) * 100
   let miiCompliance = "0%";
@@ -283,6 +288,12 @@ export default function ProductMappingPage() {
                   hoverColor: "rgba(59, 130, 246, 0.08)"
                 },
                 {
+                  title: "Products with Model",
+                  value: productsWithModel,
+                  subtitle: totalItems > 0 ? `${Math.round((productsWithModel / totalItems) * 100)}% of items` : "",
+                  hoverColor: "rgba(245, 158, 11, 0.08)"
+                },
+                {
                   title: "Unique OEM Manufacturers",
                   value: totalOEMsCount || (indianOEMs + globalOEMs),
                   subtitle: `${indianOEMs} Indian / ${globalOEMs} Global`,
@@ -379,17 +390,34 @@ export default function ProductMappingPage() {
                         ? item.oem 
                         : "N/A";
                       
-                      // Format Model - use productName if model is missing
-                      const modelDisplay = item.model && item.model !== "N/A" && item.model.trim() !== ""
-                        ? item.model
-                        : "N/A";
+                      // Format Model - model name only. Never OEM list (e.g. "Blustar/Voltas/Carrier"), specs, or N/A. Fallback: [Category] Series.
+                      const looksLikeSpecs = (s: string) => {
+                        if (!s || typeof s !== "string") return true;
+                        const t = String(s).trim();
+                        if (t.length > 65) return true;
+                        return /(Width|Thickness|Length|Size):\s*\d|\d+\s*mm\s*[x,×]\s*\d|\d+\s*mm\s*,\s*\d|dimension\s*\d/i.test(t);
+                      };
+                      const looksLikeOemList = (s: string) => !!(s && typeof s === "string" && s.split("/").length >= 2);
+                      const getModelDisplay = (it: any, recModel?: string) => {
+                        const r = (recModel || "").trim();
+                        if (r && r !== "N/A" && r !== "Unspecified" && !looksLikeSpecs(r) && !looksLikeOemList(r)) return r;
+                        const m = (it.model || "").trim();
+                        if (m && m !== "N/A" && m !== "Unspecified" && !looksLikeSpecs(m) && !looksLikeOemList(m)) return m;
+                        const pn = (it.productName || "").trim();
+                        if (pn && !looksLikeOemList(pn)) return pn.length > 42 ? pn.substring(0, 42) + "…" : pn;
+                        const cat = (it.category || "").trim();
+                        return (looksLikeOemList(cat) ? "General" : (cat || "General")) + " Series";
+                      };
+                      const modelDisplay = getModelDisplay(item, recommendations[0]?.model);
                       
-                      // Format MII Status
-                      const miiStatusDisplay = item.miiStatus || "Unmapped";
-                      const isMapped = miiStatusDisplay === "Mapped" || 
-                                     miiStatusDisplay === "MII-Compliant" || 
-                                     miiStatusDisplay === "Indian OEM" ||
-                                     miiStatusDisplay === "MII Compliant";
+                      // Format MII Status: show "India" or "Global" instead of "Unknown". Indian OEM / MII-Compliant → India; else → Global.
+                      const getMiiDisplay = (s: string) => {
+                        const v = (s || "").trim().toLowerCase();
+                        if (v.includes("indian") || v.includes("mii-compliant") || v.includes("mii compliant") || v === "mapped" || v === "india") return "India";
+                        return "Global";
+                      };
+                      const miiStatusDisplay = getMiiDisplay(item.miiStatus || "Unmapped");
+                      const isMapped = miiStatusDisplay === "India";
                       
                       return (
                         <tr key={index} style={{ borderBottom: "1px solid #e5e7eb" }}>
@@ -452,7 +480,7 @@ export default function ProductMappingPage() {
                             )}
                           </td>
                           
-                          {/* Model Column - Show multiple models if available */}
+                          {/* Model Column - Model name only (no specs). Use rec.model, item.model, productName, or [Category] Series. */}
                           <td style={{ padding: 10 }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -471,7 +499,7 @@ export default function ProductMappingPage() {
                                       color: "#374151",
                                       marginBottom: "2px"
                                     }}>
-                                      {rec.model}
+                                      {getModelDisplay(item, rec.model)}
                                     </div>
                                     {rec.reasoning && (
                                       <div style={{ 
@@ -489,10 +517,7 @@ export default function ProductMappingPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span style={{ 
-                                fontSize: 13,
-                                color: modelDisplay !== "N/A" ? "#374151" : "#9ca3af"
-                              }}>
+                              <span style={{ fontSize: 13, color: "#374151" }}>
                                 {modelDisplay}
                               </span>
                             )}
@@ -506,9 +531,9 @@ export default function ProductMappingPage() {
                           }}>
                             {hasRecommendations && recommendations[0] ? (
                               <span style={{ 
-                                color: recommendations[0].miiStatus === "Indian OEM" ? "#10b981" : "#ef4444" 
+                                color: getMiiDisplay(recommendations[0].miiStatus) === "India" ? "#10b981" : "#ef4444" 
                               }}>
-                                {recommendations[0].miiStatus}
+                                {getMiiDisplay(recommendations[0].miiStatus)}
                               </span>
                             ) : (
                               miiStatusDisplay

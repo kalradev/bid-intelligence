@@ -17,6 +17,23 @@ from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _looks_like_oem_list(s: str) -> bool:
+    """True if string looks like OEM list (e.g. 'Blustar/Voltas/Carrier')."""
+    return bool(s and isinstance(s, str) and len(s.strip().split("/")) >= 2)
+
+
+def _model_fallback(product: Dict[str, Any]) -> str:
+    """Return a short model-like name: productName or [Category] Series. Never use OEM lists or specs."""
+    pn = (product.get("productName") or "").strip()
+    if pn and not _looks_like_oem_list(pn):
+        return pn[:50] if len(pn) > 50 else pn
+    cat = (product.get("category") or "General").strip()
+    if _looks_like_oem_list(cat):
+        cat = "General"
+    return f"{cat} Series"
+
+
 # Initialize OpenAI client with API key from settings
 async_client = None
 if settings.OPENAI_API_KEY:
@@ -338,10 +355,14 @@ async def enrich_products_with_recommendations(
                     # Store all recommendations
                     p_copy["oemRecommendations"] = recommendations
                     
-                    # Use the best recommendation as primary OEM/Model
+                    # Use the best recommendation as primary OEM/Model. Never store "N/A" or OEM list as model.
                     best = recommendations[0]
                     p_copy["oem"] = best.get("oem", p_copy.get("oem", "Unspecified"))
-                    p_copy["model"] = best.get("model", "N/A")
+                    best_model = (best.get("model") or "").strip()
+                    if best_model and best_model not in ("N/A", "Unspecified", "") and not _looks_like_oem_list(best_model):
+                        p_copy["model"] = best_model
+                    else:
+                        p_copy["model"] = _model_fallback(p_copy)
                     p_copy["miiStatus"] = best.get("miiStatus", "Unmapped")
                     p_copy["recommendationSource"] = "ai_generated"
                     
@@ -349,6 +370,10 @@ async def enrich_products_with_recommendations(
                 else:
                     logger.debug(f"⚠️ No recommendations found for {product_name}")
                 
+                # Ensure model is never N/A and never OEM list before appending
+                m = (p_copy.get("model") or "").strip()
+                if not m or m in ("N/A", "Unspecified", "") or _looks_like_oem_list(m):
+                    p_copy["model"] = _model_fallback(p_copy)
                 enriched_products.append(p_copy)
                     
             except Exception as e:

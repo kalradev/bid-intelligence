@@ -51,17 +51,54 @@ async def extract_text(buffer: bytes, mimetype: str, filename: str) -> Dict[str,
 async def extract_from_pdf(buffer: bytes) -> Dict[str, Any]:
     try:
         text = ""
+        tables_text = ""
         page_count = 0
+        extracted_tables = []
+        
         with pdfplumber.open(io.BytesIO(buffer)) as pdf:
             page_count = len(pdf.pages)
-            for page in pdf.pages:
+            for page_num, page in enumerate(pdf.pages):
+                # Extract regular text
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
+                
+                # Extract tables from this page
+                page_tables = page.extract_tables()
+                if page_tables:
+                    for table_idx, table in enumerate(page_tables):
+                        if table and len(table) > 1:  # At least header + 1 row
+                            # Convert table to text format for fallback extractor
+                            table_text = ""
+                            for row in table:
+                                if row:
+                                    # Filter out None values and join with | delimiter
+                                    row_clean = [str(cell).strip() if cell else "" for cell in row]
+                                    row_clean = [c for c in row_clean if c]  # Remove empty cells
+                                    if row_clean:
+                                        table_text += " | ".join(row_clean) + "\n"
+                            
+                            if table_text.strip():
+                                tables_text += f"\n--- TABLE {page_num+1}-{table_idx+1} ---\n{table_text}"
+                                extracted_tables.append({
+                                    "page": page_num + 1,
+                                    "tableIndex": table_idx,
+                                    "rows": table
+                                })
+        
+        # Combine regular text with table text (tables at the end for better parsing)
+        combined_text = text
+        if tables_text:
+            combined_text += "\n\n=== EXTRACTED TABLES ===\n" + tables_text
         
         return {
-            "text": text,
-            "metadata": {"pages": page_count}
+            "text": combined_text,
+            "originalText": text,  # Keep original without tables for reference
+            "metadata": {
+                "pages": page_count,
+                "tablesExtracted": len(extracted_tables),
+                "tables": extracted_tables
+            }
         }
     except Exception as e:
         logger.error(f"PDF extraction failed: {str(e)}")

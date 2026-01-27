@@ -13,14 +13,32 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI client
 client = None
-if settings.OPENAI_API_KEY:
-    try:
+
+def get_openai_client():
+    """Get or initialize OpenAI client, checking for API key at runtime"""
+    global client
+    if client is None:
+        if settings.OPENAI_API_KEY:
+            try:
+                client = OpenAI(api_key=settings.OPENAI_API_KEY)
+                logger.info("✅ OpenAI client initialized")
+            except Exception as e:
+                logger.error(f"❌ OpenAI initialization failed: {str(e)}")
+                raise Exception(f"OpenAI initialization failed: {str(e)}")
+        else:
+            logger.error("❌ OPENAI_API_KEY not found in settings")
+            raise Exception("OPENAI_API_KEY not found in settings. Please check your .env file.")
+    return client
+
+# Try to initialize on import
+try:
+    if settings.OPENAI_API_KEY:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
         logger.info("✅ OpenAI client initialized")
-    except Exception as e:
-        logger.error(f"❌ OpenAI initialization failed: {str(e)}")
-else:
-    logger.error("❌ OPENAI_API_KEY not found in settings")
+    else:
+        logger.warning("⚠️ OPENAI_API_KEY not found in settings. Client will be initialized on first use.")
+except Exception as e:
+    logger.warning(f"⚠️ OpenAI initialization failed on import: {str(e)}. Will retry on first use.")
 
 # Configuration
 OPENAI_MODEL = "gpt-4o-mini"
@@ -37,8 +55,12 @@ def estimate_tokens(text: str) -> int:
 async def generate_departmental_summaries(document_text: str, file_name: str) -> Dict[str, Any]:
     logger.info(f"🔍 Starting analysis for: {file_name}")
     logger.info(f"   Document length: {len(document_text)} characters")
-    if not client:
-        raise Exception("OpenAI client not initialized. Please check your OPENAI_API_KEY.")
+    
+    # Get OpenAI client (will initialize if needed)
+    try:
+        openai_client = get_openai_client()
+    except Exception as e:
+        raise Exception(f"OpenAI client not initialized. Please check your OPENAI_API_KEY. Error: {str(e)}")
     
     system_prompt = get_system_prompt()
     user_prompt = build_user_prompt(document_text, file_name)
@@ -57,14 +79,38 @@ async def generate_departmental_summaries(document_text: str, file_name: str) ->
         
         # Check if AI extracted any products, if not try fallback
         summaries = result.get("summaries", {})
-        product_count = len(summaries.get("productMapping", {}).get("miiProductStatus", []))
+        
+        # Ensure productMapping exists
+        if "productMapping" not in summaries:
+            logger.warning("⚠️ AI response missing productMapping section - creating it...")
+            summaries["productMapping"] = {}
+        
+        product_mapping = summaries["productMapping"]
+        if "miiProductStatus" not in product_mapping:
+            logger.warning("⚠️ AI response missing miiProductStatus array - initializing...")
+            product_mapping["miiProductStatus"] = []
+        
+        product_count = len(product_mapping.get("miiProductStatus", []))
+        logger.info(f"📊 AI extracted {product_count} products")
         
         if product_count == 0:
-            logger.info("🔄 AI extracted 0 products - trying fallback BOQ extraction...")
+            logger.warning("⚠️ AI extracted 0 products - trying fallback BOQ extraction...")
+            logger.info(f"   Document text length: {len(document_text)} characters")
+            logger.info(f"   Document preview (first 500 chars): {document_text[:500]}")
+            
             from services.fallback_boq_extractor import enhance_analysis_with_fallback_products
             summaries = enhance_analysis_with_fallback_products(summaries, document_text)
             result["summaries"] = summaries
+            
             product_count = len(summaries.get("productMapping", {}).get("miiProductStatus", []))
+            if product_count > 0:
+                logger.info(f"✅ Fallback extraction successful: {product_count} products found")
+            else:
+                logger.error(f"❌ Both AI and fallback extraction failed - 0 products extracted")
+                logger.error(f"   This may indicate:")
+                logger.error(f"   1. Document does not contain BOQ/BOM/product lists")
+                logger.error(f"   2. Product information is in images/scanned format")
+                logger.error(f"   3. Table structure is not preserved in text extraction")
         
         # Enrich products with AI-generated OEM recommendations
         if product_count > 0:
@@ -102,7 +148,10 @@ async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Di
     # and we want to avoid complex async setups for now, we'll use run_in_executor if needed,
     # but for simplicity, we'll just run it. FastAPI handles sync routes in threads.
     
-    response = client.chat.completions.create(
+    # Get OpenAI client (will initialize if needed)
+    openai_client = get_openai_client()
+    
+    response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -232,6 +281,90 @@ For bidManagement.successFactors: Extract 12-20 items per category:
 - emdExemption: MSME exemption conditions, Startup India exemption, women entrepreneurs, SC/ST exemptions, specific exemption clauses
 - technicalEvaluationCriteria: Scoring pattern, marks distribution, evaluation parameters, minimum qualifying criteria, comparative methodology, weightage allocation
 - preQualificationCriteria: Experience requirements (similar projects, value, timeline), financial turnover, net worth, registration requirements, blacklisting status
+
+**ðŸš¨ ELIGIBILITY CRITERIA EXTRACTION (CRITICAL - COMPREHENSIVE):**
+For bidManagement.successFactors.preQualificationCriteria: Extract ALL eligibility criteria points from the document.
+ðŸš¨ MANDATORY: Extract EVERY SINGLE eligibility criterion as a separate item in the array.
+âš ï¸ CRITICAL: The number of criteria is NOT fixed - extract ALL criteria that exist in the PDF (could be 5, 8, 10, 12, 15, 20, or any other number). Count them carefully and extract each one separately.
+
+**SEARCH STRATEGY:**
+1. Search for sections titled: Eligibility Criteria, Pre-Qualification Criteria, Bidder Eligibility, Qualification Criteria, Eligibility Conditions, Pre-Qualification Requirements
+2. Look for numbered lists, bullet points, or table rows under eligibility sections
+   - If you see a table with Sr.No column and Eligibility Criteria column, extract EACH row as a separate criterion
+   - If you see numbered list (1, 2, 3... or i, ii, iii...), extract EACH numbered item separately
+   - Count ALL items carefully - do NOT stop after finding 2 or 3 criteria
+3. Search for phrases like: Bidder must have, Minimum requirement, Should have, Must possess, Required to have, Eligibility condition
+4. Extract from tables with columns like: Sr.No, Eligibility Criteria, Requirement, Condition
+   - âš ï¸ CRITICAL: If a table has multiple rows, each row is a separate criterion - extract ALL rows
+5. Look in annexures, appendices, and eligibility/qualification sections
+6. Scan the ENTIRE document - eligibility criteria may be scattered across multiple pages or sections
+
+**EXTRACTION RULES:**
+- Extract EACH criterion as a SEPARATE item in the preQualificationCriteria array
+- Extract ALL criteria present in the document - the number is NOT fixed, extract whatever count exists (could be 5, 10, 12, 15, 20, etc.)
+- Preserve the EXACT wording from the document - do NOT summarize or combine multiple criteria
+- Each criterion should be a complete, standalone statement
+- Include ALL types of eligibility: LEGAL, TECHNICAL, FINANCIAL, OPERATIONAL, experience, registration, certifications, compliance, etc.
+- ⚠️ MANDATORY: Extract ALL eligibility criteria regardless of category - Legal, Technical, Financial, Operational, and any other types
+- Extract criteria even if they appear in different sections of the document
+- If criteria are numbered (1, 2, 3... or i, ii, iii...), extract each numbered item separately
+- âš ï¸ CRITICAL FOR TABLES: If eligibility criteria are in a table format:
+  * Each row in the table = ONE separate criterion
+  * Do NOT combine multiple rows into one criterion
+  * Extract ALL rows from the table, not just the first 2 or 3
+  * If table has 12 rows, extract all 12 rows as 12 separate criteria
+  * Look for tables with headers like: Sr.No, S.No, Sl.No, Eligibility Criteria, Requirement, Condition
+
+**COMMON ELIGIBILITY CRITERIA TYPES TO EXTRACT (EXTRACT ALL):**
+⚠️ CRITICAL: You MUST extract eligibility criteria from ALL of these categories if present in the document:
+
+1. **LEGAL CRITERIA:**
+   - Legal compliance, regulatory approvals, licenses, permits
+   - Non-blacklisting, debarment status, legal standing
+   - Court cases, litigation status, legal disputes
+   - Statutory compliance, legal entity requirements
+   - Any legal conditions or requirements
+
+2. **TECHNICAL CRITERIA:**
+   - Technical capabilities, infrastructure requirements
+   - Manpower qualifications, technical expertise
+   - Equipment, tools, technology requirements
+   - Technical certifications, OEM authorizations
+   - Technical experience, domain expertise
+   - Any technical conditions or requirements
+
+3. **FINANCIAL CRITERIA:**
+   - Turnover requirements, annual revenue, financial standing
+   - Net worth, paid-up capital, financial stability
+   - Bank guarantees, financial solvency
+   - Minimum project value, financial capacity
+   - Any financial conditions or requirements
+
+4. **OPERATIONAL CRITERIA:**
+   - Operational capabilities, service delivery capacity
+   - Infrastructure, facilities, operational setup
+   - Manpower, staffing, operational resources
+   - Quality management systems, operational processes
+   - Service level agreements, operational commitments
+   - Any operational conditions or requirements
+
+5. **OTHER CRITERIA:**
+   - Experience: Similar projects, years of experience, number of completed projects
+   - Registration: Company registration, GST, PAN, EPF/ESI, industry-specific registrations
+   - Certifications: ISO, quality certifications, industry certifications
+   - Any other eligibility conditions mentioned in the document
+
+⚠️ DO NOT skip any category - extract ALL criteria from ALL categories present in the document.
+
+**EXAMPLES:**
+âœ… GOOD: Extract each criterion separately with exact wording from document
+âŒ BAD: Combining or summarizing multiple criteria into one item
+
+**CRITICAL:**
+- Extract ALL eligibility criteria present in the document, regardless of the count (could be any number)
+- DO NOT combine multiple criteria into one item
+- DO NOT skip any criteria even if they seem similar
+- Extract the EXACT text from the document for each criterion
 
 For bidManagement.keyPoints: Extract 20-30 items total across categories:
 - Deadlines: ALL dates with times and locations
@@ -464,38 +597,102 @@ EXTRACTION RULES:
 - ⚠️ productMapping.miiProductStatus is the ONLY correct location for product extraction
 - If you find products mentioned in technical specs, extract them to productMapping.miiProductStatus, NOT technical.keySpecifications
 
-**SEARCH STRATEGY:**
-1. Scan ENTIRE document from start to finish for ANY product/item mentions
-2. Look for these sections: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, Technical Specifications, Annexures, Appendices
-3. Search for tables with columns like: "Item", "Description", "Product", "Make", "Model", "Quantity", "Unit", "Specification"
-4. Extract EVERY product/item listed - do NOT skip ANY entries
-5. Each row in BOQ/BOM = one product entry in productMapping.miiProductStatus array
-6. MANDATORY: Extract ALL items, even if they seem repetitive or similar
+**OBJECTIVE:**
+Extract ONLY valid bidder-deliverable products from the document.
+DO NOT infer, hallucinate, or expand products beyond what is explicitly stated.
 
-**EXTRACTION RULES:**
-- If you find a table with products, extract EVERY row as a separate product into productMapping.miiProductStatus
-- If product name is missing, use the item description or first column value
-- If multiple products are listed in one row, split them into separate entries in productMapping.miiProductStatus
-- Minimum requirement: Extract at least 5-10 products if any product list exists in the document
-- If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
-- ⚠️ REMEMBER: Products go in productMapping.miiProductStatus, NOT in technical.keySpecifications
+**1. RFP CLASSIFICATION (INTERNAL - FIRST STEP):**
+- First classify the RFP as one of:
+  a) SERVICE / SOLUTION RFP (e.g., SOC, SIEM, Managed Services, Consulting, Implementation)
+  b) TURNKEY / SUPPLY / PROCUREMENT RFP (e.g., Hardware Supply, Equipment Procurement, Material Supply)
+- If SERVICE / SOLUTION RFP → extract ONLY tangible deliverables (hardware, software licenses, tools) that are explicitly listed
+- If TURNKEY / SUPPLY RFP → extract supply items explicitly listed in BOQ/BOM
 
-**OEM & MODEL EXTRACTION (CRITICAL):**
-- Search for brand names in: product descriptions, "Approved Makes", specifications, "Make & Model" columns, brand columns
-- Search for model numbers/names in: "Model:", "Model No:", "Part Number:", "SKU:", "Product Code:", product descriptions
-- Multiple brands listed → extract FIRST one mentioned
-- Keywords to look for: "Make:", "Brand:", "Model:", "Model No:", "or equivalent", "Approved Manufacturer", "Manufacturer"
-- Extract model number/name if present (e.g., "Dell PowerEdge R750", "HP ProLiant DL380", "Cisco Catalyst 9300", "Model XYZ-123")
-- If model not explicitly found but product name contains model info (like "Dell R750 Server"), extract it from product name
-- If product name IS a model identifier (like "Model 2", "Variant A"), use that as the model
-- Only return "Unspecified" for OEM if NO brand found after searching ENTIRE document
-- Extract model from product name/description if separate model field not found
+**2. WHAT QUALIFIES AS A PRODUCT:**
+A valid product MUST satisfy ALL of these:
+- Explicitly deliverable by bidder (not just mentioned or referenced)
+- Physical item, software license, or OEM solution
+- Clearly named in BOQ/BOM/Scope/Technical Specs
+- NOT a process, activity, deadline, or compliance requirement
 
-**MII STATUS:**
-- Indian OEMs: {indian_oems}
-- Global OEMs: {global_oems}
-- If mentions "Make in India", "MII compliant", "Class-I Local" → mark as "MII-Compliant"
-- If uncertain, use "Requires Review"
+**3. WHAT TO EXCLUDE (STRICT - CRITICAL):**
+🚨 DO NOT extract ANY of the following:
+- Dates, timelines, deadlines, milestones (e.g., "Date of publication of Bid", "Last date of submission", "Establishment of Fully")
+- Process steps, workflows, activities (e.g., "Opening of bids", "Technical evaluation", "Site visit")
+- Compliance statements or eligibility criteria (e.g., "Bidder must have", "Minimum turnover required")
+- SLA terms, penalties, payment terms (e.g., "Liquidated damages", "Payment within 30 days")
+- Training, support, AMC unless tied to a named SKU/product
+- Generic words like: "system", "solution", "platform" (without OEM/model specification)
+- Log sources, monitored systems, supported technologies (these are infrastructure references, not deliverables)
+- Existing infrastructure, compatibility references
+- Document metadata (page numbers, headers, footers, continuation markers)
+- Table headers, totals, subtotals, summary rows
+
+**4. OEM / MODEL / MII RULES (STRICT):**
+- OEM: Extract ONLY if explicitly mentioned in the document for that product
+  - Search in: product descriptions, "Approved Makes", "Make & Model" columns, brand columns
+  - If multiple brands listed → extract FIRST one mentioned
+  - If NO brand found after searching ENTIRE document → use "Unspecified"
+  - DO NOT guess or infer OEMs
+- Model: Extract ONLY if explicitly mentioned
+  - Search in: "Model:", "Model No:", "Part Number:", "SKU:", "Product Code:", product descriptions
+  - If model not explicitly found but product name contains model info (like "Dell R750 Server"), extract it from product name
+  - If product name IS a model identifier (like "Model 2", "Variant A"), use that as the model
+  - If no model number/name exists → use "Not Specified" (NOT "N/A")
+  - DO NOT put specifications or dimensions in model field
+  - DO NOT put OEM/brand lists in model field
+- MII Status:
+  - Indian OEMs: {indian_oems}
+  - Global OEMs: {global_oems}
+  - If mentions "Make in India", "MII compliant", "Class-I Local" → mark as "MII-Compliant"
+  - If uncertain → use "Requires Review"
+
+**5. QUANTITY & UNIT RULES:**
+- Extract quantity ONLY if explicitly stated in the document
+- If quantity not found → use null (DO NOT assume 1)
+- Units must be normalized: "Nos", "Units", "Licenses", "Meters", "Kilograms", "Liters", etc.
+- If unit not found → use null
+
+**6. CATEGORIZATION (MANDATORY):**
+Each product MUST have exactly one category from this list:
+- Hardware
+- Software
+- Network
+- Security
+- Electrical
+- Civil
+- Other
+
+**7. DUPLICATES:**
+- Merge identical products (same productName + OEM + model)
+- Sum quantities only if units match
+- Remove duplicate entries
+
+**8. OUTPUT FORMAT (MANDATORY JSON SCHEMA):**
+⚠️ CRITICAL: Include productMapping.miiProductStatus in your FULL JSON response (along with all other departments).
+The productMapping section should have this structure:
+{{
+  "productMapping": {{
+    "miiProductStatus": [
+      {{
+        "productName": "string (REQUIRED)",
+        "oem": "string | 'Unspecified'",
+        "model": "string | 'Not Specified'",
+        "quantity": "number | null",
+        "unit": "string | null",
+        "category": "string (REQUIRED - one of: Hardware, Software, Network, Security, Electrical, Civil, Other)",
+        "miiStatus": "string (MII-Compliant | Non-MII | Requires Review)",
+        "specifications": "string (technical details if available)"
+      }}
+    ]
+  }}
+}}
+Note: This productMapping section must be included in your complete JSON response along with projectOverview, bidManagement, technical, commercial, finance, legal, scm sections.
+
+**9. EMPTY RESULT:**
+- If NO valid products found after thorough search → return empty array: []
+- DO NOT return products if only non-deliverables (dates, deadlines, process steps) are found
+- DO NOT include explanations, comments, or recommendations in the output
 
 **🚨 DEPARTMENT-SPECIFIC EXTRACTION MANDATES (NO N/A ALLOWED):**
 
@@ -662,7 +859,7 @@ Return ONLY valid JSON with this structure:
         "quantity": "string (if mentioned in document, else 'N/A')",
         "unit": "string (if mentioned in document, else 'N/A')",
         "oem": "string (brand/manufacturer name if found, else 'Unspecified')",
-        "model": "string (model number/name if found, else 'N/A')",
+        "model": "string (model number/name e.g. 'Dell R750', 'Catalyst 9300'. If not found use productName or '[Category] Series'. Do NOT put dimensions/specs in model; do NOT put OEM lists like 'Blustar/Voltas/Carrier' in model. Never 'N/A')",
         "miiStatus": "string (will be set later, use 'Pending Classification' for now)"
       }}
     ]

@@ -83,7 +83,17 @@ async def enrich_products(products: List[Dict[str, Any]]) -> List[Dict[str, Any]
             p_copy["miiStatus"] = classify_mii_status(oem, category)
             p_copy["confidence"] = 90
             p_copy["source"] = "document"
-            
+
+        # Ensure we never keep Unknown/Unmapped: re-classify if needed (handles edge cases)
+        if (not p_copy.get("miiStatus") or
+            str(p_copy.get("miiStatus", "")).strip() in (
+                "Unknown", "Unmapped", "Pending Classification", "Requires Review", ""
+            )):
+            p_copy["miiStatus"] = classify_mii_status(
+                p_copy.get("oem", "") or oem,
+                p_copy.get("category", "") or category
+            )
+
         enriched.append(p_copy)
     return enriched
 

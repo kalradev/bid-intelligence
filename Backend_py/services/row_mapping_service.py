@@ -65,7 +65,7 @@ Map this row to a structured product object. Extract:
 2. Quantity (if present)
 3. Unit (e.g., nos, units, pcs, meters)
 4. OEM/Brand (if mentioned in row, otherwise return "Unspecified")
-5. Model (extract specific model number/name if present in the row data. If no model found, return "N/A")
+5. Model (extract specific model number/name if present in the row data. If no model found, use product name or "Standard Model"—never "N/A")
 6. Category (infer from product type: Hardware, Software, Civil, Electrical, Furniture, HVAC, Security, Networking, etc.)
 7. Specifications (any technical details, performance metrics, features)
 

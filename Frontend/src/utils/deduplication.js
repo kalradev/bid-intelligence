@@ -259,9 +259,17 @@ export const processDepartmentData = (data) => {
       const deduplicatedSuccessFactors = {};
       Object.entries(processed.successFactors).forEach(([category, items]) => {
         if (Array.isArray(items)) {
-          const uniqueItems = removeDuplicates(items);
-          if (uniqueItems.length > 0) {
-            deduplicatedSuccessFactors[category] = uniqueItems;
+          // Special handling for preQualificationCriteria - preserve all items, only filter N/A
+          if (category === 'preQualificationCriteria') {
+            const filteredItems = filterNA(items);
+            if (filteredItems.length > 0) {
+              deduplicatedSuccessFactors[category] = filteredItems;
+            }
+          } else {
+            const uniqueItems = removeDuplicates(items);
+            if (uniqueItems.length > 0) {
+              deduplicatedSuccessFactors[category] = uniqueItems;
+            }
           }
         } else {
           deduplicatedSuccessFactors[category] = items;

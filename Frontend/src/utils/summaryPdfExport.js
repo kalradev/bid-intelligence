@@ -3,8 +3,9 @@ import jsPDF from 'jspdf';
 /**
  * Generate a comprehensive summary PDF from analysis data
  * @param {Object} analysisData - The complete analysis data from localStorage
+ * @param {Object} eligibilityChecklist - Optional eligibility checklist with Yes/No status
  */
-export const generateSummaryPDF = (analysisData) => {
+export const generateSummaryPDF = (analysisData, eligibilityChecklist = {}) => {
   try {
     if (!analysisData || !analysisData.data) {
       alert('No analysis data available to download');
@@ -83,7 +84,24 @@ export const generateSummaryPDF = (analysisData) => {
       if (bid.keyDeadlines) addText(`Key Deadlines: ${bid.keyDeadlines}`, 10, true);
       if (bid.strategy) addText(`Strategy: ${bid.strategy}`);
       
-      if (bid.successFactors && bid.successFactors.length > 0) {
+      // Eligibility Criteria with Yes/No status
+      if (bid.successFactors && typeof bid.successFactors === 'object' && bid.successFactors.preQualificationCriteria) {
+        const criteria = bid.successFactors.preQualificationCriteria;
+        if (Array.isArray(criteria) && criteria.length > 0) {
+          yPosition += 3;
+          addText('Eligibility Criteria:', 10, true);
+          
+          criteria.forEach((criterion, idx) => {
+            const status = eligibilityChecklist[criterion];
+            const statusText = status === true || status === "true" ? "✓ Yes" : status === false || status === "false" ? "✗ No" : "";
+            const displayText = statusText ? `${criterion} [${statusText}]` : criterion;
+            addText(`${idx + 1}. ${displayText}`, 9);
+          });
+          yPosition += 2;
+        }
+      }
+      
+      if (bid.successFactors && bid.successFactors.length > 0 && !bid.successFactors.preQualificationCriteria) {
         addText('Success Factors:', 10, true);
         bid.successFactors.forEach(factor => addText(`• ${factor}`, 9));
       }
@@ -218,6 +236,60 @@ export const generateSummaryPDF = (analysisData) => {
       if (pm.makeInIndiaMapping) {
         addText(`Make in India Status: ${pm.makeInIndiaMapping.status}`, 10, true);
         addText(`MII Mapped: ${pm.makeInIndiaMapping.mapped || 0}, Unmapped: ${pm.makeInIndiaMapping.unmapped || 0}`);
+      }
+      // Product table: Model = model name only. Never OEM list (e.g. "Blustar/Voltas/Carrier"), specs, or N/A. Fallback: [Category] Series.
+      const looksLikeSpecs = (s) => {
+        if (!s || typeof s !== 'string') return true;
+        const t = String(s).trim();
+        if (t.length > 65) return true;
+        return /(Width|Thickness|Length|Size):\s*\d|\d+\s*mm\s*[x,×]\s*\d|\d+\s*mm\s*,\s*\d|dimension\s*\d/i.test(t);
+      };
+      const looksLikeOemList = (s) => !!(s && typeof s === 'string' && s.split('/').length >= 2);
+      const getModelDisplay = (p) => {
+        const m = (p.model || '').trim();
+        if (m && m !== 'N/A' && m !== 'Unspecified' && !looksLikeSpecs(m) && !looksLikeOemList(m)) return m;
+        const pn = (p.productName || '').trim();
+        if (pn && !looksLikeOemList(pn)) return pn.length > 42 ? pn.substring(0, 42) + '…' : pn;
+        const cat = (p.category || '').trim();
+        return (looksLikeOemList(cat) ? 'General' : (cat || 'General')) + ' Series';
+      };
+      const products = pm.miiProductStatus || [];
+      if (products.length > 0) {
+        yPosition += 4;
+        addText('Product list (Name, Category, OEM, Model, MII Status):', 10, true);
+        const colWidths = [45, 28, 35, 42, 25];
+        const headers = ['Product', 'Category', 'OEM', 'Model', 'MII'];
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text(headers[0], margin, yPosition);
+        pdf.text(headers[1], margin + colWidths[0], yPosition);
+        pdf.text(headers[2], margin + colWidths[0] + colWidths[1], yPosition);
+        pdf.text(headers[3], margin + colWidths[0] + colWidths[1] + colWidths[2], yPosition);
+        pdf.text(headers[4], margin + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPosition);
+        yPosition += 5;
+        pdf.setFont('helvetica', 'normal');
+        for (let i = 0; i < Math.min(products.length, 50); i++) {
+          const p = products[i];
+          if (yPosition > pageHeight - 20) {
+            pdf.addPage();
+            yPosition = margin;
+          }
+          const name = (p.productName || 'N/A').substring(0, 22);
+          const cat = (p.category || 'Other').substring(0, 10);
+          const oem = (p.oem || 'N/A').substring(0, 14);
+          const model = getModelDisplay(p).substring(0, 18);
+          const mii = (p.miiStatus || 'Unmapped').substring(0, 8);
+          pdf.text(name, margin, yPosition);
+          pdf.text(cat, margin + colWidths[0], yPosition);
+          pdf.text(oem, margin + colWidths[0] + colWidths[1], yPosition);
+          pdf.text(model, margin + colWidths[0] + colWidths[1] + colWidths[2], yPosition);
+          pdf.text(mii, margin + colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3], yPosition);
+          yPosition += 4.5;
+        }
+        if (products.length > 50) {
+          addText(`... and ${products.length - 50} more products.`, 8);
+        }
+        pdf.setFontSize(10);
       }
     }
 

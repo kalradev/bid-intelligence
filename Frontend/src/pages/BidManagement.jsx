@@ -79,7 +79,93 @@ const BidManagement = () => {
                 // Process and deduplicate all list-based fields, filter N/A
                 if (bidManagementData) {
                     try {
+                        // Debug: Log eligibility criteria before processing
+                        console.log("🔍 Raw eligibility criteria:", bidManagementData?.successFactors?.preQualificationCriteria);
+                        console.log("🔍 Full successFactors:", bidManagementData?.successFactors);
+                        
                         const processedData = processDepartmentData(bidManagementData);
+                        
+                        // Fallback: If preQualificationCriteria is empty but we have categorized successFactors,
+                        // extract eligibility-like items from Financial, Technical, Compliance sections
+                        if ((!processedData.successFactors?.preQualificationCriteria || 
+                             processedData.successFactors.preQualificationCriteria.length === 0) &&
+                            processedData.successFactors && 
+                            typeof processedData.successFactors === 'object') {
+                            
+                            const eligibilityPatterns = [
+                                /minimum.*turnover|turnover.*minimum|average.*turnover|turnover.*required|turnover.*last.*years/i,
+                                /must be.*company|company.*registered|indian company|llp|partnership|registered under/i,
+                                /years.*experience|experience.*years|minimum.*experience|experience.*required|experience of/i,
+                                /profitable|profitability|financial.*standing|must be profitable/i,
+                                /no.*litigation|no.*blacklist|debarment|legal.*status|blacklisting/i,
+                                /bidder must|must have|required to have|eligibility|must possess/i,
+                                /registration|registered under|gst|pan|epf|certificate of incorporation/i
+                            ];
+                            
+                            const extractedCriteria = [];
+                            
+                            // Extract from Financial section - look for eligibility-like items
+                            if (Array.isArray(processedData.successFactors.Financial)) {
+                                processedData.successFactors.Financial.forEach(item => {
+                                    if (typeof item === 'string') {
+                                        const lowerItem = item.toLowerCase();
+                                        if (eligibilityPatterns.some(pattern => pattern.test(item)) ||
+                                            (lowerItem.includes('minimum') && (lowerItem.includes('turnover') || lowerItem.includes('crore') || lowerItem.includes('years'))) ||
+                                            (lowerItem.includes('must be') && lowerItem.includes('profitable')) ||
+                                            (lowerItem.includes('bidder must') && lowerItem.includes('turnover'))) {
+                                            extractedCriteria.push(item);
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Extract from Technical section - look for experience/eligibility requirements
+                            if (Array.isArray(processedData.successFactors.Technical)) {
+                                processedData.successFactors.Technical.forEach(item => {
+                                    if (typeof item === 'string') {
+                                        const lowerItem = item.toLowerCase();
+                                        if ((lowerItem.includes('experience') && (lowerItem.includes('years') || lowerItem.includes('minimum'))) ||
+                                            (lowerItem.includes('minimum') && lowerItem.includes('years')) ||
+                                            lowerItem.includes('experience of minimum')) {
+                                            extractedCriteria.push(item);
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // Extract from Compliance section - look for company registration/legal requirements
+                            if (Array.isArray(processedData.successFactors.Compliance)) {
+                                processedData.successFactors.Compliance.forEach(item => {
+                                    if (typeof item === 'string') {
+                                        const lowerItem = item.toLowerCase();
+                                        if ((lowerItem.includes('must be') && (lowerItem.includes('indian') || lowerItem.includes('company'))) ||
+                                            (lowerItem.includes('indian company') || lowerItem.includes('llp') || lowerItem.includes('partnership')) ||
+                                            (lowerItem.includes('registered') && (lowerItem.includes('under') || lowerItem.includes('applicable'))) ||
+                                            (lowerItem.includes('no') && (lowerItem.includes('litigation') || lowerItem.includes('blacklist'))) ||
+                                            lowerItem.includes('debarment')) {
+                                            extractedCriteria.push(item);
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            // If we found eligibility criteria, add them to preQualificationCriteria
+                            if (extractedCriteria.length > 0) {
+                                if (!processedData.successFactors.preQualificationCriteria) {
+                                    processedData.successFactors.preQualificationCriteria = [];
+                                }
+                                // Merge and deduplicate
+                                const existing = processedData.successFactors.preQualificationCriteria || [];
+                                const combined = [...existing, ...extractedCriteria];
+                                processedData.successFactors.preQualificationCriteria = [...new Set(combined)];
+                                console.log("✅ Extracted eligibility criteria from categorized sections:", processedData.successFactors.preQualificationCriteria);
+                            }
+                        }
+                        
+                        // Debug: Log eligibility criteria after processing
+                        console.log("🔍 Processed eligibility criteria:", processedData?.successFactors?.preQualificationCriteria);
+                        console.log("🔍 Processed successFactors:", processedData?.successFactors);
+                        
                         setData(processedData);
                     } catch (processError) {
                         console.error("Error processing bid management data:", processError);
@@ -319,7 +405,7 @@ const BidManagement = () => {
                         )}
 
                         {/* Eligibility Criteria with Yes/No Buttons */}
-                        {data.successFactors.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria) && data.successFactors.preQualificationCriteria.length > 0 && (
+                        {data.successFactors?.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria) && data.successFactors.preQualificationCriteria.length > 0 ? (
                             <div style={{ marginBottom: "24px", background: "#fef3c7", padding: "16px", borderRadius: "8px", border: "1px solid #fde68a" }}>
                                 <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "12px", marginTop: "0" }}>
                                     Eligibility Criteria
@@ -335,18 +421,6 @@ const BidManagement = () => {
                                         const checkStatus = eligibilityChecks[item];
                                         const isYes = checkStatus === true || checkStatus === "true";
                                         const isNo = checkStatus === false || checkStatus === "false";
-                                        const isUnselected = checkStatus === undefined || checkStatus === null;
-                                        
-                                        // Debug logging (remove in production)
-                                        if (idx === 0) {
-                                            console.log(`🔍 Checklist state for "${item}":`, {
-                                                rawValue: checkStatus,
-                                                isYes,
-                                                isNo,
-                                                isUnselected,
-                                                allChecks: eligibilityChecks
-                                            });
-                                        }
                                         
                                         return (
                                             <li 
@@ -354,10 +428,10 @@ const BidManagement = () => {
                                                 style={{ 
                                                     marginBottom: "16px", 
                                                     padding: "12px",
-                                                    background: isYes ? "#dcfce7" : isNo ? "#fee2e2" : "#f9fafb",
+                                                    background: "#f3f4f6",
                                                     borderRadius: "8px",
-                                                    border: `2px solid ${isYes ? "#15803d" : isNo ? "#b91c1c" : "#d1d5db"}`,
-                                                    transition: "all 0.3s ease"
+                                                    border: "1px solid #e5e7eb",
+                                                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.1)"
                                                 }}
                                             >
                                                 <div style={{
@@ -370,7 +444,7 @@ const BidManagement = () => {
                                                         flex: 1,
                                                         fontSize: "16px",
                                                         color: "#78350f",
-                                                        fontWeight: "500",
+                                                        fontWeight: "400",
                                                         minWidth: "300px"
                                                     }}>
                                                         {item}
@@ -384,34 +458,16 @@ const BidManagement = () => {
                                                             onClick={() => handleEligibilityCheck(item, true)}
                                                             disabled={isLoadingChecklist}
                                                             style={{
-                                                                padding: "10px 24px",
-                                                                fontSize: "15px",
-                                                                fontWeight: "700",
-                                                                borderRadius: "8px",
-                                                                border: isYes ? "3px solid #15803d" : "2px solid #d1d5db",
+                                                                padding: "8px 20px",
+                                                                fontSize: "14px",
+                                                                fontWeight: "600",
+                                                                borderRadius: "6px",
+                                                                border: isYes ? "2px solid #15803d" : "1px solid #d1d5db",
                                                                 cursor: isLoadingChecklist ? "not-allowed" : "pointer",
-                                                                background: isYes ? "#15803d" : isNo ? "#f3f4f6" : "#ffffff",
-                                                                color: isYes ? "white" : isNo ? "#9ca3af" : "#4b5563",
-                                                                transition: "all 0.3s ease",
-                                                                boxShadow: isYes ? "0 4px 8px rgba(21, 128, 61, 0.5)" : "0 2px 4px rgba(0, 0, 0, 0.1)",
-                                                                transform: isYes ? "scale(1.08)" : "scale(1)",
+                                                                background: isYes ? "#15803d" : "#ffffff",
+                                                                color: isYes ? "white" : "#4b5563",
+                                                                transition: "all 0.2s ease",
                                                                 opacity: isLoadingChecklist ? 0.6 : 1
-                                                            }}
-                                                            onMouseEnter={(e) => {
-                                                                if (!isLoadingChecklist && !isYes) {
-                                                                    e.currentTarget.style.background = isNo ? "#e5e7eb" : "#f0fdf4";
-                                                                    e.currentTarget.style.borderColor = isNo ? "#9ca3af" : "#86efac";
-                                                                    e.currentTarget.style.transform = "scale(1.05)";
-                                                                    e.currentTarget.style.boxShadow = "0 3px 6px rgba(0, 0, 0, 0.15)";
-                                                                }
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                if (!isYes) {
-                                                                    e.currentTarget.style.background = isNo ? "#f3f4f6" : "#ffffff";
-                                                                    e.currentTarget.style.borderColor = isNo ? "#d1d5db" : "#d1d5db";
-                                                                    e.currentTarget.style.transform = "scale(1)";
-                                                                    e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
-                                                                }
                                                             }}
                                                         >
                                                             ✓ Yes
@@ -420,37 +476,19 @@ const BidManagement = () => {
                                                             onClick={() => handleEligibilityCheck(item, false)}
                                                             disabled={isLoadingChecklist}
                                                             style={{
-                                                                padding: "10px 24px",
-                                                                fontSize: "15px",
-                                                                fontWeight: "700",
-                                                                borderRadius: "8px",
-                                                                border: isNo ? "3px solid #b91c1c" : "2px solid #d1d5db",
+                                                                padding: "8px 20px",
+                                                                fontSize: "14px",
+                                                                fontWeight: "600",
+                                                                borderRadius: "6px",
+                                                                border: isNo ? "2px solid #b91c1c" : "1px solid #d1d5db",
                                                                 cursor: isLoadingChecklist ? "not-allowed" : "pointer",
-                                                                background: isNo ? "#b91c1c" : isYes ? "#f3f4f6" : "#ffffff",
-                                                                color: isNo ? "white" : isYes ? "#9ca3af" : "#4b5563",
-                                                                transition: "all 0.3s ease",
-                                                                boxShadow: isNo ? "0 4px 8px rgba(185, 28, 28, 0.5)" : "0 2px 4px rgba(0, 0, 0, 0.1)",
-                                                                transform: isNo ? "scale(1.08)" : "scale(1)",
+                                                                background: isNo ? "#b91c1c" : "#ffffff",
+                                                                color: isNo ? "white" : "#4b5563",
+                                                                transition: "all 0.2s ease",
                                                                 opacity: isLoadingChecklist ? 0.6 : 1
                                                             }}
-                                                            onMouseEnter={(e) => {
-                                                                if (!isLoadingChecklist && !isNo) {
-                                                                    e.currentTarget.style.background = isYes ? "#e5e7eb" : "#fef2f2";
-                                                                    e.currentTarget.style.borderColor = isYes ? "#9ca3af" : "#fca5a5";
-                                                                    e.currentTarget.style.transform = "scale(1.05)";
-                                                                    e.currentTarget.style.boxShadow = "0 3px 6px rgba(0, 0, 0, 0.15)";
-                                                                }
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                if (!isNo) {
-                                                                    e.currentTarget.style.background = isYes ? "#f3f4f6" : "#ffffff";
-                                                                    e.currentTarget.style.borderColor = isYes ? "#d1d5db" : "#d1d5db";
-                                                                    e.currentTarget.style.transform = "scale(1)";
-                                                                    e.currentTarget.style.boxShadow = "0 2px 4px rgba(0, 0, 0, 0.1)";
-                                                                }
-                                                            }}
                                                         >
-                                                            ✗ No
+                                                            X No
                                                         </button>
                                                     </div>
                                                 </div>
@@ -458,6 +496,40 @@ const BidManagement = () => {
                                         );
                                     })}
                                 </ul>
+                            </div>
+                        ) : (
+                            <div style={{ marginBottom: "24px", background: "#fee2e2", padding: "16px", borderRadius: "8px", border: "1px solid #fca5a5" }}>
+                                <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#991b1b", marginBottom: "8px", marginTop: "0" }}>
+                                    Eligibility Criteria
+                                </h4>
+                                <p style={{ color: "#991b1b", fontSize: "14px", margin: "0" }}>
+                                    No eligibility criteria found. Please check:
+                                    <br />1. If the PDF contains eligibility criteria sections
+                                    <br />2. If the analysis completed successfully
+                                    <br />3. Check browser console for debugging information
+                                </p>
+                                <details style={{ marginTop: "12px" }}>
+                                    <summary style={{ cursor: "pointer", color: "#991b1b", fontSize: "14px" }}>Debug Information</summary>
+                                    <pre style={{ 
+                                        background: "#f9fafb", 
+                                        padding: "12px", 
+                                        borderRadius: "4px", 
+                                        fontSize: "12px", 
+                                        overflow: "auto",
+                                        marginTop: "8px",
+                                        maxHeight: "200px"
+                                    }}>
+                                        {JSON.stringify({
+                                            hasSuccessFactors: !!data.successFactors,
+                                            successFactorsType: typeof data.successFactors,
+                                            hasPreQualificationCriteria: !!data.successFactors?.preQualificationCriteria,
+                                            preQualificationCriteriaType: typeof data.successFactors?.preQualificationCriteria,
+                                            isArray: Array.isArray(data.successFactors?.preQualificationCriteria),
+                                            length: data.successFactors?.preQualificationCriteria?.length,
+                                            sample: data.successFactors?.preQualificationCriteria?.slice(0, 2)
+                                        }, null, 2)}
+                                    </pre>
+                                </details>
                             </div>
                         )}
 

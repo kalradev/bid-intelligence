@@ -6,26 +6,19 @@ class Settings(BaseSettings):
     # API Keys
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
-    PINECONE_API_KEY: Optional[str] = None
-    PINECONE_ENVIRONMENT: Optional[str] = None
-    PINECONE_INDEX: Optional[str] = "tender-analysis"
     
     # Server Config
     PORT: int = 3000
     NODE_ENV: str = "development"
     MAX_FILE_SIZE_MB: int = 50
     
-    # Database Config (PostgreSQL) - Kept for migration period
+    # Database Config (PostgreSQL)
     POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "12345"  # Match your PostgreSQL password
+    POSTGRES_PASSWORD: str = "1234"  # Match your PostgreSQL password
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_DB: str = "Bid2"  # Main database for Bid Intelligence project
+    POSTGRES_DB: str = "Bid"  # Main database for Bid Intelligence project
     DATABASE_URL: Optional[str] = None
-    
-    # MongoDB Config
-    MONGODB_STRING: Optional[str] = None  # Connection string from .env
-    MONGODB_DB: str = "bid_intelligence"  # Database name in MongoDB
     
     # Versioning
     PROCESSING_VERSION: int = 31

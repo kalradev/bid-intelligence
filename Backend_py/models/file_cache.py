@@ -1,12 +1,14 @@
 """
-File Cache Model - MongoDB Implementation
+File Cache Model - PostgreSQL/SQLAlchemy Implementation
 Handles file caching operations
 """
 import json
 import logging
 from typing import Optional, Dict, Any
 from datetime import datetime
-from core.mongodb import get_mongodb, convert_id_to_str
+from sqlalchemy.orm import Session
+from core.sqlalchemy_db import get_db_session
+from models.sqlalchemy_models import FileCache as FileCacheModel
 
 logger = logging.getLogger(__name__)
 
@@ -14,30 +16,33 @@ class FileCache:
     @staticmethod
     def find_by_hash(file_hash: str, version: int) -> Optional[Dict[str, Any]]:
         """Find cached file by hash and version"""
-        db = get_mongodb()
-        if db is None:
-            return None
+        db = get_db_session()
         try:
-            collection = db.file_cache
-            
-            # Find the cached file
-            cached_file = collection.find_one({
-                "file_hash": file_hash,
-                "processing_version": version
-            })
+            cached_file = db.query(FileCacheModel).filter(
+                FileCacheModel.file_hash == file_hash,
+                FileCacheModel.processing_version == version
+            ).first()
             
             if cached_file:
                 # Update last accessed time
-                collection.update_one(
-                    {"_id": cached_file["_id"]},
-                    {"$set": {"last_accessed_at": datetime.utcnow()}}
-                )
+                cached_file.last_accessed_at = datetime.utcnow()
+                db.commit()
                 
-                result = convert_id_to_str(cached_file)
+                result = {
+                    "id": cached_file.id,
+                    "fileHash": cached_file.file_hash,
+                    "processingVersion": cached_file.processing_version,
+                    "originalFilename": cached_file.original_filename,
+                    "extractedText": cached_file.extracted_text,
+                    "departmentalSummaries": cached_file.departmental_summaries,
+                    "metadata": cached_file.metadata_json,
+                    "createdAt": cached_file.created_at.isoformat() if cached_file.created_at else None,
+                    "lastAccessedAt": cached_file.last_accessed_at.isoformat() if cached_file.last_accessed_at else None
+                }
                 
-                # Parse JSON strings if they exist (backward compatibility)
-                if isinstance(result.get("departmental_summaries"), str):
-                    result["departmental_summaries"] = json.loads(result["departmental_summaries"])
+                # Handle JSON strings if they exist (backward compatibility)
+                if isinstance(result.get("departmentalSummaries"), str):
+                    result["departmentalSummaries"] = json.loads(result["departmentalSummaries"])
                 if result.get("metadata") and isinstance(result["metadata"], str):
                     result["metadata"] = json.loads(result["metadata"])
                 
@@ -46,17 +51,14 @@ class FileCache:
         except Exception as e:
             logger.error(f"Error finding in cache: {str(e)}")
             return None
+        finally:
+            db.close()
 
     @staticmethod
     def create(data: Dict[str, Any]):
         """Create or update a cached file"""
-        db = get_mongodb()
-        if db is None:
-            return
-        
+        db = get_db_session()
         try:
-            collection = db.file_cache
-            
             file_hash = data["fileHash"]
             version = data["processingVersion"]
             filename = data["originalFilename"]
@@ -64,33 +66,35 @@ class FileCache:
             summaries = data["departmentalSummaries"]
             metadata = data.get("metadata")
 
-            cache_doc = {
-                "file_hash": file_hash,
-                "processing_version": version,
-                "original_filename": filename,
-                "extracted_text": text,
-                "departmental_summaries": summaries,  # MongoDB stores as object
-                "metadata": metadata,  # MongoDB stores as object
-                "created_at": datetime.utcnow(),
-                "last_accessed_at": datetime.utcnow()
-            }
+            # Check if exists
+            existing = db.query(FileCacheModel).filter(
+                FileCacheModel.file_hash == file_hash,
+                FileCacheModel.processing_version == version
+            ).first()
             
-            # Use upsert (update if exists, insert if not)
-            collection.update_one(
-                {
-                    "file_hash": file_hash,
-                    "processing_version": version
-                },
-                {
-                    "$set": cache_doc,
-                    "$setOnInsert": {"created_at": datetime.utcnow()}
-                },
-                upsert=True
-            )
+            if existing:
+                # Update existing
+                existing.original_filename = filename
+                existing.extracted_text = text
+                existing.departmental_summaries = summaries
+                existing.metadata_json = metadata
+                existing.last_accessed_at = datetime.utcnow()
+            else:
+                # Create new
+                new_cache = FileCacheModel(
+                    file_hash=file_hash,
+                    processing_version=version,
+                    original_filename=filename,
+                    extracted_text=text,
+                    departmental_summaries=summaries,
+                    metadata_json=metadata
+                )
+                db.add(new_cache)
             
-            # Create unique index
-            collection.create_index([("file_hash", 1), ("processing_version", 1)], unique=True)
-            
+            db.commit()
             logger.info(f"✅ Cached file: {filename} (hash: {file_hash[:8]}..., v{version})")
         except Exception as e:
+            db.rollback()
             logger.error(f"Error creating cache: {str(e)}")
+        finally:
+            db.close()

@@ -74,12 +74,59 @@ export default function InsightsPage() {
     }
   };
 
-  const handleDownloadSummary = () => {
+  const handleDownloadSummary = async () => {
     const analysisData = localStorage.getItem("analysisData");
-    if (analysisData) {
-      generateSummaryPDF(JSON.parse(analysisData));
-    } else {
+    if (!analysisData) {
       alert("No analysis data available to download");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(analysisData);
+      let eligibilityChecklist = {};
+      
+      // Try to fetch eligibility checklist if project name is available
+      if (projectName) {
+        try {
+          const token = localStorage.getItem('token');
+          if (token) {
+            const currentDoc = localStorage.getItem("currentDocument");
+            let docId = null;
+            if (currentDoc) {
+              try {
+                const doc = JSON.parse(currentDoc);
+                docId = doc.documentId;
+              } catch (e) {
+                // Ignore parse errors
+              }
+            }
+            
+            const url = docId 
+              ? `http://localhost:3000/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}?document_id=${docId}`
+              : `http://localhost:3000/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`;
+            
+            const response = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.checklist) {
+                eligibilityChecklist = result.checklist;
+              }
+            }
+          }
+        } catch (error) {
+          console.warn("Could not fetch eligibility checklist, proceeding without it:", error);
+        }
+      }
+      
+      generateSummaryPDF(parsed, eligibilityChecklist);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      alert("Failed to generate summary PDF. Please try again.");
     }
   };
 

@@ -51,9 +51,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
                     background: "white",
                 }}
             >
-                <option>All</option>
-                <option>India</option>
-                <option>USA</option>
+                <option value="All">All</option>
+                <option value="India">India</option>
+                <option value="Global">Global</option>
+                <option value="Unknown">Unknown</option>
             </select>
 
             <select

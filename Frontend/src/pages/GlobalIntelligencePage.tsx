@@ -30,17 +30,18 @@ export default function GlobalIntelligencePage() {
         if (productMapping?.miiProductStatus && Array.isArray(productMapping.miiProductStatus)) {
           // Transform miiProductStatus to the format needed for the table
           const transformedData: ProductData[] = productMapping.miiProductStatus.map((item: any) => {
-            // Determine country based on MII status
+            // Country: use item.country if present, else derive from MII status (India / Global / Unknown)
             let country = "Unknown";
             let isMII = false;
-
-            if (item.miiStatus) {
+            if (item.country && typeof item.country === "string" && item.country.trim()) {
+              country = item.country.trim();
+              isMII = /india|indian|mii/i.test(country);
+            } else if (item.miiStatus) {
               const status = item.miiStatus.toLowerCase();
-              if (status.includes("indian") || status.includes("mii-compliant") || status.includes("likely indian")) {
+              if (status.includes("indian") || status.includes("mii-compliant") || status.includes("mii compliant") || (status.includes("mii") && status.includes("compliant")) || status.includes("likely indian")) {
                 country = "India";
                 isMII = true;
               } else if (status.includes("global") || status.includes("foreign")) {
-                // Try to infer country from OEM name or default to "Global"
                 country = "Global";
                 isMII = false;
               } else if (status.includes("review") || status.includes("unspecified")) {
@@ -49,10 +50,30 @@ export default function GlobalIntelligencePage() {
               }
             }
 
+            // Model = model name only. Never OEM list (e.g. "Blustar/Voltas/Carrier"), specs, or N/A. Fallback: [Category] Series or Standard Model.
+            const looksLikeSpecs = (s) => {
+              if (!s || typeof s !== "string") return true;
+              const t = String(s).trim();
+              if (t.length > 65) return true;
+              return /(Width|Thickness|Length|Size):\s*\d|\d+\s*mm\s*[x,×]\s*\d|\d+\s*mm\s*,\s*\d|dimension\s*\d/i.test(t);
+            };
+            const looksLikeOemList = (s) => (s && typeof s === "string" && (s.split("/").length >= 2));
+            const m = (item.model || "").trim();
+            const cat = (item.category || "").trim();
+            const useCat = looksLikeOemList(cat) ? "General" : (cat || "General");
+            let modelDisplay = "Standard Model";
+            if (m && m !== "N/A" && m !== "Unspecified" && !looksLikeSpecs(m) && !looksLikeOemList(m)) {
+              modelDisplay = m;
+            } else {
+              const pn = (item.productName || "").trim();
+              if (pn && !looksLikeOemList(pn)) modelDisplay = pn.length > 42 ? pn.substring(0, 42) + "…" : pn;
+              else modelDisplay = useCat + " Series";
+            }
+
             return {
               product: item.productName || "N/A",
               oem: item.oem || "Unspecified",
-              model: item.model || "Standard Model",
+              model: modelDisplay,
               country: country,
               mii: isMII,
             };
