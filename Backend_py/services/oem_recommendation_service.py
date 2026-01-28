@@ -11,6 +11,7 @@ based on actual specifications from tender documents.
 import asyncio
 import json
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from openai import AsyncOpenAI
 from core.config import settings
@@ -28,6 +29,58 @@ if settings.OPENAI_API_KEY:
         async_client = None
 else:
     logger.warning("⚠️ OPENAI_API_KEY not found - OEM recommendations will be disabled")
+
+
+def is_valid_product_for_enrichment(product: Dict[str, Any]) -> bool:
+    """
+    Check if a product is valid for OEM enrichment.
+    EXTREMELY PERMISSIVE: Only rejects obvious non-products (headers with dots, dates, long instructions).
+    Allows ALL products that have specifications or look like products.
+    """
+    import re
+    
+    product_name = product.get("productName", "").strip()
+    
+    if not product_name:
+        return False
+    
+    # Remove leading numbers and dots (like "1. GENERAL ............")
+    product_clean = re.sub(r'^\s*\d+[\.)]?\s*', '', product_name).strip()
+    product_lower = product_clean.lower()
+    
+    # ONLY reject if it's clearly NOT a product:
+    
+    # 1. Section headers with trailing dots (like "GENERAL ........................")
+    if re.search(r'[\.\_\-]{10,}$', product_clean):
+        return False
+    
+    # 2. Known section header names (exact match only)
+    header_names = ['GENERAL', 'PARTICULARS', 'REQUEST', 'SCOPE', 'SERVICE', 
+                    'SPECIAL', 'AUDIT', 'FORCE', 'ITIL', 'TICKETING', 'EXIT']
+    if product_clean.upper() == header_names or product_clean.upper() in header_names:
+        return False
+    
+    # 3. Dates (DD/MM/YYYY or DD-MM-YYYY format)
+    if re.match(r'^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$', product_clean):
+        return False
+    
+    # 4. Very long instruction sentences (50+ chars with instruction keywords)
+    instruction_keywords = ['must', 'should', 'shall', 'required', 'submission', 'submit', 
+                          'declaration', 'certificate', 'opening', 'closing', 'evaluation']
+    if len(product_clean) > 50 and any(keyword in product_lower for keyword in instruction_keywords):
+        return False
+    
+    # 5. Empty or just dots/underscores
+    if not product_clean or re.match(r'^[\.\_\-]+$', product_clean):
+        return False
+    
+    # 6. Just "N/A" or similar
+    if product_clean.upper() in ['N/A', 'NA', 'NONE', 'NOT APPLICABLE']:
+        return False
+    
+    # EVERYTHING ELSE IS ALLOWED - be extremely permissive
+    # If it has a name and doesn't match the rejection criteria above, it's a product
+    return True
 
 
 async def recommend_oem_models_batch(
@@ -65,13 +118,18 @@ for MULTIPLE products based on specifications provided."""
     # Build product list for prompt
     products_text = ""
     for i, p in enumerate(products, 1):
+        existing_oem = p.get('oem', 'Unspecified')
+        oem_note = ""
+        if existing_oem and existing_oem not in ['Unspecified', 'N/A', '']:
+            oem_note = f"- Existing OEM: {existing_oem}\n  **IMPORTANT: This product already has an OEM. You MUST provide specific model names for this OEM (and optionally other compatible OEMs). If multiple OEMs are listed (e.g., 'HP/Epson/Sharp'), provide models for EACH OEM.**"
+        
         products_text += f"""
 **PRODUCT {i}:**
 - Name: {p.get('productName', 'Unknown')}
 - Category: {p.get('category', 'Other')}
 - Specifications: {p.get('specifications', 'Standard specifications')}
 - Quantity: {p.get('quantity', '1')}
-{f"- Existing OEM: {p.get('oem')}" if p.get('oem') and p.get('oem') != 'Unspecified' else ''}
+{oem_note}
 """
 
     user_prompt = f"""**YOUR TASK:**
@@ -83,16 +141,19 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 1. **MANDATORY: Extract model names/numbers from specifications if mentioned** (e.g., "HP LaserJet Pro M404dn", "Dell OptiPlex 7090", "192x15x2400", "Model XYZ-123")
 2. **If specifications contain model numbers, dimensions, or part numbers, use those EXACT values**
 3. **If product name contains model info (e.g., "Acoustic Panel 192x15x2400"), extract the model part**
-4. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
-5. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+4. **If an existing OEM is mentioned, you MUST provide specific model names for that OEM** (e.g., if OEM is "HP/Epson/Sharp", provide models like "HP LaserJet Pro M404dn", "Epson EcoTank ET-2720", "Sharp MX-3070N")
+5. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
+6. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+7. **For products with multiple OEMs listed (e.g., "HP/Epson/Sharp"), provide models for EACH OEM mentioned**
 
 **CRITICAL RULES:**
 1. Provide REAL manufacturers that exist in the market
 2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
 4. Prioritize Indian OEMs first (for Make in India compliance)
-5. If an OEM is pre-approved/mentioned, include it as the first option
+5. **If an OEM is pre-approved/mentioned in "Existing OEM", you MUST include it and provide specific model names for it**
 6. Consider availability, pricing tier, and quality
+7. **For each OEM you recommend, ALWAYS provide a specific model name/number - this is MANDATORY**
 
 **CATEGORY-SPECIFIC GUIDANCE:**
 - Furniture: Consider brands like Godrej, Durian, Featherlite, Nilkamal, Steelcase
@@ -140,23 +201,49 @@ Return 2-3 recommendations per product."""
         result = json.loads(response.choices[0].message.content)
         product_recs = result.get("product_recommendations", {})
         
-        # Validate and ensure all models are not "N/A"
+        # Validate and ensure all models are not "N/A" - generate better model names
         validated_recs = {}
         for product_name, recs in product_recs.items():
             validated_list = []
             for rec in recs:
-                model = rec.get("model", "N/A")
-                if not model or model == "N/A" or model.strip() == "":
-                    oem = rec.get("oem", "")
-                    # Try to extract from product name
+                model = rec.get("model", "").strip()
+                oem = rec.get("oem", "").strip()
+                
+                # If model is missing or "N/A", generate a proper model name
+                if not model or model.upper() in ["N/A", "NA", "NONE", ""]:
+                    # Strategy 1: Extract from product name if it contains model info
                     if any(char.isdigit() for char in product_name):
                         parts = product_name.split()
                         model_parts = [p for p in parts if any(char.isdigit() for char in p)]
-                        model = " ".join(model_parts) if model_parts else f"{oem} {product_name}" if oem else product_name
+                        if model_parts:
+                            model = " ".join(model_parts)
+                        else:
+                            # Extract numbers and create model
+                            numbers = re.findall(r'\d+', product_name)
+                            if numbers:
+                                model = f"{oem} {' '.join(numbers)}" if oem else f"Model {' '.join(numbers)}"
+                            else:
+                                model = f"{oem} {product_name}" if oem else product_name
                     else:
-                        model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                        # Strategy 2: Create model name from OEM + product category
+                        # Clean product name for model
+                        clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                        if oem:
+                            model = f"{oem} {clean_name}"
+                        else:
+                            model = f"{clean_name} Standard"
+                    
                     rec["model"] = model
-                    logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
+                    logger.info(f"✅ Generated model '{model}' for {product_name} (OEM: {oem})")
+                else:
+                    # Model exists but validate it's not generic
+                    if model.upper() in ["STANDARD", "STANDARD MODEL", "GENERIC", "N/A STANDARD MODEL"]:
+                        # Replace generic model with better name
+                        clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                        model = f"{oem} {clean_name}" if oem else f"{clean_name} Standard"
+                        rec["model"] = model
+                        logger.info(f"✅ Replaced generic model with '{model}' for {product_name}")
+                
                 validated_list.append(rec)
             validated_recs[product_name] = validated_list
         
@@ -219,16 +306,19 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 1. **MANDATORY: Extract model names/numbers from specifications if mentioned** (e.g., "HP LaserJet Pro M404dn", "Dell OptiPlex 7090", "192x15x2400", "Model XYZ-123")
 2. **If specifications contain model numbers, dimensions, or part numbers, use those EXACT values**
 3. **If product name contains model info (e.g., "Acoustic Panel 192x15x2400"), extract the model part**
-4. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
-5. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+4. **If an existing OEM is mentioned above, you MUST provide specific model names for that OEM** (e.g., if OEM is "HP/Epson/Sharp", provide models like "HP LaserJet Pro M404dn", "Epson EcoTank ET-2720", "Sharp MX-3070N")
+5. **If no model in specs/name, provide a REAL, specific model from that OEM's catalog** (e.g., "HP LaserJet Pro M404dn" not just "HP Printer")
+6. **NEVER return "N/A", "Standard", or generic names - always provide specific model names/numbers**
+7. **For products with multiple OEMs listed (e.g., "HP/Epson/Sharp"), provide models for EACH OEM mentioned**
 
 **CRITICAL RULES:**
 1. Provide REAL manufacturers that exist in the market
 2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
 4. Prioritize Indian OEMs first (for Make in India compliance)
-5. If an OEM is pre-approved/mentioned, include it as the first option
+5. **If an OEM is pre-approved/mentioned above, you MUST include it and provide specific model names for it**
 6. Consider availability, pricing tier, and quality
+7. **For each OEM you recommend, ALWAYS provide a specific model name/number - this is MANDATORY**
 
 **CATEGORY-SPECIFIC GUIDANCE:**
 - Furniture: Consider brands like Godrej, Durian, Featherlite, Nilkamal, Steelcase
@@ -307,7 +397,20 @@ Return exactly 2-3 recommendations, ranked by best match score."""
                     elif "godrej" in oem.lower() and "furniture" in category_lower:
                         model = "Godrej Interio Series"
                     else:
-                        model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                        # Generate better model name from product name
+                        clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                        if oem:
+                            # Try to create a meaningful model name
+                            if any(char.isdigit() for char in product_name):
+                                numbers = re.findall(r'\d+', product_name)
+                                if numbers:
+                                    model = f"{oem} {' '.join(numbers)}"
+                                else:
+                                    model = f"{oem} {clean_name}"
+                            else:
+                                model = f"{oem} {clean_name}"
+                        else:
+                            model = f"{clean_name} Standard"
                 
                 rec["model"] = model
                 logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
@@ -346,34 +449,82 @@ async def enrich_products_with_recommendations(
     if not products:
         return []
     
-    # OPTIMIZATION 1: Smart Filtering - Skip products that already have good OEM info
+    # OPTIMIZATION 1: Smart Filtering - Filter out invalid products and skip those with recommendations
     products_needing_enrichment = []
     products_already_complete = []
+    products_invalid = []
     
     for product in products:
+        # First check if product is valid for enrichment (not a header, date, instruction, etc.)
+        if not is_valid_product_for_enrichment(product):
+            # Even if invalid, ALWAYS generate a model name if model is N/A
+            existing_oem = product.get("oem", "Unspecified")
+            existing_model = product.get("model", "N/A")
+            product_name = product.get("productName", "")
+            
+            # Generate model name if missing
+            if existing_model in ["N/A", "", None]:
+                clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                # Remove leading numbers if any
+                clean_name = re.sub(r'^\d+\s+', '', clean_name).strip()
+                
+                if existing_oem not in ["Unspecified", "N/A", "", None]:
+                    # Has OEM - create model name from OEM + product
+                    if any(char.isdigit() for char in product_name):
+                        numbers = re.findall(r'\d+', product_name)
+                        if numbers:
+                            product["model"] = f"{existing_oem} {' '.join(numbers)}"
+                        else:
+                            product["model"] = f"{existing_oem} {clean_name}"
+                    else:
+                        product["model"] = f"{existing_oem} {clean_name}"
+                else:
+                    # No OEM - create generic model name
+                    if any(char.isdigit() for char in product_name):
+                        numbers = re.findall(r'\d+', product_name)
+                        if numbers:
+                            product["model"] = f"{clean_name} {' '.join(numbers)}"
+                        else:
+                            product["model"] = f"{clean_name} Standard"
+                    else:
+                        product["model"] = f"{clean_name} Standard"
+                
+                logger.info(f"✅ Generated model '{product['model']}' for skipped product: {product_name[:50]}...")
+            
+            products_invalid.append(product)
+            product_name_display = product.get('productName', '')[:60]
+            logger.info(f"⏭️ Skipping invalid product (header/instruction/date): {product_name_display}...")
+            continue
+        
         existing_oem = product.get("oem", "Unspecified")
         existing_model = product.get("model", "N/A")
+        existing_recommendations = product.get("oemRecommendations", [])
         
-        # Skip if product already has valid OEM AND model
-        has_valid_oem = existing_oem and existing_oem not in ["Unspecified", "N/A", ""]
-        has_valid_model = existing_model and existing_model not in ["N/A", "", "Unspecified"]
+        # Only skip if product already has recommendations (meaning it was enriched before)
+        # We want to enrich products that:
+        # 1. Don't have recommendations yet (even if they have OEM/model)
+        # 2. Have OEM but no model (need model suggestions)
+        # 3. Have no OEM at all (need both OEM and model)
+        has_recommendations = existing_recommendations and len(existing_recommendations) > 0
         
-        if has_valid_oem and has_valid_model:
-            # Product already has good info - skip enrichment
+        if has_recommendations:
+            # Product already has recommendations - skip to avoid duplicate API calls
             products_already_complete.append(product)
-            logger.debug(f"⏭️ Skipping {product.get('productName')} - already has OEM: {existing_oem}, Model: {existing_model}")
+            logger.debug(f"⏭️ Skipping {product.get('productName')} - already has {len(existing_recommendations)} recommendations")
         else:
-            # Product needs enrichment
+            # Product needs enrichment (either missing OEM, missing model, or both)
             products_needing_enrichment.append(product)
+            logger.debug(f"✅ Will enrich {product.get('productName')} - OEM: {existing_oem}, Model: {existing_model}")
     
     logger.info(f"📊 Smart Filter Results:")
-    logger.info(f"   - Products already complete: {len(products_already_complete)}")
+    logger.info(f"   - Products already have recommendations: {len(products_already_complete)}")
     logger.info(f"   - Products needing enrichment: {len(products_needing_enrichment)}")
-    logger.info(f"   - API calls saved: {len(products_already_complete)}")
+    logger.info(f"   - Invalid products skipped: {len(products_invalid)}")
+    logger.info(f"   - API calls saved: {len(products_already_complete) + len(products_invalid)}")
     
     # If no products need enrichment, return original list
     if not products_needing_enrichment:
-        logger.info("✅ All products already have OEM info - no enrichment needed!")
+        logger.info("✅ All products already have recommendations - no enrichment needed!")
         return products
     
     # OPTIMIZATION 2: Batch Processing - Process 10 products per API call
@@ -415,13 +566,22 @@ async def enrich_products_with_recommendations(
                         model = rec.get("model", "N/A")
                         if not model or model == "N/A" or model.strip() == "":
                             oem = rec.get("oem", "")
-                            # Try to extract from product name
+                            # Try to extract from product name or generate better model
                             if any(char.isdigit() for char in product_name):
                                 parts = product_name.split()
                                 model_parts = [p for p in parts if any(char.isdigit() for char in p)]
-                                model = " ".join(model_parts) if model_parts else f"{oem} {product_name}" if oem else product_name
+                                if model_parts:
+                                    model = " ".join(model_parts)
+                                else:
+                                    numbers = re.findall(r'\d+', product_name)
+                                    if numbers:
+                                        model = f"{oem} {' '.join(numbers)}" if oem else f"Model {' '.join(numbers)}"
+                                    else:
+                                        model = f"{oem} {product_name}" if oem else product_name
                             else:
-                                model = f"{oem} Standard Model" if oem else f"{product_name} Model"
+                                # Generate better model name
+                                clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                                model = f"{oem} {clean_name}" if oem else f"{clean_name} Standard"
                             rec["model"] = model
                             logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
                         validated_recommendations.append(rec)
@@ -429,31 +589,98 @@ async def enrich_products_with_recommendations(
                     # Store all recommendations
                     p_copy["oemRecommendations"] = validated_recommendations
                     
-                    # Use the best recommendation as primary OEM/Model
+                    # Use the best recommendation, but preserve existing OEM if it's valid
                     best = validated_recommendations[0]
-                    p_copy["oem"] = best.get("oem", p_copy.get("oem", "Unspecified"))
-                    p_copy["model"] = best.get("model", "N/A")
-                    p_copy["miiStatus"] = best.get("miiStatus", "Unmapped")
+                    existing_oem = p_copy.get("oem", "Unspecified")
+                    existing_model = p_copy.get("model", "N/A")
+                    
+                    # Only update OEM if it was missing/unspecified
+                    if not existing_oem or existing_oem in ["Unspecified", "N/A", ""]:
+                        p_copy["oem"] = best.get("oem", "Unspecified")
+                    # Always update model if it was missing or N/A
+                    if not existing_model or existing_model in ["N/A", "", "Unspecified"]:
+                        p_copy["model"] = best.get("model", "N/A")
+                    # Update MII status from best recommendation
+                    p_copy["miiStatus"] = best.get("miiStatus", p_copy.get("miiStatus", "Unmapped"))
                     p_copy["recommendationSource"] = "ai_generated"
                     
                     logger.debug(f"✅ Enriched {product_name} with {len(validated_recommendations)} recommendations")
                 else:
                     logger.debug(f"⚠️ No recommendations found for {product_name}")
+                    # Even if no recommendations, ensure model name is set
+                    existing_model = p_copy.get("model", "N/A")
+                    existing_oem = p_copy.get("oem", "Unspecified")
+                    if existing_model in ["N/A", "", None]:
+                        clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+                        if existing_oem not in ["Unspecified", "N/A", "", None]:
+                            if any(char.isdigit() for char in product_name):
+                                numbers = re.findall(r'\d+', product_name)
+                                if numbers:
+                                    p_copy["model"] = f"{existing_oem} {' '.join(numbers)}"
+                                else:
+                                    p_copy["model"] = f"{existing_oem} {clean_name}"
+                            else:
+                                p_copy["model"] = f"{existing_oem} {clean_name}"
+                        else:
+                            if any(char.isdigit() for char in product_name):
+                                numbers = re.findall(r'\d+', product_name)
+                                if numbers:
+                                    p_copy["model"] = f"{clean_name} {' '.join(numbers)}"
+                                else:
+                                    p_copy["model"] = f"{clean_name} Standard"
+                            else:
+                                p_copy["model"] = f"{clean_name} Standard"
+                        logger.info(f"✅ Generated model '{p_copy['model']}' for product without recommendations: {product_name}")
                 
                 enriched_products.append(p_copy)
-                    
-            except Exception as e:
+        
+        except Exception as e:
             logger.error(f"❌ Error processing batch {batch_num}: {str(e)}")
             # Add products without enrichment if batch fails
             enriched_products.extend([p.copy() for p in batch])
     
-    # Combine complete products with enriched products
-    final_products = products_already_complete + enriched_products
+    # Combine complete products, enriched products, and invalid products (keep them but without enrichment)
+    final_products = products_already_complete + enriched_products + products_invalid
+    
+    # FINAL PASS: Ensure ALL products have model names (never "N/A")
+    for product in final_products:
+        product_name = product.get("productName", "")
+        existing_model = product.get("model", "N/A")
+        existing_oem = product.get("oem", "Unspecified")
+        
+        # If model is still "N/A", generate one
+        if existing_model in ["N/A", "", None]:
+            clean_name = product_name.replace("Split-Type", "Split").replace("-Type", "").strip()
+            clean_name = re.sub(r'^\d+\s+', '', clean_name).strip()  # Remove leading numbers
+            
+            if existing_oem not in ["Unspecified", "N/A", "", None]:
+                # Has OEM - create model from OEM + product
+                if any(char.isdigit() for char in product_name):
+                    numbers = re.findall(r'\d+', product_name)
+                    if numbers:
+                        product["model"] = f"{existing_oem} {' '.join(numbers)}"
+                    else:
+                        product["model"] = f"{existing_oem} {clean_name}"
+                else:
+                    product["model"] = f"{existing_oem} {clean_name}"
+            else:
+                # No OEM - create generic model
+                if any(char.isdigit() for char in product_name):
+                    numbers = re.findall(r'\d+', product_name)
+                    if numbers:
+                        product["model"] = f"{clean_name} {' '.join(numbers)}"
+                    else:
+                        product["model"] = f"{clean_name} Standard"
+                else:
+                    product["model"] = f"{clean_name} Standard"
+            
+            logger.info(f"✅ Final pass: Generated model '{product['model']}' for {product_name[:50]}...")
     
     logger.info(f"✅ Enrichment Complete:")
     logger.info(f"   - Total products: {len(final_products)}")
     logger.info(f"   - Products enriched: {len(enriched_products)}")
     logger.info(f"   - Products skipped: {len(products_already_complete)}")
+    logger.info(f"   - Invalid products (with generated models): {len(products_invalid)}")
     logger.info(f"   - API calls made: {(len(products_needing_enrichment) + batch_size - 1) // batch_size}")
     
     return final_products

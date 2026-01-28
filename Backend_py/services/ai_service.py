@@ -158,6 +158,7 @@ OUTPUT RULES:
 - EXCLUDE only truly generic requirements (e.g., "bid in INR", "submit original documents", "EMD refundable")
 - Include ALL relevant requirements, deadlines, specifications, and critical information
 - Arrays: Extract 5-10 items per category to ensure comprehensive coverage
+- ⚠️ EXCEPTION: For eligibility criteria (preQualificationCriteria), extract ALL items from tables - no limit, extract every row
 - Include both differentiating factors AND standard requirements that are explicitly mentioned
 - NO generic advice - only document-specific, actionable intelligence
 
@@ -179,6 +180,7 @@ CRITICAL: ORGANIZED SUMMARIES WITH SUBHEADINGS
 - CRITICAL: If the document contains multiple parts or corrigendums, always prioritize information from the LATEST corrigendum or amendment.
 - RESOLVE CONFLICTS: If conflicting values appear for the same requirement, use the MOST SPECIFIC or MOST RECENT value found in the document.
 - DEDUPLICATION: Consolidate similar requirements into a single clear statement. Avoid repetition.
+- ⚠️ EXCEPTION FOR ELIGIBILITY CRITERIA: DO NOT deduplicate eligibility criteria from tables - extract EVERY row as a separate item, even if they seem similar. Each row in an eligibility criteria table is a distinct requirement that must be listed separately.
 
 💰 PRICING APPOINTMENT & PRICING BID EXTRACTION:
 For commercial.pricingAppointment: Extract ALL mentions of:
@@ -231,7 +233,21 @@ For bidManagement.successFactors: Extract 12-20 items per category:
 - Timeline: Bid submission, technical opening, financial opening, pre-bid meeting, clarifications, site visit, contract signing, delivery milestones
 - emdExemption: MSME exemption conditions, Startup India exemption, women entrepreneurs, SC/ST exemptions, specific exemption clauses
 - technicalEvaluationCriteria: Scoring pattern, marks distribution, evaluation parameters, minimum qualifying criteria, comparative methodology, weightage allocation
-- preQualificationCriteria: Experience requirements (similar projects, value, timeline), financial turnover, net worth, registration requirements, blacklisting status
+- preQualificationCriteria: 🚨 CRITICAL - Extract ALL eligibility-related requirements from the ENTIRE document EXACTLY AS WRITTEN! 
+  * ⚠️ VALIDATION RULE: Extract ONLY what is EXPLICITLY written in the document - DO NOT infer, create, or generate criteria that are not in the document
+  * ⚠️ DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" exactly - do NOT change to "₹10 crores" or any other amount)
+  * ⚠️ DO NOT add criteria that are not in the document (e.g., if document doesn't explicitly mention "blacklisting", do NOT add it)
+  * ⚠️ Before adding any criterion, verify it exists in the document text - if you cannot find the exact text, DO NOT add it
+  * ALL rows from eligibility criteria tables (extract EXACTLY AS WRITTEN with FULL text)
+  * Look for tables with columns like "S. No.", "Eligibility Criteria", "Compliance", "Documents to be submitted", "Appendix-B", "Bidder's Eligibility Criteria"
+  * Search for section headings like "Bidder's Eligibility Criteria", "Eligibility Criteria", "Pre-Qualification Criteria", "Appendix-B"
+  * Extract EVERY row as a separate item with COMPLETE, FULL text - DO NOT shorten, summarize, or abbreviate
+  * Copy the text EXACTLY as it appears in the document, word-for-word, including all details, dates, amounts, percentages
+  * If table spans multiple pages, extract ALL rows from ALL pages
+  * Include ALL criteria listed in eligibility tables: Experience requirements, financial turnover, net worth, registration requirements, blacklisting status, company registration type, certifications, compliance with government orders, MSME status, profitability, client references, litigations, debarment, etc.
+  * ⚠️ IMPORTANT: Also include eligibility-related requirements from Financial, Technical, Operational sections ONLY if they are explicitly stated as eligibility criteria in the document
+  * DO NOT differentiate or separate eligibility criteria into different sections - put ALL eligibility requirements here
+  * If eligibility criteria are in a table format, extract ALL rows with FULL text - do NOT skip any entries
 
 For bidManagement.keyPoints: Extract 20-30 items total across categories:
 - Deadlines: ALL dates with times and locations
@@ -375,12 +391,85 @@ Document: {file_name}
 === END DOCUMENT ===
 
 EXTRACTION RULES:
+🚨 CRITICAL VALIDATION RULE: For eligibility criteria (preQualificationCriteria), you MUST extract ONLY what is EXPLICITLY written in the document. Before adding any criterion to preQualificationCriteria:
+- Search the document text for the EXACT wording
+- If you cannot find the exact text or a very close match, DO NOT add it
+- DO NOT infer, create, or generate criteria that are not explicitly stated
+- DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" not "₹10 crores")
+- If the document shows a table with eligibility criteria, extract ONLY from that table - do NOT add criteria from other sections unless they are explicitly marked as eligibility criteria
+
 1. PRIORITIZE information with NUMERIC values (amounts, percentages, dates, quantities, thresholds)
 2. For ALL departmental fields: Write DETAILED, COMPREHENSIVE summaries (2-4 sentences minimum)
 3. Arrays: Extract MINIMUM 10-15 items per category (more is better - aim for 15-20+)
+   ⚠️ EXCEPTION: For eligibility criteria (preQualificationCriteria), extract ALL rows from tables EXACTLY as written - extract every single row, no minimum or maximum limit, but ONLY extract what is actually in the document
 4. Combine information from multiple document sections into cohesive summaries
 5. Use alternative search terms and synonyms for every field
 6. Extract from tables, annexures, appendices, footnotes, conditions, clauses, all sections
+
+**🚨 ELIGIBILITY CRITERIA / PRE-QUALIFICATION CRITERIA EXTRACTION (CRITICAL - HIGHEST PRIORITY):**
+
+You are a document extraction engine for eligibility criteria.
+
+TASK:
+Extract ALL eligibility criteria EXACTLY as written in the document into bidManagement.successFactors.preQualificationCriteria array.
+Do NOT add, rephrase, summarize, or infer anything.
+Do NOT generate points that are not present in the document.
+Do NOT shorten the text.
+
+RULES:
+- Only use text that appears in the provided document context
+- If something is not present, DO NOT create it
+- Keep original numbering if present (1, 2, 3…)
+- Keep full sentences as-is
+- Preserve table structure meaning
+- Output all points even if they are long
+- If criteria span multiple pages, merge them and extract ALL
+- Look for tables with columns like: "S. No.", "Eligibility Criteria", "Compliance (Yes/No)", "Documents to be submitted", "Criteria", "Requirement", "Bidder's Eligibility Criteria", "Appendix-B"
+- Search for section headings like: "Bidder's Eligibility Criteria", "Eligibility Criteria", "Pre-Qualification Criteria", "Qualification Criteria", "Appendix-B"
+- Each row in the eligibility criteria table = ONE separate item in bidManagement.successFactors.preQualificationCriteria array
+- Extract the FULL text of each eligibility criterion from the "Eligibility Criteria" column (or equivalent column name)
+- DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" exactly)
+- DO NOT add criteria that are not in the document
+- DO NOT infer or create criteria based on context
+- If eligibility criteria are not found in the document, return empty array []
+
+OUTPUT FORMAT:
+Extract each criterion as a separate string in the preQualificationCriteria array:
+["Full criterion 1 text exactly as written", "Full criterion 2 text exactly as written", ...]
+
+⚠️ CRITICAL: The user expects to see ALL eligibility criteria EXACTLY as written in the document - do NOT create, infer, or modify any criteria
+
+**EXAMPLE - Correct Eligibility Criteria Extraction:**
+
+If the document has an eligibility criteria table:
+
+DOCUMENT TABLE SHOWS:
+S. No. 1: "The Bidder must be an Indian Company/ LLP /Partnership firm registered under applicable Act in India."
+S. No. 2: "The Bidder (including its OEM, if any) must comply with the requirements contained in O.M. No. 6/18/2019-PPD, dated 23.07.2020 order (Public Procurement No. 1), order (Public Procurement No. 2) dated 23.07.2020 and order (Public Procurement No. 3) dated 24.07.2020"
+S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore during last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25. In case of MSME, the Bidder must have a cumulative turnover of minimum Rs.20 crore for last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25."
+
+❌ WRONG OUTPUT:
+- Extract only 4-5 "most important" criteria
+- Shorten: "Bidder must be Indian company"
+- Change amounts: "₹10 crores" or "₹20 crores" (document says "Rs. 20 crore")
+- Add criteria not in document: "No blacklisting status" (if not in document)
+- Infer criteria based on context
+
+✅ CORRECT OUTPUT (preQualificationCriteria array):
+[
+  "The Bidder must be an Indian Company/ LLP /Partnership firm registered under applicable Act in India.",
+  "The Bidder (including its OEM, if any) must comply with the requirements contained in O.M. No. 6/18/2019-PPD, dated 23.07.2020 order (Public Procurement No. 1), order (Public Procurement No. 2) dated 23.07.2020 and order (Public Procurement No. 3) dated 24.07.2020",
+  "The Bidder must have an average turnover of minimum Rs. 20 crore during last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25. In case of MSME, the Bidder must have a cumulative turnover of minimum Rs.20 crore for last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25."
+]
+
+⚠️ CRITICAL VALIDATION CHECKLIST:
+- ✅ Extract EXACTLY as written - preserve "Rs. 20 crore" not "₹20 crores" or "₹10 crores"
+- ✅ Extract ALL rows from the table - if table has 10 rows, extract all 10
+- ✅ Each criterion is COMPLETE text exactly as it appears in the document
+- ✅ DO NOT add criteria that are not in the document
+- ✅ DO NOT infer or create criteria based on what "makes sense"
+- ✅ If you cannot find the exact text in the document, DO NOT add it
+- ✅ If eligibility criteria are not found in the document, return empty array []
 
 **🚨 FINANCIAL VALUES (bidValue, EMD) - STRICT RULES:**
 - ONLY extract if EXPLICITLY stated in document
@@ -480,16 +569,24 @@ EXTRACTION RULES:
 - If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
 - ⚠️ REMEMBER: Products go in productMapping.miiProductStatus, NOT in technical.keySpecifications
 
-**OEM & MODEL EXTRACTION (CRITICAL):**
+**OEM & MODEL EXTRACTION (CRITICAL - MANDATORY):**
+- ⚠️ ALWAYS extract model names - NEVER return "N/A" for model unless absolutely impossible
 - Search for brand names in: product descriptions, "Approved Makes", specifications, "Make & Model" columns, brand columns
 - Search for model numbers/names in: "Model:", "Model No:", "Part Number:", "SKU:", "Product Code:", product descriptions
-- Multiple brands listed → extract FIRST one mentioned
+- Multiple brands listed → extract FIRST one mentioned AND extract model for that brand
 - Keywords to look for: "Make:", "Brand:", "Model:", "Model No:", "or equivalent", "Approved Manufacturer", "Manufacturer"
 - Extract model number/name if present (e.g., "Dell PowerEdge R750", "HP ProLiant DL380", "Cisco Catalyst 9300", "Model XYZ-123")
 - If model not explicitly found but product name contains model info (like "Dell R750 Server"), extract it from product name
 - If product name IS a model identifier (like "Model 2", "Variant A"), use that as the model
+- If specifications mention model numbers/codes, extract them as the model
+- For generic products (like "False Ceiling", "Manager Table", "Split-Type AC"), infer a standard model name based on specifications:
+  * Example: "False Ceiling" with specs → "Standard False Ceiling Panel [specs]"
+  * Example: "Manager Table" → "Standard Manager Table [dimensions if mentioned]"
+  * Example: "Split-Type AC" with capacity → "Standard Split AC [tonnage]"
 - Only return "Unspecified" for OEM if NO brand found after searching ENTIRE document
+- Only return "N/A" for model if NO model information exists AND product is too generic to infer
 - Extract model from product name/description if separate model field not found
+- ⚠️ CRITICAL: If product has OEM but model is "N/A", try harder - check specifications, product name, and related text for model clues
 
 **MII STATUS:**
 - Indian OEMs: {indian_oems}
