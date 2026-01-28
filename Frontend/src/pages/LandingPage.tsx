@@ -1,6 +1,9 @@
 import { ChevronRight, Cpu, FileSearch, Globe2, LineChart, LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+// Logo imports
+import womenOwnedLogo from '../assets/women-owned-logo.png';
+import cacheLogo from '../assets/Cache-Logo.png';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -19,43 +22,15 @@ export default function LandingPage() {
 
   return (
     <div className="universal-page-wrapper">
-      {/* Logout Button - Floating Top Right */}
-      <button
-        onClick={handleLogout}
-        title="Logout"
-        style={{
-          position: 'fixed',
-          top: '20px',
-          right: '20px',
-          zIndex: 1000,
-          background: '#dc2626',
-          color: 'white',
-          border: 'none',
-          borderRadius: '12px',
-          padding: '12px 20px',
-          fontSize: '15px',
-          fontWeight: 600,
-          cursor: 'pointer',
-          transition: 'all 0.3s ease',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
-        }}
-        onMouseOver={(e) => {
-          e.currentTarget.style.background = '#b91c1c';
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
-        }}
-        onMouseOut={(e) => {
-          e.currentTarget.style.background = '#dc2626';
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
-        }}
-      >
-        <LogOut size={18} />
-        <span>Logout</span>
-      </button>
+      {/* Women Owned Logo - Top Left */}
+      <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
+        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+      </div>
+      
+      {/* Cache Logo - Top Right */}
+      <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
+        <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+      </div>
 
       {/* Background Animation */}
       <div className="universal-background">
@@ -139,6 +114,44 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
+
+      {/* Logout Button - Bottom Right Corner */}
+      <button
+        onClick={handleLogout}
+        title="Logout"
+        style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          zIndex: 1000,
+          background: '#dc2626',
+          color: 'white',
+          border: 'none',
+          borderRadius: '12px',
+          padding: '12px 20px',
+          fontSize: '15px',
+          fontWeight: 600,
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
+        }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.background = '#b91c1c';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.background = '#dc2626';
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
+        }}
+      >
+        <LogOut size={18} />
+        <span>Logout</span>
+      </button>
     </div>
   );
 }

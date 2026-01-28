@@ -243,13 +243,29 @@ class ProjectService:
     async def _enrich_and_sync_summaries(summaries: Dict[str, Any], filenames: List[str]):
         """Performs OEM enrichment and syncs technical specifications."""
         from services.oem_enrichment_service import enrich_products, get_enrichment_stats
+        from services.oem_recommendation_service import enrich_products_with_recommendations, get_recommendation_stats
         
         if (summaries.get("productMapping") and 
             summaries["productMapping"].get("miiProductStatus")):
             products = summaries["productMapping"]["miiProductStatus"]
             valid_products = [p for p in products if p.get("productName") and p.get("productName").strip() not in ["", "N/A", "n/a"]]
             
+            # Step 1: Basic OEM enrichment (for OEM classification and MII status)
             enriched_products = await enrich_products(valid_products)
+            
+            # Step 2: Generate AI-powered OEM and MODEL recommendations
+            # This is critical - it generates model names for existing OEMs
+            try:
+                logger.info(f"🎯 Generating model recommendations for {len(enriched_products)} products...")
+                enriched_products = await enrich_products_with_recommendations(enriched_products)
+                rec_stats = get_recommendation_stats(enriched_products)
+                logger.info(f"✅ Model recommendations generated: {rec_stats['productsWithRecommendations']}/{rec_stats['totalProducts']} products")
+            except Exception as e:
+                logger.error(f"⚠️ Model recommendation generation failed: {str(e)}")
+                # Continue with basic enrichment if recommendation fails
+                logger.info("📦 Proceeding with basic OEM enrichment only")
+            
+            # Calculate stats from enriched products
             stats = get_enrichment_stats(enriched_products)
             
             summaries["productMapping"]["miiProductStatus"] = enriched_products
