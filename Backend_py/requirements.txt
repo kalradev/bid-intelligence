@@ -12,15 +12,11 @@ pydantic-settings>=2.5.0
 openai>=1.24.0,<2.0.0
 google-generativeai==0.3.2
 
-# LangChain Ecosystem (0.3.x - compatible with langchain-pinecone 0.2.13)
+# LangChain Ecosystem
 langchain-core>=0.3.34,<0.4.0
 langchain>=0.3.0,<0.4.0
 langchain-community>=0.3.0,<0.4.0
 langchain-openai>=0.3.0,<0.4.0
-langchain-pinecone==0.2.13
-
-# Vector DB
-pinecone>=6.0.0,<7.0.0
 
 # Document Processing
 pdfplumber==0.10.3

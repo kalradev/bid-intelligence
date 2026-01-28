@@ -6,9 +6,6 @@ class Settings(BaseSettings):
     # API Keys
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
-    PINECONE_API_KEY: Optional[str] = None
-    PINECONE_ENVIRONMENT: Optional[str] = None
-    PINECONE_INDEX: Optional[str] = "tender-analysis"
     
     # Server Config
     PORT: int = 3000

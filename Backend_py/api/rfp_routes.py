@@ -14,12 +14,6 @@ from core.config import settings
 from services.document_extractor import extract_text
 from services.ai_service import generate_departmental_summaries
 from services.oem_enrichment_service import enrich_products, get_enrichment_stats
-# Optional Pinecone import - will fail gracefully if not available
-try:
-    from services.pinecone_service import store_rfp_in_pinecone
-except ImportError as e:
-    logger.warning(f"Pinecone service not available: {e}. Pinecone features will be disabled.")
-    store_rfp_in_pinecone = None
 from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
@@ -220,17 +214,6 @@ async def analyze_rfp(
             }
         }
         FileCache.create(cache_data)
-        
-        # Store merged document in Pinecone (optional)
-        if store_rfp_in_pinecone:
-            try:
-                await store_rfp_in_pinecone(
-                    document_id=combined_hash,
-                    file_name=f"Merged RFP ({len(files)} files)",
-                    text=merged_text
-                )
-            except Exception as pine_err:
-                logger.warning(f"Failed to store in Pinecone: {str(pine_err)}")
 
         return {
             "success": True,
@@ -517,32 +500,7 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
             except Exception as e:
                 logger.error(f"Flask proxy failed: {str(e)}")
         
-        # Fallback to local Pinecone service
-        try:
-            from services.pinecone_service import query_rfp_document
-            results = await query_rfp_document(documentId, query, k=5)
-            sources = []
-            for doc in results:
-                meta = doc.metadata
-                page = meta.get("pageNumber") or meta.get("page")
-                if page:
-                    sources.append({
-                        "pageNumber": str(page),
-                        "snippet": doc.page_content,
-                        "relevance": 70 # Placeholder
-                    })
-                if len(sources) >= 3: break
-                
-            return {
-                "sources": sources,
-                "query": query,
-                "documentId": documentId,
-                "fallback": True
-            }
-        except Exception as e:
-            logger.error(f"Pinecone fallback failed: {str(e)}")
-                
-        # Fallback to empty sources if everything fails
+        # Return empty sources if proxy fails
         return {
             "sources": [],
             "query": query,
