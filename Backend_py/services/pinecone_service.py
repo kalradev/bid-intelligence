@@ -1,24 +1,50 @@
 import os
 import logging
 from typing import List, Dict, Any, Optional
-from pinecone import Pinecone
-from langchain_pinecone import PineconeVectorStore
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document as LCDocument
-from langchain_community.embeddings import HuggingFaceEmbeddings
 from core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Optional imports for Pinecone - fail gracefully if not available
+try:
+    from pinecone import Pinecone
+    from langchain_pinecone import PineconeVectorStore
+    from langchain_core.documents import Document as LCDocument
+    from langchain_community.embeddings import HuggingFaceEmbeddings
+    # Try different import paths for text splitter depending on langchain version
+    try:
+        from langchain.text_splitters import RecursiveCharacterTextSplitter
+    except ImportError:
+        try:
+            from langchain.text_splitter import RecursiveCharacterTextSplitter
+        except ImportError:
+            from langchain_community.text_splitter import RecursiveCharacterTextSplitter
+    PINECONE_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Pinecone dependencies not available: {e}. Pinecone features will be disabled.")
+    PINECONE_AVAILABLE = False
+    Pinecone = None
+    PineconeVectorStore = None
+    RecursiveCharacterTextSplitter = None
+    LCDocument = None
+    HuggingFaceEmbeddings = None
+
 def get_embeddings():
+    if not PINECONE_AVAILABLE or HuggingFaceEmbeddings is None:
+        raise ImportError("HuggingFaceEmbeddings not available. Pinecone dependencies are missing.")
     return HuggingFaceEmbeddings(model_name='sentence-transformers/all-MiniLM-L6-v2')
 
 def get_pinecone_client():
+    if not PINECONE_AVAILABLE:
+        return None
     if settings.PINECONE_API_KEY:
         return Pinecone(api_key=settings.PINECONE_API_KEY)
     return None
 
 async def store_rfp_in_pinecone(document_id: str, file_name: str, text: str, metadata: Dict[str, Any] = None):
+    if not PINECONE_AVAILABLE:
+        logger.warning("Pinecone service not available. Skipping storage.")
+        return None
     try:
         pc = get_pinecone_client()
         if not pc:
@@ -59,6 +85,9 @@ async def store_rfp_in_pinecone(document_id: str, file_name: str, text: str, met
         raise e
 
 async def query_rfp_document(document_id: str, query: str, k: int = 3):
+    if not PINECONE_AVAILABLE:
+        logger.warning("Pinecone service not available. Cannot query.")
+        return []
     try:
         embeddings = get_embeddings()
         index_name = os.getenv("PINECONE_INDEX_NAME", "bid-intelligence-chatbot")

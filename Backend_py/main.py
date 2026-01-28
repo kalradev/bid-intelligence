@@ -129,13 +129,10 @@ async def root():
 async def health_check():
     """Simple health check endpoint"""
     try:
-        # Test MongoDB connection
-        from core.mongodb import get_mongodb
-        db = get_mongodb()
-        if db is not None:
-            # Try to ping the database
-            db.client.admin.command('ping')
-            db_status = "connected (MongoDB)"
+        # Test PostgreSQL connection
+        from core.sqlalchemy_db import test_connection
+        if test_connection():
+            db_status = "connected (PostgreSQL)"
         else:
             db_status = "disconnected"
     except Exception as e:
@@ -145,7 +142,7 @@ async def health_check():
         "status": "ok",
         "service": "Bid Intelligence.ai API",
         "database": db_status,
-        "database_type": "MongoDB",
+        "database_type": "PostgreSQL",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     }
 
