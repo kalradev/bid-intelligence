@@ -93,6 +93,34 @@ async def generate_departmental_summaries(document_text: str, file_name: str) ->
         product_count = len(product_mapping.get("miiProductStatus", []))
         logger.info(f"📊 AI extracted {product_count} products")
         
+        # Filter out document text snippets and invalid products
+        if product_count > 0:
+            from services.fallback_boq_extractor import _is_non_product_entry
+            original_products = product_mapping.get("miiProductStatus", [])
+            filtered_products = []
+            filtered_count = 0
+            
+            for product in original_products:
+                product_name = product.get("productName", "").strip()
+                if not product_name:
+                    filtered_count += 1
+                    continue
+                
+                # Filter out document text snippets
+                if _is_non_product_entry(product_name):
+                    logger.debug(f"   Filtering out non-product entry: {product_name}")
+                    filtered_count += 1
+                    continue
+                
+                filtered_products.append(product)
+            
+            if filtered_count > 0:
+                logger.info(f"   🧹 Filtered out {filtered_count} invalid products (document snippets, metadata, etc.)")
+                product_mapping["miiProductStatus"] = filtered_products
+                product_count = len(filtered_products)
+                summaries["productMapping"] = product_mapping
+                result["summaries"] = summaries
+        
         if product_count == 0:
             logger.warning("⚠️ AI extracted 0 products - trying fallback BOQ extraction...")
             logger.info(f"   Document text length: {len(document_text)} characters")
@@ -603,48 +631,62 @@ DO NOT infer, hallucinate, or expand products beyond what is explicitly stated.
 
 **1. RFP CLASSIFICATION (INTERNAL - FIRST STEP):**
 - First classify the RFP as one of:
-  a) SERVICE / SOLUTION RFP (e.g., SOC, SIEM, Managed Services, Consulting, Implementation)
+  a) SERVICE / SOLUTION RFP (e.g., SOC, SIEM, Managed Services, Consulting, Implementation, Deception Technology, EDT, Security Solutions)
   b) TURNKEY / SUPPLY / PROCUREMENT RFP (e.g., Hardware Supply, Equipment Procurement, Material Supply)
-- If SERVICE / SOLUTION RFP → extract ONLY tangible deliverables (hardware, software licenses, tools) that are explicitly listed
+- If SERVICE / SOLUTION RFP:
+  → Extract the MAIN SOLUTION/SERVICE from project title, scope, or description (e.g., "Enterprise Level Deception Technology (EDT) Solution")
+  → This is the PRIMARY product - extract it even if it's a "solution" or "platform"
+  → Category should be appropriate (e.g., "Security" for security solutions, "Software" for software solutions)
+  → OEM: If document says "Open to eligible OEMs" or "Not specified" → use "Not specified (Open to eligible OEMs)"
+  → Model: Use descriptive model like "OEM-defined Deception / Honeypot Platform" or "Not Specified"
+  → MII: If document mentions "Preference to Make in India" or "PPP-MII" → use "Applicable (Preference to Make in India – PPP-MII)"
+  → Also extract any tangible deliverables (hardware, software licenses, tools) that are explicitly listed
 - If TURNKEY / SUPPLY RFP → extract supply items explicitly listed in BOQ/BOM
 
 **2. WHAT QUALIFIES AS A PRODUCT:**
 A valid product MUST satisfy ALL of these:
 - Explicitly deliverable by bidder (not just mentioned or referenced)
-- Physical item, software license, or OEM solution
-- Clearly named in BOQ/BOM/Scope/Technical Specs
+- Physical item, software license, OEM solution, OR the main solution/service for SERVICE RFPs
+- Clearly named in BOQ/BOM/Scope/Technical Specs/Project Title
 - NOT a process, activity, deadline, or compliance requirement
+- For SERVICE RFPs: The main solution name from project title/scope IS a valid product
 
 **3. WHAT TO EXCLUDE (STRICT - CRITICAL):**
 🚨 DO NOT extract ANY of the following:
-- Dates, timelines, deadlines, milestones (e.g., "Date of publication of Bid", "Last date of submission", "Establishment of Fully")
-- Process steps, workflows, activities (e.g., "Opening of bids", "Technical evaluation", "Site visit")
-- Compliance statements or eligibility criteria (e.g., "Bidder must have", "Minimum turnover required")
+- Dates, timelines, deadlines, milestones (e.g., "Date of publication of Bid", "Last date of submission", "Bid Document Availability", "Contact details of issuing")
+- Process steps, workflows, activities (e.g., "Opening of bids", "Technical evaluation", "Site visit", "any to be issued")
+- Compliance statements or eligibility criteria (e.g., "Bidder must have", "Minimum turnover required", "regarding this RFP)")
 - SLA terms, penalties, payment terms (e.g., "Liquidated damages", "Payment within 30 days")
 - Training, support, AMC unless tied to a named SKU/product
-- Generic words like: "system", "solution", "platform" (without OEM/model specification)
+- Document metadata (page numbers, headers, footers, continuation markers, "Contact details", "regarding this RFP")
+- Table headers, totals, subtotals, summary rows
+- Generic phrases without product context (e.g., "Contact details", "Bid Document Availability", "any to be issued")
 - Log sources, monitored systems, supported technologies (these are infrastructure references, not deliverables)
 - Existing infrastructure, compatibility references
-- Document metadata (page numbers, headers, footers, continuation markers)
-- Table headers, totals, subtotals, summary rows
+- Text snippets that are clearly document structure (e.g., "Contact details of issuing", "regarding this RFP)")
 
 **4. OEM / MODEL / MII RULES (STRICT):**
 - OEM: Extract ONLY if explicitly mentioned in the document for that product
   - Search in: product descriptions, "Approved Makes", "Make & Model" columns, brand columns
-  - If multiple brands listed → extract FIRST one mentioned
-  - If NO brand found after searching ENTIRE document → use "Unspecified"
+  - If document says "Open to eligible OEMs", "Not specified", "Any eligible OEM" → use "Not specified (Open to eligible OEMs)"
+  - If multiple brands listed → extract FIRST one mentioned OR use "Not specified (Open to eligible OEMs)" if it's a service RFP
+  - If NO brand found after searching ENTIRE document → use "Not specified (Open to eligible OEMs)" for SERVICE RFPs, "Unspecified" for hardware RFPs
   - DO NOT guess or infer OEMs
+  - DO NOT combine multiple OEMs like "Dell / HPE" - use "Not specified (Open to eligible OEMs)" instead
 - Model: Extract ONLY if explicitly mentioned
   - Search in: "Model:", "Model No:", "Part Number:", "SKU:", "Product Code:", product descriptions
+  - For SERVICE RFPs: Use descriptive model like "OEM-defined Deception / Honeypot Platform" or extract from solution description
   - If model not explicitly found but product name contains model info (like "Dell R750 Server"), extract it from product name
   - If product name IS a model identifier (like "Model 2", "Variant A"), use that as the model
   - If no model number/name exists → use "Not Specified" (NOT "N/A")
   - DO NOT put specifications or dimensions in model field
   - DO NOT put OEM/brand lists in model field
+  - DO NOT copy product name to model field if they're the same
 - MII Status:
   - Indian OEMs: {indian_oems}
   - Global OEMs: {global_oems}
-  - If mentions "Make in India", "MII compliant", "Class-I Local" → mark as "MII-Compliant"
+  - If mentions "Make in India", "MII compliant", "Class-I Local", "Preference to Make in India", "PPP-MII" → mark as "Applicable (Preference to Make in India – PPP-MII)" or "MII-Compliant"
+  - If document says "Preference to Make in India" or "PPP-MII" → use "Applicable (Preference to Make in India – PPP-MII)"
   - If uncertain → use "Requires Review"
 
 **5. QUANTITY & UNIT RULES:**
@@ -658,10 +700,15 @@ Each product MUST have exactly one category from this list:
 - Hardware
 - Software
 - Network
-- Security
+- Security (use for security solutions like Deception Technology, SOC, SIEM, etc.)
 - Electrical
 - Civil
-- Other
+- Other (only if none of the above fit)
+
+For SERVICE/SOLUTION RFPs:
+- Security solutions (Deception Technology, SOC, SIEM) → use "Security" category
+- Software solutions → use "Software" category
+- Cyber Security Software → use "Security" category (NOT "Other")
 
 **7. DUPLICATES:**
 - Merge identical products (same productName + OEM + model)

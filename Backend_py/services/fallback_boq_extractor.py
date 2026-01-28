@@ -17,7 +17,9 @@ def _is_service_rfp(document_text: str) -> bool:
         'service', 'services', 'solution', 'solutions', 'consulting', 'consultancy',
         'support', 'training', 'maintenance', 'implementation', 'deployment',
         'soc', 'siem', 'managed services', 'professional services', 'advisory',
-        'license', 'licenses', 'licensing', 'subscription', 'saas', 'cloud service'
+        'license', 'licenses', 'licensing', 'subscription', 'saas', 'cloud service',
+        'deception technology', 'edt', 'deception', 'honeypot', 'security solution',
+        'cyber security', 'cybersecurity'
     ]
     
     # Count service keywords
@@ -31,13 +33,194 @@ def _is_service_rfp(document_text: str) -> bool:
     service_phrases = [
         'service rfp', 'services tender', 'consulting services', 'support services',
         'training services', 'professional services', 'managed services',
-        'solution implementation', 'service delivery', 'service provider'
+        'solution implementation', 'service delivery', 'service provider',
+        'deception technology solution', 'edt solution', 'enterprise level deception',
+        'security solution', 'cyber security solution'
     ]
     
     if any(phrase in text_lower for phrase in service_phrases):
         return True
     
     return False
+
+def _is_non_product_entry(product_name: str) -> bool:
+    """
+    Check if an entry is clearly NOT a product (document text snippets, metadata, etc.)
+    """
+    if not product_name or len(product_name.strip()) < 3:
+        return True
+    
+    product_lower = product_name.lower().strip()
+    
+    # Document metadata and structure text
+    non_product_patterns = [
+        # Dates and deadlines
+        r'^(date|last date|deadline|submission date|opening date)',
+        r'bid document availability',
+        r'contact details',
+        r'regarding this rfp',
+        r'any to be issued',
+        r'pre-bid meeting',
+        r'clarification',
+        r'address for submission',
+        r'venue',
+        r'time',
+        r'hrs',
+        # Process steps
+        r'opening of',
+        r'technical evaluation',
+        r'site visit',
+        r'bid submission',
+        r'bid opening',
+        # Document structure
+        r'^page \d+',
+        r'continued',
+        r'cont\.',
+        r'annexure',
+        r'appendix',
+        r'schedule',
+        # Common document phrases
+        r'^the\s+',
+        r'^a\s+',
+        r'^an\s+',
+        r'^for\s+',
+        r'^with\s+',
+        r'^of\s+',
+        r'^in\s+',
+        r'^on\s+',
+        r'^at\s+',
+        r'^to\s+',
+    ]
+    
+    # Check against patterns
+    for pattern in non_product_patterns:
+        if re.search(pattern, product_lower):
+            return True
+    
+    # Check for common document text snippets
+    document_snippets = [
+        'contact details of issuing',
+        'regarding this rfp)',
+        'bid document availability',
+        'any to be issued',
+        'last date for requesting',
+        'pre - bid meeting',
+        'clarifications to queries',
+        'last date and time for bid',
+        'submission',
+        'address for submission of bids',
+        'date of publication',
+        'establishment of fully',
+    ]
+    
+    if product_lower in document_snippets:
+        return True
+    
+    # Check if it's a partial sentence (starts with lowercase, ends with incomplete phrase)
+    if product_lower[0].islower() and len(product_lower.split()) < 5:
+        # Might be a document snippet
+        if any(word in product_lower for word in ['details', 'regarding', 'availability', 'clarification', 'submission', 'meeting']):
+            return True
+    
+    return False
+
+def _extract_main_solution_from_document(document_text: str) -> Dict[str, Any]:
+    """
+    Extract the main solution/service name from document title, scope, or description
+    For SERVICE RFPs when no products are found in tables
+    """
+    lines = document_text.split('\n')
+    text_lower = document_text.lower()
+    
+    # Look for solution/service names in common patterns
+    solution_patterns = [
+        r'(?:procurement|supply|implementation|deployment|provision)\s+of\s+([^\.]+?)(?:solution|service|system|platform|technology)',
+        r'(?:enterprise|enterprise level|enterprise-level)\s+([^\.]+?)(?:solution|service|system|platform|technology)',
+        r'([A-Z][^\.]{10,}?(?:solution|service|system|platform|technology|edt|soc|siem))',
+        r'(?:for|of)\s+([A-Z][^\.]{15,}?(?:solution|service|system|platform))',
+    ]
+    
+    # Try to find solution name in first 50 lines (usually in title/scope)
+    for i, line in enumerate(lines[:50]):
+        line = line.strip()
+        if not line or len(line) < 15:
+            continue
+        
+        # Look for solution keywords
+        solution_keywords = ['deception technology', 'edt', 'soc', 'siem', 'solution', 'service', 'platform', 'system']
+        if any(keyword in line.lower() for keyword in solution_keywords):
+            # Clean up the line
+            solution_name = line.strip()
+            # Remove common prefixes
+            for prefix in ['Tender for', 'RFP for', 'Procurement of', 'Supply of', 'Implementation of', 'Deployment of', 'Procurement, design, sizing, implementation, and maintenance of']:
+                if solution_name.lower().startswith(prefix.lower()):
+                    solution_name = solution_name[len(prefix):].strip()
+            
+            # Extract solution name more precisely - look for patterns like "Enterprise Level Deception Technology (EDT) Solution"
+            # Try to extract the full solution name including parentheses
+            solution_match = re.search(r'([A-Z][^\.]{15,}?(?:\([A-Z]+\))?\s*(?:solution|service|system|platform|technology))', line, re.IGNORECASE)
+            if solution_match:
+                solution_name = solution_match.group(1).strip()
+            
+            # If it looks like a solution name (contains solution/service keywords and is descriptive)
+            if len(solution_name) > 15 and any(kw in solution_name.lower() for kw in ['solution', 'service', 'technology', 'system', 'platform', 'edt', 'soc', 'siem', 'deception']):
+                # Determine category
+                category = "Other"
+                if 'security' in solution_name.lower() or 'deception' in solution_name.lower() or 'edt' in solution_name.lower() or 'soc' in solution_name.lower() or 'siem' in solution_name.lower():
+                    category = "Security"
+                elif 'software' in solution_name.lower():
+                    category = "Software"
+                
+                # Check for MII preference
+                mii_status = "Requires Review"
+                if 'make in india' in text_lower or 'mii' in text_lower or 'ppp-mii' in text_lower or 'preference to make in india' in text_lower:
+                    mii_status = "Applicable (Preference to Make in India – PPP-MII)"
+                
+                return {
+                    "srNo": "1",
+                    "productName": solution_name[:200],
+                    "category": category,
+                    "specifications": "",
+                    "quantity": None,
+                    "unit": None,
+                    "oem": "Not specified (Open to eligible OEMs)",
+                    "model": "OEM-defined Deception / Honeypot Platform" if 'deception' in solution_name.lower() else "Not Specified",
+                    "miiStatus": mii_status,
+                    "source": "fallback-extraction-solution"
+                }
+    
+    # If not found in first 50 lines, search entire document for solution name patterns
+    for pattern in solution_patterns:
+        matches = re.finditer(pattern, document_text, re.IGNORECASE)
+        for match in matches:
+            solution_name = match.group(1).strip() if match.lastindex else match.group(0).strip()
+            if len(solution_name) > 15 and len(solution_name) < 200:
+                # Determine category
+                category = "Other"
+                if 'security' in solution_name.lower() or 'deception' in solution_name.lower() or 'edt' in solution_name.lower():
+                    category = "Security"
+                elif 'software' in solution_name.lower():
+                    category = "Software"
+                
+                # Check for MII preference
+                mii_status = "Requires Review"
+                if 'make in india' in text_lower or 'mii' in text_lower or 'ppp-mii' in text_lower:
+                    mii_status = "Applicable (Preference to Make in India – PPP-MII)"
+                
+                return {
+                    "srNo": "1",
+                    "productName": solution_name[:200],
+                    "category": category,
+                    "specifications": "",
+                    "quantity": None,
+                    "unit": None,
+                    "oem": "Not specified (Open to eligible OEMs)",
+                    "model": "OEM-defined Deception / Honeypot Platform" if 'deception' in solution_name.lower() else "Not Specified",
+                    "miiStatus": mii_status,
+                    "source": "fallback-extraction-solution"
+                }
+    
+    return None
 
 def _is_top_level_item(product_name: str, all_products: List[Dict[str, Any]]) -> bool:
     """
@@ -169,6 +352,11 @@ def _parse_table_rows(table_rows: List[List[str]]) -> List[Dict[str, Any]]:
         # STRICT VALIDATION: Skip if product name looks like a header, total, or invalid entry
         if not product_name:
             continue
+        
+        # CRITICAL: Filter out document text snippets and non-product entries
+        if _is_non_product_entry(product_name):
+            logger.debug(f"   Skipping non-product entry: {product_name}")
+            continue
             
         product_name_lower = product_name.lower().strip()
         
@@ -182,7 +370,9 @@ def _parse_table_rows(table_rows: List[List[str]]) -> List[Dict[str, Any]]:
             'specification', 'spec', 'make', 'model', 'brand', 'oem', 'manufacturer',
             'category', 'type', 'variant', 'version', 'n/a', 'na', 'not applicable',
             'tbd', 'to be decided', 'miscellaneous', 'others', 'various', 'etc',
-            'annexure', 'annexe', 'appendix', 'schedule', 'table', 'figure'
+            'annexure', 'annexe', 'appendix', 'schedule', 'table', 'figure',
+            'contact details', 'bid document', 'regarding this', 'any to be issued',
+            'last date for', 'pre-bid', 'clarification', 'address for submission'
         ]
         
         # Check if product name is exactly a header keyword or contains it as a standalone word
@@ -359,6 +549,11 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
         # STRICT VALIDATION: Skip if product name looks like a header, total, or invalid entry
         if not product_name:
             continue
+        
+        # CRITICAL: Filter out document text snippets and non-product entries
+        if _is_non_product_entry(product_name):
+            logger.debug(f"   Skipping non-product entry: {product_name}")
+            continue
             
         product_name_lower = product_name.lower().strip()
         
@@ -372,7 +567,9 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
             'specification', 'spec', 'make', 'model', 'brand', 'oem', 'manufacturer',
             'category', 'type', 'variant', 'version', 'n/a', 'na', 'not applicable',
             'tbd', 'to be decided', 'miscellaneous', 'others', 'various', 'etc',
-            'annexure', 'annexe', 'appendix', 'schedule', 'table', 'figure'
+            'annexure', 'annexe', 'appendix', 'schedule', 'table', 'figure',
+            'contact details', 'bid document', 'regarding this', 'any to be issued',
+            'last date for', 'pre-bid', 'clarification', 'address for submission'
         ]
         
         # Check if product name is exactly a header keyword or contains it as a standalone word
@@ -439,6 +636,14 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
     is_service = _is_service_rfp(document_text)
     if is_service:
         logger.info("   🔍 Detected SERVICE RFP - applying conservative extraction (max 10 top-level items)")
+        
+        # If no products found from tables, try to extract main solution/service from document
+        if len(products) == 0:
+            logger.info("   🔍 No products from tables - attempting to extract main solution/service...")
+            solution_product = _extract_main_solution_from_document(document_text)
+            if solution_product:
+                products.append(solution_product)
+                logger.info(f"   ✅ Extracted main solution: {solution_product.get('productName', 'N/A')}")
     
     # Final validation pass: Remove any invalid products that might have slipped through
     valid_products = []
