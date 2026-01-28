@@ -1,13 +1,13 @@
 """
-Project Model - MongoDB Implementation
+Project Model - PostgreSQL Implementation using SQLAlchemy
 Handles all project-related database operations
 """
 import json
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-from bson import ObjectId
-from core.mongodb import get_mongodb, convert_id_to_str, str_to_objectid
+from core.sqlalchemy_db import get_db_session
+from models.sqlalchemy_models import Project, ProjectDocument, AnalysisRecord
 
 logger = logging.getLogger(__name__)
 
@@ -15,209 +15,240 @@ class ProjectModel:
     @staticmethod
     def get_by_name(project_name: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Get project by name and optionally user_id"""
-        db = get_mongodb()
-        if db is None:
-            return None
+        db = get_db_session()
         try:
-            collection = db.projects
-            query = {"project_name": project_name}
+            query = db.query(Project).filter(Project.project_name == project_name)
             
             if user_id:
-                user_oid = str_to_objectid(user_id) if isinstance(user_id, (str, int)) else user_id
-                query["user_id"] = user_oid
+                query = query.filter(Project.user_id == user_id)
             
-            project = collection.find_one(query)
+            project = query.first()
             if project:
-                return convert_id_to_str(project)
+                return {
+                    "id": project.id,
+                    "project_name": project.project_name,
+                    "tender_id": project.tender_id,
+                    "client_name": project.client_name,
+                    "user_id": project.user_id,
+                    "created_at": project.created_at
+                }
             return None
         except Exception as e:
             logger.error(f"Error getting project: {str(e)}")
             return None
+        finally:
+            db.close()
 
     @staticmethod
     def get_all(user_id: int) -> List[Dict[str, Any]]:
         """Get all projects for a user"""
-        db = get_mongodb()
-        if db is None:
-            return []
+        db = get_db_session()
         try:
-            collection = db.projects
-            user_oid = str_to_objectid(user_id) if isinstance(user_id, (str, int)) else user_id
+            projects = db.query(Project).filter(
+                Project.user_id == user_id
+            ).order_by(Project.project_name).all()
             
-            projects = list(collection.find({"user_id": user_oid}).sort("project_name", 1))
-            return [convert_id_to_str(p) for p in projects]
+            return [{
+                "id": p.id,
+                "project_name": p.project_name,
+                "tender_id": p.tender_id,
+                "client_name": p.client_name,
+                "user_id": p.user_id,
+                "created_at": p.created_at
+            } for p in projects]
         except Exception as e:
             logger.error(f"Error getting all projects: {str(e)}")
             return []
+        finally:
+            db.close()
 
     @staticmethod
     def create(project_name: str, tender_id: str, client_name: str, user_id: int) -> Optional[int]:
         """Create a new project"""
-        db = get_mongodb()
-        if db is None:
-            return None
+        db = get_db_session()
         try:
-            collection = db.projects
-            
-            # Convert user_id to ObjectId
-            user_oid = str_to_objectid(user_id) if isinstance(user_id, (str, int)) else user_id
-            
             # Check if project already exists for this user
-            existing = collection.find_one({
-                "project_name": project_name,
-                "user_id": user_oid
-            })
+            existing = db.query(Project).filter(
+                Project.project_name == project_name,
+                Project.user_id == user_id
+            ).first()
+            
             if existing:
                 logger.warning(f"Project {project_name} already exists for user {user_id}")
-                return str(existing["_id"])
+                return existing.id
             
-            project_doc = {
-                "project_name": project_name,
-                "tender_id": tender_id,
-                "client_name": client_name,
-                "user_id": user_oid,
-                "created_at": datetime.utcnow()
-            }
+            new_project = Project(
+                project_name=project_name,
+                tender_id=tender_id,
+                client_name=client_name,
+                user_id=user_id
+            )
             
-            result = collection.insert_one(project_doc)
+            db.add(new_project)
+            db.commit()
+            db.refresh(new_project)
             
-            # Create indexes if they don't exist
-            collection.create_index([("project_name", 1), ("user_id", 1)], unique=True)
-            collection.create_index("user_id")
-            
-            return str(result.inserted_id)
+            return new_project.id
         except Exception as e:
+            db.rollback()
             logger.error(f"Error creating project: {str(e)}")
             return None
+        finally:
+            db.close()
 
     @staticmethod
     def add_document(project_id: int, file_hash: str, file_name: str, update_type: str, extracted_text: str, analysis_data: Dict[str, Any]) -> Optional[int]:
         """Add a document to a project"""
-        db = get_mongodb()
-        if db is None:
-            return None
+        db = get_db_session()
         try:
-            collection = db.project_documents
+            new_document = ProjectDocument(
+                project_id=project_id,
+                file_hash=file_hash,
+                file_name=file_name,
+                update_type=update_type,
+                extracted_text=extracted_text,
+                analysis_data=analysis_data
+            )
             
-            # Convert project_id to ObjectId
-            project_oid = str_to_objectid(project_id) if isinstance(project_id, (str, int)) else project_id
+            db.add(new_document)
+            db.commit()
+            db.refresh(new_document)
             
-            document_doc = {
-                "project_id": project_oid,
-                "file_hash": file_hash,
-                "file_name": file_name,
-                "update_type": update_type,
-                "extracted_text": extracted_text,
-                "analysis_data": analysis_data,  # MongoDB stores JSON natively
-                "created_at": datetime.utcnow()
-            }
-            
-            result = collection.insert_one(document_doc)
-            
-            # Create indexes
-            collection.create_index("project_id")
-            collection.create_index("file_hash")
-            
-            return str(result.inserted_id)
+            return new_document.id
         except Exception as e:
+            db.rollback()
             logger.error(f"Error adding document: {str(e)}")
             return None
+        finally:
+            db.close()
 
     @staticmethod
     def add_analysis_record(project_id: int, document_id: int, section: str, content: str, source_type: str, source_file_name: str, source_file_id: str, linked_section_id: Optional[int] = None):
         """Add an analysis record"""
-        db = get_mongodb()
-        if db is None:
-            return
+        db = get_db_session()
         try:
-            collection = db.analysis_records
+            new_record = AnalysisRecord(
+                project_id=project_id,
+                document_id=document_id,
+                section=section,
+                content=content,
+                source_type=source_type,
+                source_file_name=source_file_name,
+                source_file_id=source_file_id,
+                linked_section_id=linked_section_id
+            )
             
-            # Convert IDs to ObjectId
-            project_oid = str_to_objectid(project_id) if isinstance(project_id, (str, int)) else project_id
-            doc_oid = str_to_objectid(document_id) if isinstance(document_id, (str, int)) else document_id
-            linked_oid = str_to_objectid(linked_section_id) if linked_section_id and isinstance(linked_section_id, (str, int)) else linked_section_id
-            
-            record_doc = {
-                "project_id": project_oid,
-                "document_id": doc_oid,
-                "section": section,
-                "content": content,
-                "source_type": source_type,
-                "source_file_name": source_file_name,
-                "source_file_id": source_file_id,
-                "linked_section_id": linked_oid,
-                "created_at": datetime.utcnow()
-            }
-            
-            collection.insert_one(record_doc)
-            
-            # Create indexes
-            collection.create_index([("project_id", 1), ("section", 1)])
-            collection.create_index("document_id")
+            db.add(new_record)
+            db.commit()
         except Exception as e:
+            db.rollback()
             logger.error(f"Error adding analysis record: {str(e)}")
+        finally:
+            db.close()
 
     @staticmethod
     def get_merged_analysis(project_id: int) -> List[Dict[str, Any]]:
         """Get all analysis records for a project"""
-        db = get_mongodb()
-        if db is None:
-            return []
+        db = get_db_session()
         try:
-            collection = db.analysis_records
+            records = db.query(AnalysisRecord).filter(
+                AnalysisRecord.project_id == project_id
+            ).order_by(AnalysisRecord.created_at).all()
             
-            # Convert project_id to ObjectId
-            project_oid = str_to_objectid(project_id) if isinstance(project_id, (str, int)) else project_id
-            
-            records = list(collection.find({"project_id": project_oid}).sort("created_at", 1))
-            return [convert_id_to_str(r) for r in records]
+            return [{
+                "id": r.id,
+                "project_id": r.project_id,
+                "document_id": r.document_id,
+                "section": r.section,
+                "content": r.content,
+                "source_type": r.source_type,
+                "source_file_name": r.source_file_name,
+                "source_file_id": r.source_file_id,
+                "linked_section_id": r.linked_section_id,
+                "created_at": r.created_at
+            } for r in records]
         except Exception as e:
             logger.error(f"Error getting merged analysis: {str(e)}")
             return []
+        finally:
+            db.close()
     
     @staticmethod
     def get_documents_by_project(project_id: int) -> List[Dict[str, Any]]:
         """Get all documents for a project"""
-        db = get_mongodb()
-        if db is None:
-            return []
+        db = get_db_session()
         try:
-            collection = db.project_documents
+            documents = db.query(ProjectDocument).filter(
+                ProjectDocument.project_id == project_id
+            ).order_by(ProjectDocument.created_at).all()
             
-            # Convert project_id to ObjectId
-            project_oid = str_to_objectid(project_id) if isinstance(project_id, (str, int)) else project_id
-            
-            documents = list(collection.find({"project_id": project_oid}).sort("created_at", 1))
-            return [convert_id_to_str(d) for d in documents]
+            return [{
+                "id": d.id,
+                "project_id": d.project_id,
+                "file_hash": d.file_hash,
+                "file_name": d.file_name,
+                "update_type": d.update_type,
+                "extracted_text": d.extracted_text,
+                "analysis_data": d.analysis_data,
+                "created_at": d.created_at
+            } for d in documents]
         except Exception as e:
             logger.error(f"Error getting documents: {str(e)}")
             return []
+        finally:
+            db.close()
     
     @staticmethod
     def get_final_analysis(project_id: int) -> Dict[str, Any]:
         """Get final merged analysis with documents"""
-        db = get_mongodb()
-        if db is None:
-            return {}
+        db = get_db_session()
         try:
-            project_oid = str_to_objectid(project_id) if isinstance(project_id, (str, int)) else project_id
-            
             # Get project
-            project = db.projects.find_one({"_id": project_oid})
+            project = db.query(Project).filter(Project.id == project_id).first()
             if not project:
                 return {}
             
             # Get all documents
-            documents = list(db.project_documents.find({"project_id": project_oid}).sort("created_at", 1))
+            documents = db.query(ProjectDocument).filter(
+                ProjectDocument.project_id == project_id
+            ).order_by(ProjectDocument.created_at).all()
             
             # Get all analysis records
-            analysis_records = list(db.analysis_records.find({"project_id": project_oid}).sort("created_at", 1))
+            analysis_records = db.query(AnalysisRecord).filter(
+                AnalysisRecord.project_id == project_id
+            ).order_by(AnalysisRecord.created_at).all()
             
             return {
-                "project": convert_id_to_str(project),
-                "documents": [convert_id_to_str(d) for d in documents],
-                "analysis_records": [convert_id_to_str(r) for r in analysis_records]
+                "project": {
+                    "id": project.id,
+                    "project_name": project.project_name,
+                    "tender_id": project.tender_id,
+                    "client_name": project.client_name,
+                    "user_id": project.user_id,
+                    "created_at": project.created_at
+                },
+                "documents": [{
+                    "id": d.id,
+                    "project_id": d.project_id,
+                    "file_hash": d.file_hash,
+                    "file_name": d.file_name,
+                    "update_type": d.update_type,
+                    "extracted_text": d.extracted_text,
+                    "analysis_data": d.analysis_data,
+                    "created_at": d.created_at
+                } for d in documents],
+                "analysis_records": [{
+                    "id": r.id,
+                    "project_id": r.project_id,
+                    "document_id": r.document_id,
+                    "section": r.section,
+                    "content": r.content,
+                    "source_type": r.source_type,
+                    "created_at": r.created_at
+                } for r in analysis_records]
             }
         except Exception as e:
             logger.error(f"Error getting final analysis: {str(e)}")
             return {}
+        finally:
+            db.close()

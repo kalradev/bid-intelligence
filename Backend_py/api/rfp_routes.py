@@ -14,7 +14,12 @@ from core.config import settings
 from services.document_extractor import extract_text
 from services.ai_service import generate_departmental_summaries
 from services.oem_enrichment_service import enrich_products, get_enrichment_stats
-from services.pinecone_service import store_rfp_in_pinecone
+# Optional Pinecone import - will fail gracefully if not available
+try:
+    from services.pinecone_service import store_rfp_in_pinecone
+except ImportError as e:
+    logger.warning(f"Pinecone service not available: {e}. Pinecone features will be disabled.")
+    store_rfp_in_pinecone = None
 from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
@@ -96,32 +101,36 @@ async def analyze_rfp(
                 )
                 
                 # Get the document ID that was just created
-                from core.mongodb import get_mongodb, str_to_objectid
+                from core.sqlalchemy_db import get_db_session
+                from models.sqlalchemy_models import ProjectDocument
                 doc_id = None
-                db = get_mongodb()
-                if db is not None:
-                    try:
-                        project_id = result_data.get("project_id")
-                        if not project_id:
-                            # Try to get project_id from project name
-                            from models.project import ProjectModel
-                            project = ProjectModel.get_by_name(project_name, current_user["id"])
-                            if project:
-                                project_id = project["id"]
-                        
-                        if project_id:
-                            project_oid = str_to_objectid(project_id) if isinstance(project_id, str) else project_id
-                            doc = db.project_documents.find_one(
-                                {"project_id": project_oid, "file_hash": combined_hash},
-                                sort=[("created_at", -1)]
-                            )
-                            if doc:
-                                doc_id = str(doc["_id"])
-                                logger.info(f"✅ Found document ID: {doc_id} for project {project_name}")
-                        else:
-                            logger.warning("Could not determine project_id for document lookup")
-                    except Exception as e:
-                        logger.error(f"Error fetching document ID: {str(e)}")
+                db = get_db_session()
+                try:
+                    project_id = result_data.get("project_id")
+                    if not project_id:
+                        # Try to get project_id from project name
+                        from models.sqlalchemy_models import Project
+                        project = db.query(Project).filter(
+                            Project.project_name == project_name,
+                            Project.user_id == current_user["id"]
+                        ).first()
+                        if project:
+                            project_id = project.id
+                    
+                    if project_id:
+                        doc = db.query(ProjectDocument).filter(
+                            ProjectDocument.project_id == project_id,
+                            ProjectDocument.file_hash == combined_hash
+                        ).order_by(ProjectDocument.created_at.desc()).first()
+                        if doc:
+                            doc_id = doc.id
+                            logger.info(f"✅ Found document ID: {doc_id} for project {project_name}")
+                    else:
+                        logger.warning("Could not determine project_id for document lookup")
+                except Exception as e:
+                    logger.error(f"Error fetching document ID: {str(e)}")
+                finally:
+                    db.close()
                 
                 # Debug: Log product mapping in response
                 pm = result_data["departmentalSummaries"].get("productMapping", {})
@@ -212,15 +221,16 @@ async def analyze_rfp(
         }
         FileCache.create(cache_data)
         
-        # Store merged document in Pinecone
-        try:
-            await store_rfp_in_pinecone(
-                document_id=combined_hash,
-                file_name=f"Merged RFP ({len(files)} files)",
-                text=merged_text
-            )
-        except Exception as pine_err:
-            logger.warning(f"Failed to store in Pinecone: {str(pine_err)}")
+        # Store merged document in Pinecone (optional)
+        if store_rfp_in_pinecone:
+            try:
+                await store_rfp_in_pinecone(
+                    document_id=combined_hash,
+                    file_name=f"Merged RFP ({len(files)} files)",
+                    text=merged_text
+                )
+            except Exception as pine_err:
+                logger.warning(f"Failed to store in Pinecone: {str(pine_err)}")
 
         return {
             "success": True,
@@ -282,25 +292,23 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
 
 @router.get("/project-status/{project_name}")
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
-    from core.mongodb import get_mongodb, str_to_objectid
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import ProjectDocument
     
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
-        if project and str(project.get('user_id')) != str(current_user["id"]):
+        if project and project.get('user_id') != current_user["id"]:
             return {"exists": False}
         if project:
             # Also check if it has a base RFP
-            from core.mongodb import convert_id_to_str
-            db = get_mongodb()
-            base_doc = None
-            if db is not None:
-                project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
-                base_doc_raw = db.project_documents.find_one(
-                    {"project_id": project_oid, "update_type": "BASE_RFP"},
-                    sort=[("created_at", -1)]
-                )
-                if base_doc_raw:
-                    base_doc = convert_id_to_str(base_doc_raw)
+            db = get_db_session()
+            try:
+                base_doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.project_id == project['id'],
+                    ProjectDocument.update_type == "BASE_RFP"
+                ).order_by(ProjectDocument.created_at.desc()).first()
+            finally:
+                db.close()
             
             return {
                 "exists": True,
@@ -309,7 +317,7 @@ async def get_project_status(project_name: str, current_user: dict = Depends(get
                     "tenderId": project["tender_id"],
                     "clientName": project["client_name"],
                     "hasBaseRfp": base_doc is not None,
-                    "baseRfpHash": base_doc.get("file_hash") if base_doc else None
+                    "baseRfpHash": base_doc.file_hash if base_doc else None
                 }
             }
         else:
@@ -331,63 +339,58 @@ async def get_project_analysis(
     - If document_id is provided: returns specific document by ID
     - Otherwise: returns latest merged analysis (default behavior)
     """
-    from core.mongodb import get_mongodb, str_to_objectid, convert_id_to_str
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import ProjectDocument
     
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if str(project.get('user_id')) != str(current_user["id"]):
+        if project.get('user_id') != current_user["id"]:
             raise HTTPException(status_code=403, detail="You don't have access to this project")
+        
+        db = get_db_session()
+        try:
+            # Get specific document by ID if provided
+            if document_id:
+                doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.id == int(document_id),
+                    ProjectDocument.project_id == project['id']
+                ).first()
+            # Get specific document type if provided
+            elif document_type:
+                doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.project_id == project['id'],
+                    ProjectDocument.update_type == document_type
+                ).order_by(ProjectDocument.created_at.desc()).first()
+            # Otherwise get latest (merged) analysis
+            else:
+                doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.project_id == project['id']
+                ).order_by(ProjectDocument.created_at.desc()).first()
             
-        db = get_mongodb()
-        if db is None:
-            raise HTTPException(status_code=500, detail="Database connection failed")
-        
-        project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
-        
-        # Get specific document by ID if provided
-        if document_id:
-            doc_oid = str_to_objectid(document_id) if isinstance(document_id, (str, int)) else document_id
-            doc = db.project_documents.find_one({
-                "_id": doc_oid,
-                "project_id": project_oid
-            })
-        # Get specific document type if provided
-        elif document_type:
-            doc = db.project_documents.find_one(
-                {"project_id": project_oid, "update_type": document_type},
-                sort=[("created_at", -1)]
-            )
-        # Otherwise get latest (merged) analysis
-        else:
-            doc = db.project_documents.find_one(
-                {"project_id": project_oid},
-                sort=[("created_at", -1)]
-            )
-        
-        if not doc:
-            if document_type or document_id:
-                raise HTTPException(status_code=404, detail=f"Document not found for the specified criteria")
-            raise HTTPException(status_code=404, detail="No analysis found for this project")
-        
-        doc = convert_id_to_str(doc)
-
-        return {
-            "success": True,
-            "project_centric": True,
-            "data": {
-                "projectName": project_name,
-                "fileHash": doc["file_hash"],
-                "departmentalSummaries": doc.get("analysis_data", {}),
-                "metadata": {
-                    "lastUpdated": doc["created_at"].isoformat() if hasattr(doc["created_at"], 'isoformat') else str(doc["created_at"]),
-                    "updateType": doc.get("update_type"),
-                    "documentId": doc["id"],
-                    "fileName": doc["file_name"]
+            if not doc:
+                if document_type or document_id:
+                    raise HTTPException(status_code=404, detail=f"Document not found for the specified criteria")
+                raise HTTPException(status_code=404, detail="No analysis found for this project")
+            
+            return {
+                "success": True,
+                "project_centric": True,
+                "data": {
+                    "projectName": project_name,
+                    "fileHash": doc.file_hash,
+                    "departmentalSummaries": doc.analysis_data or {},
+                    "metadata": {
+                        "lastUpdated": doc.created_at.isoformat() if doc.created_at else None,
+                        "updateType": doc.update_type,
+                        "documentId": doc.id,
+                        "fileName": doc.file_name
+                    }
                 }
             }
-        }
+        finally:
+            db.close()
     except HTTPException:
         raise
     except Exception as e:
@@ -397,65 +400,63 @@ async def get_project_analysis(
 @router.get("/get-project-documents/{project_name}")
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
-    from core.mongodb import get_mongodb, str_to_objectid, convert_id_to_str
-    
     try:
         project = ProjectModel.get_by_name(project_name, current_user["id"])
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if str(project.get('user_id')) != str(current_user["id"]):
+        if project.get('user_id') != current_user["id"]:
             raise HTTPException(status_code=403, detail="You don't have access to this project")
+        
+        from core.sqlalchemy_db import get_db_session
+        from models.sqlalchemy_models import ProjectDocument
+        
+        db = get_db_session()
+        try:
+            # Get all documents
+            documents_raw = db.query(ProjectDocument).filter(
+                ProjectDocument.project_id == project['id']
+            ).all()
             
-        db = get_mongodb()
-        if db is None:
-            raise HTTPException(status_code=500, detail="Database connection failed")
-        
-        project_oid = str_to_objectid(project['id']) if isinstance(project['id'], str) else project['id']
-        
-        # Get all documents and sort them
-        documents_raw = list(db.project_documents.find({"project_id": project_oid}))
-        
-        # Sort by update_type priority and created_at
-        type_priority = {'BASE_RFP': 1, 'REFERENCE_UPDATE': 2, 'CORRIGENDUM': 3}
-        documents = sorted(
-            documents_raw,
-            key=lambda x: (
-                type_priority.get(x.get('update_type', ''), 99),
-                x.get('created_at', datetime.min)
+            # Sort by update_type priority and created_at
+            type_priority = {'BASE_RFP': 1, 'REFERENCE_UPDATE': 2, 'CORRIGENDUM': 3}
+            documents = sorted(
+                documents_raw,
+                key=lambda x: (
+                    type_priority.get(x.update_type or '', 99),
+                    x.created_at or datetime.min
+                )
             )
-        )
-        
-        # Convert ObjectIds to strings
-        documents = [convert_id_to_str(doc) for doc in documents]
-        
-        # Group documents by type and number them
-        documents_by_type = {}
-        result = []
-        
-        for doc in documents:
-            doc_type = doc['update_type']
-            if doc_type not in documents_by_type:
-                documents_by_type[doc_type] = 0
-            documents_by_type[doc_type] += 1
             
-            # Create display name
-            if doc_type == 'BASE_RFP':
-                display_name = "Base RFP"
-            elif doc_type == 'CORRIGENDUM':
-                display_name = f"Corrigendum {documents_by_type[doc_type]}"
-            elif doc_type == 'REFERENCE_UPDATE':
-                display_name = f"Reference Update {documents_by_type[doc_type]}"
-            else:
-                display_name = doc_type
+            # Group documents by type and number them
+            documents_by_type = {}
+            result = []
             
-            result.append({
-                "id": doc['id'],
-                "fileHash": doc['file_hash'],
-                "fileName": doc['file_name'],
-                "updateType": doc_type,
-                "displayName": display_name,
-                "createdAt": doc['created_at'].isoformat() if hasattr(doc['created_at'], 'isoformat') else str(doc['created_at'])
-            })
+            for doc in documents:
+                doc_type = doc.update_type
+                if doc_type not in documents_by_type:
+                    documents_by_type[doc_type] = 0
+                documents_by_type[doc_type] += 1
+                
+                # Create display name
+                if doc_type == 'BASE_RFP':
+                    display_name = "Base RFP"
+                elif doc_type == 'CORRIGENDUM':
+                    display_name = f"Corrigendum {documents_by_type[doc_type]}"
+                elif doc_type == 'REFERENCE_UPDATE':
+                    display_name = f"Reference Update {documents_by_type[doc_type]}"
+                else:
+                    display_name = doc_type or "Unknown"
+                
+                result.append({
+                    "id": doc.id,
+                    "fileHash": doc.file_hash,
+                    "fileName": doc.file_name,
+                    "updateType": doc_type,
+                    "displayName": display_name,
+                    "createdAt": doc.created_at.isoformat() if doc.created_at else None
+                })
+        finally:
+            db.close()
         
         return {
             "success": True,

@@ -565,6 +565,12 @@ S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore duri
 - If you find a table with products, extract EVERY row as a separate product into productMapping.miiProductStatus
 - If product name is missing, use the item description or first column value
 - If multiple products are listed in one row, split them into separate entries in productMapping.miiProductStatus
+- ⚠️ CRITICAL: Services/Activities (Supply, Installation, Configuration, Commissioning, etc.) at DIFFERENT LOCATIONS are SEPARATE PRODUCTS
+- ⚠️ CRITICAL: Include location/service type in productName to make each product unique (e.g., "Supply of Server at Akashvani Mumbai", "Installation of Server at Akashvani Pune")
+- ⚠️ CRITICAL: Extract each service/activity at each location as a DISTINCT product entry
+- Example: "Supply of Server at Location A" and "Supply of Server at Location B" = 2 separate products
+- Example: "Installation at Mumbai" and "Installation at Pune" = 2 separate products
+- Example: "Supply", "Installation", "Configuration" = 3 separate products even if for same item
 - Minimum requirement: Extract at least 5-10 products if any product list exists in the document
 - If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
 - ⚠️ REMEMBER: Products go in productMapping.miiProductStatus, NOT in technical.keySpecifications
@@ -880,14 +886,32 @@ def _merge_objects(target: Dict[str, Any], source: Dict[str, Any], path: str = '
                 target[key] = []
                 
             if current_path == 'productMapping.miiProductStatus':
-                product_map = {p.get('productName'): p for p in target[key] if p.get('productName')}
+                # Use product name as key but preserve all unique products (different locations/service types are separate)
+                product_map = {}
+                for p in target[key]:
+                    if p.get('productName'):
+                        name = p.get('productName')
+                        # Only add if not already exists with same exact name
+                        if name not in product_map:
+                            product_map[name] = p
+                        # Replace if new product has better OEM info
+                        elif (p.get('oem') and p.get('oem') != 'Unspecified' and 
+                              product_map[name].get('oem') == 'Unspecified'):
+                            product_map[name] = p
                 
+                # Add new products - preserve all unique entries (don't merge by name alone)
                 for product in value:
                     name = product.get('productName')
                     if name:
-                        existing = product_map.get(name)
-                        if not existing or (product.get('oem') and product.get('oem') != 'Unspecified' and existing.get('oem') == 'Unspecified'):
+                        if name not in product_map:
+                            # New unique product - add it
                             product_map[name] = product
+                        elif (product.get('oem') and product.get('oem') != 'Unspecified' and 
+                              product_map[name].get('oem') == 'Unspecified'):
+                            # Replace with better OEM info
+                            product_map[name] = product
+                        # If product names differ (even slightly), they are separate products
+                        # This preserves products with different locations/service types
                 
                 all_products = list(product_map.values())
                 with_oem = [p for p in all_products if p.get('oem') and p.get('oem') != 'Unspecified']
