@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 // Logo imports
 import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import { API_BASE_URL } from '../config';
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function LoginPage() {
         setError("");
 
         try {
-            const response = await fetch('http://localhost:3000/api/auth/login', {
+            const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -58,7 +59,7 @@ export default function LoginPage() {
             
             // Provide more specific error messages
             if (error.message && error.message.includes('fetch')) {
-                setError('Cannot connect to server. Please make sure the backend is running on http://localhost:3000');
+                setError(`Cannot connect to server. Please make sure the backend is running on ${API_BASE_URL}`);
             } else if (error.message) {
                 setError(error.message);
             } else {

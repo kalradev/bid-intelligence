@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
 import { exportToPDF } from "../utils/pdfExport";
 import { processDepartmentData, filterEMD } from "../utils/deduplication";
+import { API_BASE_URL } from "../config";
 
 const BidManagement = () => {
     const [data, setData] = useState(null);
@@ -27,7 +28,7 @@ const BidManagement = () => {
                 return;
             }
 
-            let url = `http://localhost:3000/api/rfp/eligibility-checklist/${encodeURIComponent(projName)}`;
+            let url = `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projName)}`;
             if (docId) {
                 url += `?document_id=${docId}`;
             }
@@ -143,7 +144,7 @@ const BidManagement = () => {
             }
 
             const response = await fetch(
-                `http://localhost:3000/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`,
+                `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`,
                 {
                     method: 'POST',
                     headers: {

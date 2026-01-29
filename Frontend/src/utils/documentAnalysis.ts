@@ -2,6 +2,8 @@
  * Utility functions for fetching and managing document analysis
  */
 
+import { API_BASE_URL } from '../config';
+
 export interface DocumentAnalysisResult {
   success: boolean;
   project_centric: boolean;
@@ -31,7 +33,7 @@ export async function fetchProjectAnalysis(
     throw new Error("Please login to view project analysis");
   }
 
-  let url = `http://localhost:3000/api/rfp/get-project-analysis/${encodeURIComponent(projectName)}`;
+  let url = `${API_BASE_URL}/api/rfp/get-project-analysis/${encodeURIComponent(projectName)}`;
   
   if (documentId) {
     url += `?document_id=${documentId}`;
