@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import { API_BASE_URL } from '../config';
 
 interface PageViewerProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ export default function PageViewer({
   // Load PDF in iframe
   useEffect(() => {
     if (isOpen && fileHash && iframeRef.current && currentPage > 0) {
-      const baseUrl = `http://localhost:3000/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
+      const baseUrl = `${API_BASE_URL}/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
       const viewerUrl = `${baseUrl}#page=${currentPage}`;
       
       iframeRef.current.src = viewerUrl;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Filter, ChevronDown } from "lucide-react";
+import { API_BASE_URL } from '../config';
 
 interface Document {
   id: number;
@@ -43,7 +44,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
         }
 
         const response = await fetch(
-          `http://localhost:3000/api/rfp/get-project-documents/${encodeURIComponent(projectName)}`,
+          `${API_BASE_URL}/api/rfp/get-project-documents/${encodeURIComponent(projectName)}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`

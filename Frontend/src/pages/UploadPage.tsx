@@ -5,6 +5,7 @@ import { RefreshCw, LogOut } from "lucide-react";
 // Logo imports
 import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import { API_BASE_URL } from '../config';
 
 export default function UploadPage() {
     const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function UploadPage() {
                     return;
                 }
                 
-                const response = await fetch("http://localhost:3000/api/rfp/projects", {
+                const response = await fetch(`${API_BASE_URL}/api/rfp/projects`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
@@ -161,7 +162,7 @@ export default function UploadPage() {
                 return;
             }
             
-            const response = await fetch(`http://localhost:3000/api/rfp/project-status/${encodeURIComponent(name)}`, {
+            const response = await fetch(`${API_BASE_URL}/api/rfp/project-status/${encodeURIComponent(name)}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -402,7 +403,7 @@ export default function UploadPage() {
             formData.append("client_name", clientName);
             formData.append("update_type", updateType);
 
-            const response = await fetch("http://localhost:3000/api/rfp/analyze", {
+            const response = await fetch(`${API_BASE_URL}/api/rfp/analyze`, {
                 method: "POST",
                 headers: {
                     'Authorization': `Bearer ${token}`

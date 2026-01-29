@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, RotateCw } from "lucide-react";
+import { API_BASE_URL } from '../config';
 
 export default function DocumentViewer() {
   const navigate = useNavigate();
@@ -25,7 +26,7 @@ export default function DocumentViewer() {
   useEffect(() => {
     if (fileHash && iframeRef.current) {
       // Load PDF in iframe with page anchor
-      const baseUrl = `http://localhost:3000/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
+      const baseUrl = `${API_BASE_URL}/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
       const viewerUrl = `${baseUrl}#page=${currentPage}`;
       
       // Set the source - browser will handle page navigation via anchor
@@ -93,7 +94,7 @@ export default function DocumentViewer() {
   };
 
   const handleDownload = () => {
-    const downloadUrl = `http://localhost:3000/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
+    const downloadUrl = `${API_BASE_URL}/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}`;
     window.open(downloadUrl, '_blank');
   };
 
@@ -121,7 +122,7 @@ export default function DocumentViewer() {
     );
   }
 
-  const pdfUrl = `http://localhost:3000/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}#page=${currentPage}`;
+  const pdfUrl = `${API_BASE_URL}/api/rfp/document/${fileHash}?fileName=${encodeURIComponent(fileName)}#page=${currentPage}`;
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
