@@ -363,7 +363,6 @@ export default function ProductMappingPage() {
                     <th style={{ padding: 10, textAlign: "left" }}>Category</th>
                     <th style={{ padding: 10, textAlign: "left" }}>OEM</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Model</th>
-                    <th style={{ padding: 10, textAlign: "left" }}>MII Status</th>
                   </tr>
                 </thead>
 
@@ -383,13 +382,6 @@ export default function ProductMappingPage() {
                       const modelDisplay = item.model && item.model !== "N/A" && item.model.trim() !== ""
                         ? item.model
                         : "N/A";
-                      
-                      // Format MII Status
-                      const miiStatusDisplay = item.miiStatus || "Unmapped";
-                      const isMapped = miiStatusDisplay === "Mapped" || 
-                                     miiStatusDisplay === "MII-Compliant" || 
-                                     miiStatusDisplay === "Indian OEM" ||
-                                     miiStatusDisplay === "MII Compliant";
                       
                       return (
                         <tr key={index} style={{ borderBottom: "1px solid #e5e7eb" }}>
@@ -416,7 +408,7 @@ export default function ProductMappingPage() {
                                       color: "#111827",
                                       marginBottom: "2px"
                                     }}>
-                                      {i + 1}. {rec.oem}
+                                      {i + 1}. {rec.miiStatus === "Indian OEM" ? "🇮🇳 " : ""}{rec.oem}
                                       {i === 0 && (
                                         <span style={{
                                           marginLeft: "6px",
@@ -497,29 +489,12 @@ export default function ProductMappingPage() {
                               </span>
                             )}
                           </td>
-                          
-                          {/* MII Status Column */}
-                          <td style={{
-                            padding: 10,
-                            color: isMapped ? "#059669" : "#dc2626",
-                            fontWeight: 700
-                          }}>
-                            {hasRecommendations && recommendations[0] ? (
-                              <span style={{ 
-                                color: recommendations[0].miiStatus === "Indian OEM" ? "#10b981" : "#ef4444" 
-                              }}>
-                                {recommendations[0].miiStatus}
-                              </span>
-                            ) : (
-                              miiStatusDisplay
-                            )}
-                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
+                      <td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                           <p style={{ fontSize: "16px", fontWeight: 600 }}>No product mapping data available.</p>
                           <p style={{ fontSize: "14px" }}>

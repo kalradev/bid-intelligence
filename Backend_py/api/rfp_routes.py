@@ -511,6 +511,65 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
         logger.error(f"Error in get_sources: {str(e)}")
         return JSONResponse(content={"sources": [], "error": str(e)}, status_code=200)
 
+@router.get("/eligibility-criteria/{project_name}")
+async def get_eligibility_criteria(
+    project_name: str,
+    document_id: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all eligibility criteria extracted from analysis for a project/document"""
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import ProjectDocument
+
+    try:
+        project = ProjectModel.get_by_name(project_name, current_user["id"])
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.get("user_id") != current_user["id"]:
+            raise HTTPException(status_code=403, detail="You don't have access to this project")
+
+        db = get_db_session()
+        try:
+            if document_id:
+                doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.id == int(document_id),
+                    ProjectDocument.project_id == project["id"]
+                ).first()
+            else:
+                doc = db.query(ProjectDocument).filter(
+                    ProjectDocument.project_id == project["id"]
+                ).order_by(ProjectDocument.created_at.desc()).first()
+
+            if not doc or not doc.analysis_data:
+                return {
+                    "success": True,
+                    "criteria": [],
+                    "projectName": project_name,
+                    "documentId": None,
+                    "message": "No analysis found for this project"
+                }
+
+            bid_management = doc.analysis_data.get("bidManagement") or {}
+            success_factors = bid_management.get("successFactors") or {}
+            criteria = success_factors.get("preQualificationCriteria")
+            if not isinstance(criteria, list):
+                criteria = []
+
+            return {
+                "success": True,
+                "criteria": criteria,
+                "projectName": project_name,
+                "documentId": doc.id,
+                "fileName": getattr(doc, "file_name", None),
+            }
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting eligibility criteria: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/eligibility-checklist/{project_name}")
 async def get_eligibility_checklist(
     project_name: str,

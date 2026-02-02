@@ -77,6 +77,49 @@ export function updateAnalysisData(result: DocumentAnalysisResult, projectName: 
 }
 
 /**
+ * Response from GET /api/rfp/eligibility-criteria/{project_name}
+ */
+export interface EligibilityCriteriaResult {
+  success: boolean;
+  criteria: string[];
+  projectName: string;
+  documentId: number | null;
+  fileName?: string;
+  message?: string;
+}
+
+/**
+ * Fetch all eligibility criteria from analysis for a project/document
+ */
+export async function fetchEligibilityCriteria(
+  projectName: string,
+  documentId: number | null = null
+): Promise<EligibilityCriteriaResult> {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error("Please login to view eligibility criteria");
+  }
+
+  let url = `${API_BASE_URL}/api/rfp/eligibility-criteria/${encodeURIComponent(projectName)}`;
+  if (documentId) {
+    url += `?document_id=${documentId}`;
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Failed to fetch eligibility criteria");
+  }
+
+  return await response.json();
+}
+
+/**
  * Get display name for document type
  */
 function getDocumentDisplayName(updateType: string, documentId?: number): string {

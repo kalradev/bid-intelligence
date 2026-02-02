@@ -3,6 +3,7 @@ import NavbarBidManagement from "../components/NavbarBidManagement";
 import { exportToPDF } from "../utils/pdfExport";
 import { processDepartmentData, filterEMD } from "../utils/deduplication";
 import { API_BASE_URL } from "../config";
+import { fetchEligibilityCriteria } from "../utils/documentAnalysis";
 
 const BidManagement = () => {
     const [data, setData] = useState(null);
@@ -11,6 +12,8 @@ const BidManagement = () => {
     const [projectName, setProjectName] = useState(null);
     const [documentId, setDocumentId] = useState(null);
     const [isLoadingChecklist, setIsLoadingChecklist] = useState(false);
+    const [eligibilityCriteria, setEligibilityCriteria] = useState([]);
+    const [isLoadingCriteria, setIsLoadingCriteria] = useState(false);
 
     // Load eligibility checklist from API
     const loadEligibilityChecklist = useCallback(async (projName, docId) => {
@@ -107,6 +110,34 @@ const BidManagement = () => {
             setData(null);
         }
     }, []);
+
+    // Fetch all eligibility criteria from analysis API when we have a project
+    useEffect(() => {
+        if (!projectName) {
+            setEligibilityCriteria([]);
+            return;
+        }
+        let cancelled = false;
+        setIsLoadingCriteria(true);
+        fetchEligibilityCriteria(projectName, documentId ?? null)
+            .then((result) => {
+                if (!cancelled && result.success && Array.isArray(result.criteria)) {
+                    setEligibilityCriteria(result.criteria);
+                } else if (!cancelled) {
+                    setEligibilityCriteria([]);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    console.warn("Could not load eligibility criteria from API:", err);
+                    setEligibilityCriteria([]);
+                }
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoadingCriteria(false);
+            });
+        return () => { cancelled = true; };
+    }, [projectName, documentId]);
 
     // Reload checklist when projectName or documentId changes
     useEffect(() => {
@@ -319,19 +350,25 @@ const BidManagement = () => {
                             </div>
                         )}
 
-                        {/* Eligibility Criteria with Yes/No Buttons */}
-                        {data.successFactors.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria) && data.successFactors.preQualificationCriteria.length > 0 && (
+                        {/* Eligibility Criteria with Yes/No Buttons - from API or analysis data */}
+                        {(() => {
+                            const criteriaList = eligibilityCriteria.length > 0
+                                ? eligibilityCriteria
+                                : (data?.successFactors?.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria)
+                                    ? data.successFactors.preQualificationCriteria
+                                    : []);
+                            return criteriaList.length > 0 && (
                             <div style={{ marginBottom: "24px", background: "#fef3c7", padding: "16px", borderRadius: "8px", border: "1px solid #fde68a" }}>
                                 <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "12px", marginTop: "0" }}>
                                     Eligibility Criteria
                                 </h4>
-                                {isLoadingChecklist && (
+                                {(isLoadingCriteria || isLoadingChecklist) && (
                                     <p style={{ fontSize: "14px", color: "#92400e", marginBottom: "12px" }}>
-                                        Loading checklist...
+                                        {isLoadingCriteria ? "Loading eligibility criteria..." : "Loading checklist..."}
                                     </p>
                                 )}
                                 <ul style={{ paddingLeft: "0", margin: "0", listStyle: "none" }}>
-                                    {data.successFactors.preQualificationCriteria.map((item, idx) => {
+                                    {criteriaList.map((item, idx) => {
                                         // Get check status - handle both boolean true/false and string "true"/"false"
                                         const checkStatus = eligibilityChecks[item];
                                         const isYes = checkStatus === true || checkStatus === "true";
@@ -460,7 +497,8 @@ const BidManagement = () => {
                                     })}
                                 </ul>
                             </div>
-                        )}
+                            );
+                        })()}
 
                         {/* Other Success Factors (excluding the three special ones) */}
                         {Object.entries(data.successFactors)

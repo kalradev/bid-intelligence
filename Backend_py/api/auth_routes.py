@@ -7,6 +7,7 @@ import jwt
 import logging
 from datetime import datetime, timedelta
 import os
+from sqlalchemy.exc import OperationalError
 
 from core.sqlalchemy_db import get_db, get_db_session
 from core.config import settings
@@ -48,8 +49,13 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify a password against a hash"""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    """Verify a password against a hash. Returns False if hashed is invalid or verification fails."""
+    if not hashed or not isinstance(hashed, str):
+        return False
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 def create_jwt_token(user_id: int, email: str, role: str) -> str:
     """Create a JWT token for a user"""
@@ -208,7 +214,14 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Invalid email or password"
             )
         
-        # Verify password
+        if not user.password:
+            logger.warning(f"Login attempted for user {email} but password field is empty")
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid email or password"
+            )
+        
+        # Verify password (handles invalid/legacy hashes without raising)
         if not verify_password(request.password, user.password):
             raise HTTPException(
                 status_code=401,
@@ -233,6 +246,12 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         }
     except HTTPException:
         raise
+    except OperationalError as e:
+        logger.error(f"Login failed: database unreachable - {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Database unavailable. Check that PostgreSQL is running and POSTGRES_HOST in .env is correct (use localhost if Postgres is on this machine)."
+        )
     except Exception as e:
         logger.error(f"Login error: {str(e)}", exc_info=True)
         raise HTTPException(
