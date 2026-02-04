@@ -363,6 +363,7 @@ export default function ProductMappingPage() {
                     <th style={{ padding: 10, textAlign: "left" }}>Category</th>
                     <th style={{ padding: 10, textAlign: "left" }}>OEM</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Model</th>
+                    <th style={{ padding: 10, textAlign: "left" }}>MII Status</th>
                   </tr>
                 </thead>
 
@@ -408,7 +409,7 @@ export default function ProductMappingPage() {
                                       color: "#111827",
                                       marginBottom: "2px"
                                     }}>
-                                      {i + 1}. {rec.miiStatus === "Indian OEM" ? "🇮🇳 " : ""}{rec.oem}
+                                      {i + 1}. {rec.oem}
                                       {i === 0 && (
                                         <span style={{
                                           marginLeft: "6px",
@@ -489,12 +490,45 @@ export default function ProductMappingPage() {
                               </span>
                             )}
                           </td>
+
+                          {/* MII Status Column */}
+                          <td style={{ padding: 10 }}>
+                            {hasRecommendations ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {recommendations.map((rec: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    style={{
+                                      padding: "6px 8px",
+                                      borderRadius: "6px",
+                                      fontSize: "13px",
+                                      fontWeight: 500,
+                                      color: rec.miiStatus === "Indian OEM" ? "#059669" : "#374151",
+                                      background: rec.miiStatus === "Indian OEM" ? "rgba(16, 185, 129, 0.1)" : "rgba(107, 114, 128, 0.06)"
+                                    }}
+                                  >
+                                    {rec.miiStatus === "Indian OEM" ? "Indian OEM 🇮🇳" : "Global OEM"}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 500,
+                                  color: item.miiStatus && (String(item.miiStatus).toLowerCase().includes("indian") || String(item.miiStatus).toLowerCase().includes("mii-compliant") || String(item.miiStatus).toLowerCase().includes("likely indian")) ? "#059669" : "#374151"
+                                }}
+                              >
+                                {item.miiStatus && (String(item.miiStatus).toLowerCase().includes("indian") || String(item.miiStatus).toLowerCase().includes("mii-compliant") || String(item.miiStatus).toLowerCase().includes("likely indian")) ? "Indian OEM 🇮🇳" : "Global OEM"}
+                              </span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={4} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
+                      <td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                           <p style={{ fontSize: "16px", fontWeight: 600 }}>No product mapping data available.</p>
                           <p style={{ fontSize: "14px" }}>

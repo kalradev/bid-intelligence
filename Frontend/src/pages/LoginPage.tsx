@@ -104,7 +104,7 @@ export default function LoginPage() {
 
             {/* Login Form Container */}
             <div className="auth-container">
-                <div className="auth-card">
+                <div className="auth-card"> 
                     {/* Header */}
                     <div className="auth-header">
                         <div className="auth-icon-wrapper">

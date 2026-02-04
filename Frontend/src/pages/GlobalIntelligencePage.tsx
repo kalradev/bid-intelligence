@@ -212,7 +212,7 @@ export default function GlobalIntelligencePage() {
                       }}
                     >
                       <td style={{ padding: "14px 16px" }}>{item.product}</td>
-                      <td style={{ padding: "14px 16px" }}>{item.oem}</td>
+                      <td style={{ padding: "14px 16px" }}>{item.mii || item.country === "India" ? "🇮🇳 " : ""}{item.oem}</td>
                       <td style={{ padding: "14px 16px", fontSize: 13, color: "#374151" }}>{item.model}</td>
                       <td style={{ padding: "14px 16px" }}>{item.country}</td>
                       <td style={{ padding: "14px 16px", fontWeight: 600, color: item.mii ? "#059669" : "#dc2626" }}>

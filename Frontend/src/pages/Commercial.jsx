@@ -6,14 +6,18 @@ import { processDepartmentData, filterEMD } from "../utils/deduplication";
 const Commercial = () => {
   const [data, setData] = useState(null);
   const contentRef = useRef(null);
+  const [projectName, setProjectName] = useState(null);
+  const [documentId, setDocumentId] = useState(null);
+  const [userRiskAreas, setUserRiskAreas] = useState([]);
+  const [newRiskInput, setNewRiskInput] = useState("");
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
       const parsed = JSON.parse(storedData);
       const commercialData = parsed?.data?.departmentalSummaries?.commercial;
-      
-      // Process and deduplicate all list-based fields, filter N/A
+      setProjectName(parsed?.data?.projectName ?? null);
+      setDocumentId(parsed?.data?.metadata?.documentId ?? null);
       if (commercialData) {
         setData(processDepartmentData(commercialData));
       } else {
@@ -21,6 +25,30 @@ const Commercial = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!projectName) { setUserRiskAreas([]); return; }
+    const key = `riskAreas_user_commercial_${projectName}_${documentId ?? ""}`;
+    try {
+      const stored = localStorage.getItem(key);
+      setUserRiskAreas(stored ? (JSON.parse(stored) || []) : []);
+    } catch { setUserRiskAreas([]); }
+  }, [projectName, documentId]);
+
+  useEffect(() => {
+    if (!projectName || userRiskAreas.length === 0) return;
+    localStorage.setItem(`riskAreas_user_commercial_${projectName}_${documentId ?? ""}`, JSON.stringify(userRiskAreas));
+  }, [projectName, documentId, userRiskAreas]);
+
+  const handleAddUserRisk = () => {
+    const trimmed = newRiskInput.trim();
+    if (!trimmed) return;
+    setUserRiskAreas((prev) => [...prev, trimmed]);
+    setNewRiskInput("");
+  };
+  const handleRemoveUserRisk = (index) => {
+    setUserRiskAreas((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const handleDownloadPDF = () => {
     if (contentRef.current) {
@@ -322,14 +350,13 @@ const Commercial = () => {
           </>
         )}
 
-        {/* Risk Areas */}
-        {data.riskAreas && (
+        {/* Risk Areas (document + your risks) */}
+        {(data.riskAreas || userRiskAreas.length > 0) && (
           <>
             <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px", color: "#dc2626" }}>
               Risk Areas
             </h3>
-            {typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
-              // New organized structure with subheadings
+            {data.riskAreas && typeof data.riskAreas === 'object' && !Array.isArray(data.riskAreas) ? (
               Object.entries(data.riskAreas).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
                 return filteredItems && filteredItems.length > 0 && (
@@ -345,8 +372,7 @@ const Commercial = () => {
                   </div>
                 );
               })
-            ) : Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
-              // Fallback for old array structure - filter EMD values
+            ) : data.riskAreas && Array.isArray(data.riskAreas) && data.riskAreas.length > 0 ? (
               (() => {
                 const filteredRisks = filterEMD(data.riskAreas);
                 return filteredRisks.length > 0 ? (
@@ -358,8 +384,40 @@ const Commercial = () => {
                 ) : null;
               })()
             ) : null}
+            {userRiskAreas.length > 0 && (
+              <div style={{ marginBottom: "16px" }}>
+                <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>Your risks</h4>
+                <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
+                  {userRiskAreas.map((risk, idx) => (
+                    <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </>
         )}
+
+        {/* Your risk areas */}
+        <div style={{ marginTop: "26px", marginBottom: "24px", background: "#fef2f2", padding: "16px", borderRadius: "8px", border: "1px solid #fecaca" }}>
+          <h3 style={{ fontWeight: "700", fontSize: "18px", color: "#991b1b", marginBottom: "12px", marginTop: "0" }}>Your risk areas</h3>
+          <p style={{ fontSize: "14px", color: "#7f1d1d", marginBottom: "12px" }}>Add risks you want to track (saved for this project/document).</p>
+          <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
+            <input type="text" value={newRiskInput} onChange={(e) => setNewRiskInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddUserRisk()} placeholder="Type a risk and press Enter or Add" style={{ flex: "1", minWidth: "200px", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fecaca", fontSize: "14px" }} />
+            <button type="button" onClick={handleAddUserRisk} style={{ padding: "10px 20px", background: "#dc2626", color: "white", border: "none", borderRadius: "8px", fontWeight: 600, cursor: "pointer" }}>Add</button>
+          </div>
+          {userRiskAreas.length > 0 ? (
+            <ul style={{ paddingLeft: "20px", margin: "0", color: "#991b1b" }}>
+              {userRiskAreas.map((risk, idx) => (
+                <li key={idx} style={{ marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ flex: 1 }}>{risk}</span>
+                  <button type="button" onClick={() => handleRemoveUserRisk(idx)} style={{ padding: "4px 10px", background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", borderRadius: "6px", fontSize: "12px", cursor: "pointer" }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p style={{ fontSize: "14px", color: "#9ca3af", margin: 0 }}>No risks added yet.</p>
+          )}
+        </div>
 
         {/* Action Items */}
         {data.actionItems && data.actionItems.length > 0 && (
