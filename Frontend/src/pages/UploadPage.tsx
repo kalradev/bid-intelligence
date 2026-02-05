@@ -350,6 +350,13 @@ export default function UploadPage() {
             toast.error("Project Name is mandatory!");
             return;
         }
+
+        // Check quota only for NEW projects (not for updating existing ones)
+        if (projectExists === false && teamQuota && teamQuota.appliesToTeam && teamQuota.teamProjectsLeft === 0) {
+            toast.error(`Your team has reached the limit of ${teamQuota.teamProjectsLimit} projects. Please contact your Bid Manager to delete old projects or increase quota.`);
+            return;
+        }
+
         if (updateType === "BASE_RFP" && (!tenderId || !clientName)) {
             toast.error("Tender ID and Client Name are mandatory for a new Base RFP!");
             return;
