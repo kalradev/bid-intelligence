@@ -99,6 +99,13 @@ def is_instruction_or_guideline(text: str) -> bool:
         if re.match(pattern, text_lower):
             return True
     
+    # Check for eligibility/exemption keywords - these are NOT products
+    eligibility_keywords = ['exemption', 'eligibility', 'criteria', 'requirement', 'minimum', 'maximum', 
+                           'must be', 'should be', 'shall be', 'required to', 'need to', 'qualification',
+                           'local content', 'mse', 'msme', 'turnover', 'net worth', 'blacklisting']
+    if any(keyword in text_lower for keyword in eligibility_keywords):
+        return True
+    
     # Check for instruction-like sentence structure
     if text_lower.endswith('.') and len(text_lower) > 50:
         if any(word in text_lower for word in ['must', 'should', 'shall', 'required', 'need to', 'have to']):
@@ -127,6 +134,29 @@ def looks_like_product(text: str) -> bool:
     if not text or len(text) < 5:
         return False
     
+    text_lower = text.lower().strip()
+    
+    # REJECT: Eligibility criteria, exemptions, requirements - these are NOT products
+    rejection_keywords = [
+        'exemption', 'eligibility', 'criteria', 'requirement', 'minimum', 'maximum',
+        'must be', 'should be', 'shall be', 'required to', 'need to', 'qualification',
+        'local content', 'mse', 'msme', 'turnover', 'net worth', 'blacklisting',
+        'years of experience', 'for years', 'exemption for', 'criteria for'
+    ]
+    if any(keyword in text_lower for keyword in rejection_keywords):
+        logger.debug(f"   ❌ Rejected (eligibility/exemption): {text[:60]}")
+        return False
+    
+    # REJECT: Text ending with "Yes" or "No" - these are eligibility checkboxes
+    if text_lower.strip().endswith((' yes', ' no', 'yes', 'no')):
+        logger.debug(f"   ❌ Rejected (ends with Yes/No): {text[:60]}")
+        return False
+    
+    # REJECT: Text starting with "MSE" or "MSME" followed by exemption/eligibility words
+    if re.match(r'^(mse|msme)\s+(exemption|eligibility)', text_lower):
+        logger.debug(f"   ❌ Rejected (MSE/MSME exemption): {text[:60]}")
+        return False
+    
     # Products often contain:
     # - Model numbers (alphanumeric codes)
     # - Technical terms
@@ -139,9 +169,10 @@ def looks_like_product(text: str) -> bool:
         r'(server|switch|router|firewall|sensor|device|equipment|system|software|license)',
         r'(laptop|desktop|tablet|monitor|printer|scanner|camera)',
         r'(processor|memory|storage|hardware|component)',
+        r'(chair|table|furniture|ac|air conditioner|cooling|heating)',
+        r'(server|computer|workstation|printer|scanner)',
     ]
     
-    text_lower = text.lower()
     indicator_count = sum(1 for pattern in product_indicators if re.search(pattern, text, re.IGNORECASE))
     
     # If it has product indicators, it's likely a product
@@ -154,6 +185,11 @@ def looks_like_product(text: str) -> bool:
     
     # If it's too long (likely a sentence/instruction), skip
     if len(text) > 150:
+        return False
+    
+    # If it contains question-like structure or ends with "Yes/No", it's likely not a product
+    if re.search(r'\b(yes|no|required|applicable)\s*$', text_lower):
+        logger.debug(f"   ❌ Rejected (yes/no/required): {text[:60]}")
         return False
     
     # Default: if it passes other filters, consider it

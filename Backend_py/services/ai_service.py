@@ -498,10 +498,13 @@ S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore duri
 ✅ GOOD: successFactors.Financial: ["EMD: ₹2.5 lakhs (2% of estimated value)", "30% advance payment on PO", "60% on delivery and installation", "10% retention for 90 days", "MSME exemption available from EMD", "Payment within 30 days of invoice", "Bank guarantee required for advance payment", "Performance bank guarantee: 10% of contract value", "No EMD for startups registered under Startup India", "Financial turnover: ₹10 crores in last 3 years required"]
 
 **🚨 PRODUCT EXTRACTION MANDATORY**: 
-- Search ENTIRE document for BOQ/BOM/product lists and extract ALL items
+- Search ONLY in BOQ/BOM/product list sections for actual products/items
 - ⚠️ ALL products MUST go into productMapping.miiProductStatus array
-- Extract at least 10-15 products if any product information exists
-- If NO products found after thorough search, return empty array []
+- ⚠️ DO NOT extract eligibility criteria, exemptions, requirements, or conditions as products
+- ⚠️ Products must be actual items/services that can be procured (e.g., Server, Computer, Software, Furniture, Equipment)
+- Extract products from product tables only - do NOT extract from eligibility/requirement sections
+- Extract at least 5-10 products if any product information exists in BOQ/BOM sections
+- If NO products found in BOQ/BOM sections after thorough search, return empty array []
 
 **🚨 CONSISTENCY MANDATE**: 
 - lastSubmissionDate in projectOverview MUST match bidManagement.keyDeadlines
@@ -544,30 +547,273 @@ S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore duri
 5. If NONE found after searching all terms → Use filename as last resort only
 
 **🚨 PRODUCT EXTRACTION (CRITICAL - HIGHEST PRIORITY):**
-🚨 MANDATORY: You MUST extract product information into productMapping.miiProductStatus. This is the MOST IMPORTANT section!
+🚨 MANDATORY: You are a document parser, NOT a summarizer. Follow the steps EXACTLY. Do not skip steps.
+
+**SYSTEM ROLE:**
+You are a document parser, not a summarizer.
+
+**TASK:**
+Follow the steps EXACTLY. Do not skip steps.
+
+========================
+STEP 1 — CANDIDATE DETECTION
+========================
+Scan the entire document and list EVERY line or heading that describes
+any action or deliverable (supply, installation, configuration, setup,
+commissioning, deployment, service, etc.).
+
+Output as:
+CANDIDATES:
+- exact text
+- page number (if known)
+
+Do not deduplicate.
+Do not summarize.
+Do not group.
+Just dump all candidates.
+
+Look for:
+- "Supply of ...", "Supply and ...", "Supply, ..."
+- "Installation of ...", "Install ...", "Installing ..."
+- "Configuration of ...", "Configure ...", "Configuring ..."
+- "Setup of ...", "Set up ...", "Setting up ..."
+- "Commission of ...", "Commissioning ...", "Commission ..."
+- "Deploy ...", "Deployment of ...", "Deploying ..."
+- "Upgrade ...", "Upgrading ...", "Upgrade of ..."
+- "Maintain ...", "Maintenance of ...", "Maintaining ..."
+- "Provide ...", "Provision of ...", "Providing ..."
+- Any heading or line that describes work to be performed
+- BOQ lines with quantity or delivery days
+- Section titles that describe deliverables
+
+========================
+STEP 2 — SEMANTIC GROUPING
+========================
+Group the above candidates that refer to the same deliverable
+even if worded differently.
+
+Group by:
+action + item + location
+
+Example:
+- "Supply of Server at Mumbai" and "Supply Of Server At Akashvani Mumbai" = same group
+- "Installation of Server at Mumbai" = different group (different action)
+- "Supply of Server at Pune" = different group (different location)
+
+========================
+STEP 3 — DEDUPLICATION
+========================
+From each group, keep only one representative entry
+unless quantity differs.
+
+If same product appears multiple times with same quantity → keep one
+If same product appears with different quantities → keep both
+
+========================
+STEP 4 — FINAL OUTPUT
+========================
+Return ONLY the final result in productMapping.miiProductStatus array format:
+
+Each product should be an object with:
+{
+  "productName": "exact product name as in document",
+  "category": "...",
+  "quantity": "...",
+  "unit": "...",
+  "oem": "...",
+  "model": "...",
+  "specifications": "...",
+  "miiStatus": "..."
+}
+
+RULES:
+- Use only text found in the document
+- Do NOT hallucinate
+- Do NOT skip steps
+- Services count as products
+- Extract exact text as written - do NOT summarize, shorten, or rewrite
+- Preserve exact wording: "Supply Of Server At Akashvani Mumbai" not "Server at Mumbai"
+
+⚠️ CRITICAL VALIDATION BEFORE EXTRACTION:
+Before adding ANY item to productMapping.miiProductStatus, ask yourself:
+1. Is this an actual PRODUCT or SERVICE that can be supplied/procured?
+2. Does it have a clear product/service name (e.g., "Server", "Installation Service", "Configuration Service")?
+3. Does it match a pattern like "Supply of...", "Installation of...", "Configuration of..."?
+4. Does it contain words like "exemption", "eligibility", "requirement", "criteria", "minimum", "must", "should", "shall"?
+   → If YES to question 4, DO NOT extract it - it's NOT a product!
+5. Does it end with "Yes" or "No"? (e.g., "...Experience Yes")
+   → If YES, DO NOT extract it - it's likely an eligibility criterion!
 
 **CRITICAL: WHERE TO PUT PRODUCTS:**
-- ⚠️ ALL products MUST go into: productMapping.miiProductStatus (array)
+- ⚠️ ALL products and services MUST go into: productMapping.miiProductStatus (array)
 - ⚠️ DO NOT put products in technical.keySpecifications
 - ⚠️ technical.keySpecifications is ONLY for technical specifications text, NOT for product lists
 - ⚠️ productMapping.miiProductStatus is the ONLY correct location for product extraction
 - If you find products mentioned in technical specs, extract them to productMapping.miiProductStatus, NOT technical.keySpecifications
 
-**SEARCH STRATEGY:**
-1. Scan ENTIRE document from start to finish for ANY product/item mentions
-2. Look for these sections: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, Technical Specifications, Annexures, Appendices
-3. Search for tables with columns like: "Item", "Description", "Product", "Make", "Model", "Quantity", "Unit", "Specification"
-4. Extract EVERY product/item listed - do NOT skip ANY entries
-5. Each row in BOQ/BOM = one product entry in productMapping.miiProductStatus array
-6. MANDATORY: Extract ALL items, even if they seem repetitive or similar
+**🚨 CRITICAL VALIDATION - WHAT IS A PRODUCT/SERVICE:**
+- ⚠️ Products/Services are PHYSICAL ITEMS or SERVICES that can be procured/supplied:
+  * Products: Server, Desktop Computer, Software License, Chair, Table, AC Unit, Router, Switch, etc.
+  * Services: Installation, Configuration, Supply, Maintenance, Support, etc.
+  * Include location-specific items: "Supply of Server at Mumbai", "Installation of Server at Pune", etc.
+- ⚠️ DO NOT extract eligibility criteria, exemptions, requirements, or conditions as products
+- ⚠️ DO NOT extract text like "MSE Exemption for Years Of Experience Yes", "Minimum 50% Local Content", "Eligibility Criteria", etc. as products
+- ⚠️ DO NOT extract section headers, instructions, or guidelines as products
+- ⚠️ Products/Services must be actual items/services listed in BOQ/BOM/product tables or clearly stated in the document
+- ⚠️ If text contains words like "exemption", "eligibility", "requirement", "criteria", "minimum", "must", "should", "shall" - it is likely NOT a product
+- ⚠️ Products/Services typically have: Item name, Quantity, Unit, Specifications, Make/Model, Location
+- ⚠️ Before adding any item to productMapping.miiProductStatus, verify it is an actual product/service that can be supplied, NOT a requirement or condition
 
-**EXTRACTION RULES:**
-- If you find a table with products, extract EVERY row as a separate product into productMapping.miiProductStatus
+**SEARCH STRATEGY - PATTERN-BASED COMPREHENSIVE EXTRACTION:**
+1. **Scan ENTIRE document (all pages, all sections):**
+   - Start from page 1, go through every page
+   - Do NOT skip any pages
+   - Look in: Item Category sections, BOQ tables, section headings, consignee lists, product descriptions
+
+2. **Pattern-based detection:**
+   - Search for patterns: "Supply of...", "Installation of...", "Configuration of...", "Supply installation and configuration of..."
+   - Look for headings ending with locations: "...at Mumbai", "...at Pune", "...at Akashvani Mumbai"
+   - Identify BOQ lines with quantity or delivery days
+   - Find section titles that describe deliverables
+
+3. **Semantic grouping:**
+   - Group similar phrases: "Supply of Server at Mumbai" = "Supply Of Server At Akashvani Mumbai" (normalize and extract once)
+   - Each unique combination: action + item + location = one product
+   - Example: "Supply of Server at Mumbai" and "Supply of Server at Pune" = 2 different products (different locations)
+
+4. **Multi-signal validation:**
+   - Check Item Category section
+   - Check BOQ headings
+   - Check section titles
+   - Check consignee list headings
+   - If 2+ signals confirm same deliverable → extract as product
+
+5. **Extract services separately:**
+   - "Supply of Server" = one product
+   - "Installation of Server" = different product
+   - "Configuration of Server" = different product
+   - Each service type is a separate product
+
+6. **Extract location-specific items separately:**
+   - "Server at Mumbai" and "Server at Pune" = DIFFERENT products
+   - Same item at different locations = separate products
+
+7. **Deduplication:**
+   - If same product appears multiple times, extract ONCE
+   - If quantity differs, treat as separate products
+
+8. **DO NOT extract from:**
+   - Eligibility criteria sections
+   - Exemption sections
+   - Requirement sections
+   - Text containing "exemption", "eligibility", "requirement", "criteria"
+
+9. **MANDATORY: Extract ALL products/services from ALL pages**
+
+**EXTRACTION RULES - STRICT ACCURACY:**
+- Extract exact text as written in document - do NOT summarize, shorten, rewrite, or hallucinate
+- If document says "Supply Of Server At Akashvani Mumbai", extract exactly that, not "Server at Mumbai"
+- If a heading or line describes work to be performed, treat it as a potential product
+- Use action-based pattern detection: Look for action verbs (supply, install, configure, setup, commission, deploy, upgrade, maintain, provide, etc.)
+- If you find multiple pages with products/services, extract ALL unique products
+- If document mentions different actions separately, extract each as a separate product/service
+- If product names include locations, extract them as separate products (different locations = different products)
+- If you find a table with products (BOQ/BOM), extract EVERY row as a separate product into productMapping.miiProductStatus
 - If product name is missing, use the item description or first column value
 - If multiple products are listed in one row, split them into separate entries in productMapping.miiProductStatus
-- Minimum requirement: Extract at least 5-10 products if any product list exists in the document
-- If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
+- Use semantic grouping: Group similar phrases referring to the same deliverable
+- Deduplication: Count each unique action + item + location once unless quantity differs
+- Count total: If document says "Total Quantity = 6", ensure you extract 6 unique products/services
+- ⚠️ VALIDATION CHECKLIST - Before adding ANY item to productMapping.miiProductStatus:
+  * ✅ Is it an actual product/service that can be supplied? (e.g., Server, Installation Service, Configuration Service)
+  * ✅ Does it have a clear product/service name? (e.g., "Server", "Installation", "Configuration")
+  * ✅ Is it from a BOQ/BOM/product table or clearly stated product/service description?
+  * ❌ Does it contain "exemption", "eligibility", "requirement", "criteria", "minimum", "must", "should", "shall"?
+     → If YES, DO NOT extract - it's NOT a product! REJECT IT IMMEDIATELY!
+  * ❌ Is it a sentence describing a requirement? (e.g., "MSE Exemption for Years Of Experience Yes")
+     → If YES, DO NOT extract - it's NOT a product! REJECT IT IMMEDIATELY!
+  * ❌ Does it end with "Yes" or "No"? (e.g., "...Experience Yes", "...Content Yes")
+     → If YES, DO NOT extract - it's likely an eligibility criterion! REJECT IT IMMEDIATELY!
+  * ❌ Does it start with "MSE", "MSME", or contain "Exemption"?
+     → If YES, DO NOT extract - it's an exemption/eligibility criterion! REJECT IT IMMEDIATELY!
+  * ❌ Does it look like a checkbox item or eligibility question? (e.g., "MSE Exemption for Years Of Experience Yes")
+     → If YES, DO NOT extract - it's NOT a product! REJECT IT IMMEDIATELY!
+- Count total products/services: If document says "Total Quantity = 6", ensure you extract 6 products/services
+- Search for product headings: Look for "Supply Of", "Installation Of", "Configuration Of" - these are products/services
+- Extract from ALL pages: If page 5 has "Supply of Server at Mumbai" and page 6 has "Supply of Server at Pune", extract BOTH
+- If NO products found after thorough search in BOQ/BOM sections, return empty array [] for productMapping.miiProductStatus
 - ⚠️ REMEMBER: Products go in productMapping.miiProductStatus, NOT in technical.keySpecifications
+- ⚠️ CRITICAL: DO NOT extract eligibility criteria, exemptions, or requirements as products - if text contains these words, skip it!
+
+**EXAMPLE - What IS and IS NOT a Product:**
+
+❌ NOT PRODUCTS - ABSOLUTELY DO NOT EXTRACT THESE (These are eligibility criteria/exemptions):
+- "MSE Exemption for Years Of Experience Yes" ← THIS IS WRONG - DO NOT EXTRACT
+- "Minimum 50% Local Content required" ← THIS IS WRONG - DO NOT EXTRACT
+- "Eligibility Criteria" ← THIS IS WRONG - DO NOT EXTRACT
+- "The Bidder must be an Indian Company" ← THIS IS WRONG - DO NOT EXTRACT
+- "Average annual turnover of ₹20 crores required" ← THIS IS WRONG - DO NOT EXTRACT
+- "Bank Guarantee of 5% required" ← THIS IS WRONG - DO NOT EXTRACT
+- Any text containing: "exemption", "eligibility", "requirement", "criteria", "minimum", "must", "should", "shall"
+- Any text ending with "Yes" or "No" (e.g., "...Experience Yes", "...Content Yes")
+- Any text starting with "MSE", "MSME" followed by "Exemption"
+- Section headers, instructions, requirements, exemptions, criteria
+
+⚠️ CRITICAL: If you see "MSE Exemption for Years Of Experience Yes" in the document, DO NOT extract it as a product. It is an eligibility criterion, NOT a product! REJECT IT IMMEDIATELY!
+
+✅ ACTUAL PRODUCTS/SERVICES - EXTRACT THESE (These are real products/services):
+- "Supply of Server at Akashvani Mumbai" (from product description/heading)
+- "Supply of Server at Akashvani Pune" (from product description/heading)
+- "Installation of Server at Akashvani Mumbai" (from product description/heading)
+- "Installation of Server at Akashvani Pune" (from product description/heading)
+- "Configuration of Server at Akashvani Mumbai" (from product description/heading)
+- "Configuration of Server at Akashvani Pune" (from product description/heading)
+- "Server" (from BOQ table)
+- "Desktop Computer" (from product list)
+- "Office Chair" (from BOM)
+- "Split-Type AC 1.5 Ton" (from item list)
+- "Network Switch 24 Port" (from product table)
+- "Software License" (from BOQ)
+
+⚠️ CRITICAL: If you see "MSE Exemption for Years Of Experience Yes" in the document, DO NOT extract it as a product. It is an eligibility criterion, NOT a product!
+
+**EXAMPLE - Document with Multiple Products (Action-Based Pattern Detection):**
+
+If document shows across multiple pages:
+- Page 5: "Supply Of Server At Akashvani Mumbai" (heading describing work to be performed)
+- Page 6: "Supply Of Server At Akashvani Pune" (heading describing work to be performed)
+- Page 7: "Installation Of Server At Akashvani Mumbai" (heading describing work to be performed)
+- Page 8: "Installation Of Server At Akashvani Pune" (heading describing work to be performed)
+- Page 9: "Configuration Of Server At Akashvani Mumbai" (heading describing work to be performed)
+- Page 10: "Configuration Of Server At Akashvani Pune" (heading describing work to be performed)
+- Document states "Total Quantity = 6"
+
+**Action-Based Pattern Detection:**
+- Found action "Supply" with item "Server" at locations "Mumbai" and "Pune" → 2 unique products
+- Found action "Installation" with item "Server" at locations "Mumbai" and "Pune" → 2 unique products
+- Found action "Configuration" with item "Server" at locations "Mumbai" and "Pune" → 2 unique products
+- Each unique combination: action + item + location = separate product
+- Total: 6 unique products
+
+**Multi-Signal Validation:**
+- Signal 1: Headings confirm "Supply Of Server At..." (2 locations)
+- Signal 2: BOQ/Item Category confirms same items
+- Signal 3: Consignee lists confirm delivery locations
+- At least 2 signals confirm each deliverable → Extract as products
+
+**Extract ALL 6 products/services (exact text as in document):**
+[
+  {"productName": "Supply Of Server At Akashvani Mumbai", "quantity": "1", ...},
+  {"productName": "Supply Of Server At Akashvani Pune", "quantity": "1", ...},
+  {"productName": "Installation Of Server At Akashvani Mumbai", "quantity": "1", ...},
+  {"productName": "Installation Of Server At Akashvani Pune", "quantity": "1", ...},
+  {"productName": "Configuration Of Server At Akashvani Mumbai", "quantity": "1", ...},
+  {"productName": "Configuration Of Server At Akashvani Pune", "quantity": "1", ...}
+]
+
+⚠️ CRITICAL: Extract exact text as written - "Supply Of Server At Akashvani Mumbai" not "Supply of Server at Mumbai"
+⚠️ CRITICAL: If a heading or line describes work to be performed, treat it as a potential product
+⚠️ CRITICAL: Use action-based detection - look for verbs: supply, install, configure, setup, commission, deploy, upgrade, maintain, provide, etc.
 
 **OEM & MODEL EXTRACTION (CRITICAL - MANDATORY):**
 - ⚠️ ALWAYS extract model names - NEVER return "N/A" for model unless absolutely impossible
