@@ -42,15 +42,28 @@ class EligibilityChecklistModel:
             db.close()
 
     @staticmethod
-    def save_checklist(project_id, document_id: Optional[str], user_id, checklist: Dict[str, bool]) -> bool:
+    def save_checklist(project_id, document_id: Optional[Any], user_id, checklist: Dict[str, bool]) -> bool:
         """Save or update eligibility checklist items"""
         db = get_db_session()
         try:
+            # Normalize document_id
+            doc_id_int = None
+            if document_id:
+                try:
+                    doc_id_int = int(str(document_id))
+                except (ValueError, TypeError):
+                    logger.warning(f"⚠️ Could not convert document_id '{document_id}' to int, using None")
+            
+            logger.info(f"💾 Starting save for project_id={project_id}, document_id={doc_id_int}, user_id={user_id}")
+            logger.info(f"📋 Checklist items to save: {checklist}")
+            
             # Save each checklist item
             for criteria_text, is_checked in checklist.items():
+                logger.info(f"  Processing: '{criteria_text}' = {is_checked}")
+                
                 query = db.query(EligibilityChecklist).filter(
                     EligibilityChecklist.project_id == project_id,
-                    EligibilityChecklist.document_id == (int(document_id) if document_id else None),
+                    EligibilityChecklist.document_id == doc_id_int,
                     EligibilityChecklist.user_id == user_id,
                     EligibilityChecklist.criteria_text == criteria_text
                 )
@@ -59,37 +72,50 @@ class EligibilityChecklistModel:
                 
                 if existing_item:
                     # Update existing item
-                    existing_item.is_checked = 1 if is_checked else 0
+                    logger.info(f"  ♻️ Updating existing item")
+                    existing_item.is_checked = bool(is_checked)
                     existing_item.updated_at = datetime.utcnow()
                 else:
                     # Create new item
+                    logger.info(f"  ➕ Creating new item")
                     new_item = EligibilityChecklist(
                         project_id=project_id,
-                        document_id=int(document_id) if document_id else None,
+                        document_id=doc_id_int,
                         user_id=user_id,
                         criteria_text=criteria_text,
-                        is_checked=1 if is_checked else 0
+                        is_checked=bool(is_checked)
                     )
                     db.add(new_item)
             
             db.commit()
-            logger.info(f"✅ Saved eligibility checklist for project {project_id}, document {document_id}")
+            logger.info(f"✅ Saved eligibility checklist for project {project_id}, document {doc_id_int}")
             return True
         except Exception as e:
             db.rollback()
-            logger.error(f"Error saving eligibility checklist: {str(e)}")
+            logger.error(f"❌ Error saving eligibility checklist: {str(e)}")
+            logger.error(f"❌ Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Stack trace:\n{traceback.format_exc()}")
             return False
         finally:
             db.close()
 
     @staticmethod
-    def update_item(project_id, document_id: Optional[str], user_id, criteria_text: str, is_checked: bool) -> bool:
+    def update_item(project_id, document_id: Optional[Any], user_id, criteria_text: str, is_checked: bool) -> bool:
         """Update a single eligibility checklist item"""
         db = get_db_session()
         try:
+            # Normalize document_id
+            doc_id_int = None
+            if document_id:
+                try:
+                    doc_id_int = int(str(document_id))
+                except (ValueError, TypeError):
+                    logger.warning(f"⚠️ Could not convert document_id '{document_id}' to int, using None")
+
             query = db.query(EligibilityChecklist).filter(
                 EligibilityChecklist.project_id == project_id,
-                EligibilityChecklist.document_id == (int(document_id) if document_id else None),
+                EligibilityChecklist.document_id == doc_id_int,
                 EligibilityChecklist.user_id == user_id,
                 EligibilityChecklist.criteria_text == criteria_text
             )
@@ -98,16 +124,16 @@ class EligibilityChecklistModel:
             
             if existing_item:
                 # Update existing item
-                existing_item.is_checked = 1 if is_checked else 0
+                existing_item.is_checked = bool(is_checked)
                 existing_item.updated_at = datetime.utcnow()
             else:
                 # Create new item
                 new_item = EligibilityChecklist(
                     project_id=project_id,
-                    document_id=int(document_id) if document_id else None,
+                    document_id=doc_id_int,
                     user_id=user_id,
                     criteria_text=criteria_text,
-                    is_checked=1 if is_checked else 0
+                    is_checked=bool(is_checked)
                 )
                 db.add(new_item)
             

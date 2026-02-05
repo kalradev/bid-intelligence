@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
-import { exportToPDF } from "../utils/pdfExport";
-import { processDepartmentData, filterEMD } from "../utils/deduplication";
 import { API_BASE_URL } from "../config";
+import { filterEMD, processDepartmentData } from "../utils/deduplication";
+import { exportToPDF } from "../utils/pdfExport";
 
 const BidManagement = () => {
     const [data, setData] = useState(null);
@@ -18,7 +18,7 @@ const BidManagement = () => {
             console.warn("No project name provided for checklist load");
             return;
         }
-        
+
         setIsLoadingChecklist(true);
         try {
             const token = localStorage.getItem('token');
@@ -44,7 +44,7 @@ const BidManagement = () => {
             if (response.ok) {
                 const result = await response.json();
                 console.log("📦 Checklist API response:", result);
-                
+
                 if (result.success && result.checklist) {
                     console.log("✅ Loaded eligibility checklist from API:", result.checklist);
                     setEligibilityChecks(result.checklist);
@@ -70,13 +70,13 @@ const BidManagement = () => {
             if (storedData) {
                 const parsed = JSON.parse(storedData);
                 const bidManagementData = parsed?.data?.departmentalSummaries?.bidManagement;
-                
+
                 // Extract project name and document ID
                 const projName = parsed?.data?.projectName;
                 const docId = parsed?.data?.metadata?.documentId;
                 setProjectName(projName);
                 setDocumentId(docId);
-                
+
                 // Process and deduplicate all list-based fields, filter N/A
                 if (bidManagementData) {
                     try {
@@ -118,10 +118,14 @@ const BidManagement = () => {
 
     // Handle checkbox toggle and save to API
     const handleEligibilityCheck = async (item, checked) => {
+        console.log(`🔵 Button clicked! Item: "${item}", Checked: ${checked}`);
+
         if (!projectName) {
-            console.warn("No project name available");
+            console.warn("❌ No project name available");
             return;
         }
+
+        console.log(`📋 Current state before update:`, eligibilityChecks);
 
         // Store current state for potential revert
         const previousChecks = { ...eligibilityChecks };
@@ -131,17 +135,21 @@ const BidManagement = () => {
             ...eligibilityChecks,
             [item]: checked
         };
+        console.log(`✨ New state (optimistic):`, newChecks);
         setEligibilityChecks(newChecks);
 
         // Save to API
         try {
             const token = localStorage.getItem('token');
             if (!token) {
-                console.warn("No token found, cannot save checklist");
+                console.warn("❌ No token found, cannot save checklist");
                 // Revert state if no token
                 setEligibilityChecks(previousChecks);
                 return;
             }
+
+            console.log(`📤 Saving to API: ${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`);
+            console.log(`📦 Payload:`, { checklist: newChecks, document_id: documentId });
 
             const response = await fetch(
                 `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`,
@@ -153,29 +161,29 @@ const BidManagement = () => {
                     },
                     body: JSON.stringify({
                         checklist: newChecks,
-                        document_id: documentId
+                        document_id: documentId ? String(documentId) : null
                     })
                 }
             );
 
+            console.log(`📥 API Response status: ${response.status}`);
+
             if (response.ok) {
                 const result = await response.json();
+                console.log(`✅ API Response:`, result);
                 if (result.success) {
-                    console.log("✅ Eligibility checklist saved to database");
-                    // Reload from server to ensure sync
-                    setTimeout(() => {
-                        loadEligibilityChecklist(projectName, documentId);
-                    }, 200);
+                    console.log("✅ Eligibility checklist saved to database successfully!");
+                    // No need to reload - optimistic update already applied
                 }
             } else {
-                console.error("Failed to save eligibility checklist:", response.status);
+                console.error("❌ Failed to save eligibility checklist:", response.status);
                 const errorText = await response.text();
-                console.error("Error details:", errorText);
+                console.error("❌ Error details:", errorText);
                 // Revert on error
                 setEligibilityChecks(previousChecks);
             }
         } catch (error) {
-            console.error("Error saving eligibility checklist:", error);
+            console.error("❌ Error saving eligibility checklist:", error);
             // Revert on error
             setEligibilityChecks(previousChecks);
         }
@@ -193,7 +201,7 @@ const BidManagement = () => {
                 <NavbarBidManagement pageTitle="Bid Management" />
                 <div style={{ maxWidth: "900px", margin: "40px auto", padding: "35px", textAlign: "center" }}>
                     <p style={{ fontSize: "18px", color: "#6b7280", marginBottom: "12px" }}>
-                        {localStorage.getItem("analysisData") 
+                        {localStorage.getItem("analysisData")
                             ? "No bid management data available. Please upload and analyze an RFP document first."
                             : "No analysis data found. Please upload and analyze an RFP document first."}
                     </p>
@@ -337,7 +345,7 @@ const BidManagement = () => {
                                         const isYes = checkStatus === true || checkStatus === "true";
                                         const isNo = checkStatus === false || checkStatus === "false";
                                         const isUnselected = checkStatus === undefined || checkStatus === null;
-                                        
+
                                         // Debug logging (remove in production)
                                         if (idx === 0) {
                                             console.log(`🔍 Checklist state for "${item}":`, {
@@ -348,12 +356,12 @@ const BidManagement = () => {
                                                 allChecks: eligibilityChecks
                                             });
                                         }
-                                        
+
                                         return (
-                                            <li 
-                                                key={idx} 
-                                                style={{ 
-                                                    marginBottom: "16px", 
+                                            <li
+                                                key={idx}
+                                                style={{
+                                                    marginBottom: "16px",
                                                     padding: "12px",
                                                     background: isYes ? "#dcfce7" : isNo ? "#fee2e2" : "#f9fafb",
                                                     borderRadius: "8px",
@@ -367,7 +375,7 @@ const BidManagement = () => {
                                                     gap: "16px",
                                                     flexWrap: "wrap"
                                                 }}>
-                                                    <span style={{ 
+                                                    <span style={{
                                                         flex: 1,
                                                         fontSize: "16px",
                                                         color: "#78350f",
@@ -464,9 +472,9 @@ const BidManagement = () => {
 
                         {/* Other Success Factors (excluding the three special ones) */}
                         {Object.entries(data.successFactors)
-                            .filter(([category]) => 
-                                category !== 'emdExemption' && 
-                                category !== 'technicalEvaluationCriteria' && 
+                            .filter(([category]) =>
+                                category !== 'emdExemption' &&
+                                category !== 'technicalEvaluationCriteria' &&
                                 category !== 'preQualificationCriteria'
                             )
                             .map(([category, items]) => {

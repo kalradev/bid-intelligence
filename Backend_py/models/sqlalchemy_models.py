@@ -94,7 +94,7 @@ class EligibilityChecklist(Base):
     document_id = Column(Integer, ForeignKey("project_documents.id", ondelete="CASCADE"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     criteria_text = Column(Text, nullable=False)
-    is_checked = Column(Integer, nullable=True)
+    is_checked = Column(Boolean, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

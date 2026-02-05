@@ -82,10 +82,20 @@ async def analyze_rfp(
         # --- NEW PROJECT-CENTRIC WORKFLOW ---
         if project_name:
             try:
-                from services.role_quota_service import can_create_project
-                allowed, err_msg = can_create_project(current_user)
-                if not allowed:
-                    raise HTTPException(status_code=403, detail=err_msg)
+                # Check if project exists first
+                from services.role_quota_service import get_visible_user_ids
+                visible_ids = get_visible_user_ids(current_user)
+                existing_project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+                
+                # Only check quota if creating a NEW project (not updating existing)
+                if not existing_project:
+                    from services.role_quota_service import can_create_project
+                    allowed, err_msg = can_create_project(current_user)
+                    if not allowed:
+                        raise HTTPException(status_code=403, detail=err_msg)
+                    logger.info(f"✅ Quota check passed for new project: {project_name}")
+                else:
+                    logger.info(f"📁 Updating existing project: {project_name} (skipping quota check)")
                 # ProjectService handles validation, project creation, and incremental analysis
                 result_data = await ProjectService.process_project_document(
                     project_name=project_name,
@@ -554,12 +564,18 @@ async def get_eligibility_checklist(
 @router.post("/eligibility-checklist/{project_name}")
 async def save_eligibility_checklist(
     project_name: str,
-    checklist: Dict[str, bool] = Body(...),
-    document_id: Optional[str] = Body(None),
+    request_body: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user)
 ):
     """Save eligibility checklist for a project/document"""
     try:
+        # Extract checklist and document_id from request body
+        checklist = request_body.get("checklist", {})
+        document_id = request_body.get("document_id")
+        
+        logger.info(f"📥 Saving checklist for project: {project_name}, document: {document_id}")
+        logger.info(f"📋 Checklist data: {checklist}")
+        
         from services.role_quota_service import get_visible_user_ids
         visible_ids = get_visible_user_ids(current_user)
         project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
@@ -569,11 +585,13 @@ async def save_eligibility_checklist(
         user_id = current_user["id"]
         
         # Save checklist to database
+        from models.eligibility_checklist import EligibilityChecklistModel
         success = EligibilityChecklistModel.save_checklist(
             project_id, document_id, user_id, checklist
         )
         
         if success:
+            logger.info(f"✅ Checklist saved successfully for project {project_name}")
             return {
                 "success": True,
                 "message": "Eligibility checklist saved successfully",
@@ -581,12 +599,19 @@ async def save_eligibility_checklist(
                 "document_id": document_id
             }
         else:
-            raise HTTPException(status_code=500, detail="Failed to save eligibility checklist")
+            # Try to get the last error from some shared state or just return a generic one with more info if possible
+            # For now, since save_checklist returns False on any exception, we rely on the Exception block below
+            raise Exception("save_checklist returned False")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error saving eligibility checklist: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": "Failed to save eligibility checklist", "error": str(e), "traceback": error_detail}
+        )
 
 @router.patch("/eligibility-checklist/{project_name}/item")
 async def update_eligibility_item(
