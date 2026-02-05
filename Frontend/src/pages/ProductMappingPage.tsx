@@ -198,8 +198,30 @@ export default function ProductMappingPage() {
     border: "1px solid #e5e7eb",
   };
 
+  const miiFlagWaveCSS =
+    "@keyframes mii-flag-wave{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}.mii-flag-wave{display:inline-block;margin-right:6px;animation:mii-flag-wave 1.2s ease-in-out infinite;vertical-align:middle;line-height:0}";
+
+  const IndianFlagIcon = () => (
+    <span className="mii-flag-wave" aria-hidden title="Indian OEM">
+      <svg width="20" height="14" viewBox="0 0 20 14" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: "block", borderRadius: 1 }}>
+        <rect width="20" height="14" fill="#FF9933" />
+        <rect y="4.67" width="20" height="4.67" fill="#fff" />
+        <rect y="9.33" width="20" height="4.67" fill="#138808" />
+        <circle cx="10" cy="7" r="1.6" fill="#000080" />
+        <circle cx="10" cy="7" r="1.2" fill="#fff" />
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => {
+          const a = (i * 30 * Math.PI) / 180;
+          return (
+            <line key={i} x1={10 + 1.2 * Math.cos(a)} y1={7 + 1.2 * Math.sin(a)} x2={10 + 1.6 * Math.cos(a)} y2={7 + 1.6 * Math.sin(a)} stroke="#000080" strokeWidth="0.25" />
+          );
+        })}
+      </svg>
+    </span>
+  );
+
   return (
     <>
+      <style>{miiFlagWaveCSS}</style>
       {/* NAVBAR */}
       <header
         style={{
@@ -498,20 +520,45 @@ export default function ProductMappingPage() {
                             )}
                           </td>
                           
-                          {/* MII Status Column */}
-                          <td style={{
-                            padding: 10,
-                            color: isMapped ? "#059669" : "#dc2626",
-                            fontWeight: 700
-                          }}>
-                            {hasRecommendations && recommendations[0] ? (
-                              <span style={{ 
-                                color: recommendations[0].miiStatus === "Indian OEM" ? "#10b981" : "#ef4444" 
-                              }}>
-                                {recommendations[0].miiStatus}
-                              </span>
+                          {/* MII Status Column - One status per OEM */}
+                          <td style={{ padding: 10 }}>
+                            {hasRecommendations ? (
+                              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {recommendations.map((rec: any, i: number) => {
+                                  const recMii = rec.miiStatus || "Unmapped";
+                                  const isIndian = recMii === "Indian OEM" || recMii === "MII-Compliant" || recMii === "MII Compliant" || recMii === "Mapped";
+                                  return (
+                                    <div
+                                      key={i}
+                                      style={{
+                                        padding: "6px 8px",
+                                        background: i === 0 ? "rgba(59, 130, 246, 0.05)" : "rgba(243, 244, 246, 0.8)",
+                                        borderRadius: "6px",
+                                        fontSize: "13px",
+                                        fontWeight: 600,
+                                        color: isIndian ? "#059669" : "#dc2626",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "6px"
+                                      }}
+                                    >
+                                      {isIndian && <IndianFlagIcon />}
+                                      {recMii}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             ) : (
-                              miiStatusDisplay
+                              <span style={{
+                                color: isMapped ? "#059669" : "#dc2626",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px"
+                              }}>
+                                {isMapped && <IndianFlagIcon />}
+                                {miiStatusDisplay}
+                              </span>
                             )}
                           </td>
                         </tr>

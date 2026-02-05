@@ -87,34 +87,73 @@ async def enrich_products(products: List[Dict[str, Any]]) -> List[Dict[str, Any]
         enriched.append(p_copy)
     return enriched
 
+def _is_indian_mii(status: Any) -> bool:
+    """True if MII status indicates Indian OEM / MII-compliant."""
+    if not status or not isinstance(status, str):
+        return False
+    s = status.strip().lower()
+    return "indian" in s or ("mii" in s and ("compliant" in s or "mapped" in s))
+
+
 def get_enrichment_stats(products: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Compute product-mapping stats. When products have oemRecommendations,
+    unique OEMs and Indian/Global counts are taken from all recommendations;
+    MII mapping is product-level: a product counts as MII-mapped if it has
+    at least one Indian OEM recommendation.
+    """
     total = len(products)
-    indian_oems = 0
-    global_oems = 0
+    indian_oems = 0   # products with at least one Indian option (for MII %)
+    global_oems = 0   # not used for MII %; kept for compatibility
     unspecified = 0
     enriched = 0
     unique_oems = set()
     unique_indian = set()
     unique_global = set()
-    
+
     for p in products:
-        oem = p.get("oem", "Unspecified")
-        status = p.get("miiStatus", "")
-        
-        if oem != "Unspecified" and oem != "N/A":
-            enriched += 1
-            unique_oems.add(oem)
-            if "Indian" in status:
+        recs = p.get("oemRecommendations") or []
+        has_recs = isinstance(recs, list) and len(recs) > 0
+
+        if has_recs:
+            # Use recommendations: unique OEMs from all recs; product is MII-mapped if any rec is Indian
+            product_has_indian = False
+            for rec in recs:
+                oem = (rec.get("oem") or "").strip()
+                if not oem or oem in ("N/A", "Unspecified"):
+                    continue
+                oem_clean = clean_oem_name(oem)
+                unique_oems.add(oem_clean)
+                status = (rec.get("miiStatus") or "").strip()
+                if _is_indian_mii(status):
+                    product_has_indian = True
+                    unique_indian.add(oem_clean)
+                else:
+                    unique_global.add(oem_clean)
+            if product_has_indian:
                 indian_oems += 1
-                unique_indian.add(oem)
             else:
                 global_oems += 1
-                unique_global.add(oem)
+            enriched += 1
         else:
-            unspecified += 1
-            
+            # Fallback: product-level oem and miiStatus (legacy / no recommendations)
+            oem = p.get("oem", "Unspecified")
+            status = p.get("miiStatus", "")
+            oem = clean_oem_name(oem) if oem else oem
+            if oem and oem not in ("Unspecified", "N/A", ""):
+                enriched += 1
+                unique_oems.add(oem)
+                if _is_indian_mii(status):
+                    indian_oems += 1
+                    unique_indian.add(oem)
+                else:
+                    global_oems += 1
+                    unique_global.add(oem)
+            else:
+                unspecified += 1
+
     mii_compliance = f"{int((indian_oems / total * 100))}%" if total > 0 else "0%"
-    
+
     return {
         "total": total,
         "enriched": enriched,
