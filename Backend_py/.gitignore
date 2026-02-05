@@ -34,7 +34,11 @@ pid_info.txt
 
 # --- Runtime uploads / generated data ---
 uploads/
-data/
+data/temp/
+data/pageTexts/
+data/*.json
+data/*.csv
+data/cache/
 
 # --- Local databases ---
 *.db

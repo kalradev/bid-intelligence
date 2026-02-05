@@ -18,10 +18,8 @@ class ProjectModel:
         db = get_db_session()
         try:
             query = db.query(Project).filter(Project.project_name == project_name)
-            
             if user_id:
                 query = query.filter(Project.user_id == user_id)
-            
             project = query.first()
             if project:
                 return {
@@ -40,14 +38,47 @@ class ProjectModel:
             db.close()
 
     @staticmethod
+    def get_by_name_if_visible(project_name: str, visible_user_ids: List[int]) -> Optional[Dict[str, Any]]:
+        """Get project by name if its owner is in visible_user_ids (for role-based access)."""
+        if not visible_user_ids:
+            return None
+        db = get_db_session()
+        try:
+            project = db.query(Project).filter(
+                Project.project_name == project_name,
+                Project.user_id.in_(visible_user_ids)
+            ).first()
+            if project:
+                return {
+                    "id": project.id,
+                    "project_name": project.project_name,
+                    "tender_id": project.tender_id,
+                    "client_name": project.client_name,
+                    "user_id": project.user_id,
+                    "created_at": project.created_at
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Error getting project: {str(e)}")
+            return None
+        finally:
+            db.close()
+
+    @staticmethod
     def get_all(user_id: int) -> List[Dict[str, Any]]:
-        """Get all projects for a user"""
+        """Get all projects for a single user"""
+        return ProjectModel.get_all_by_user_ids([user_id])
+
+    @staticmethod
+    def get_all_by_user_ids(user_ids: List[int]) -> List[Dict[str, Any]]:
+        """Get all projects owned by any of the given user ids (for role-based visibility)."""
+        if not user_ids:
+            return []
         db = get_db_session()
         try:
             projects = db.query(Project).filter(
-                Project.user_id == user_id
+                Project.user_id.in_(user_ids)
             ).order_by(Project.project_name).all()
-            
             return [{
                 "id": p.id,
                 "project_name": p.project_name,

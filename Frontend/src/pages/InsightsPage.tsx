@@ -1,4 +1,4 @@
-import { Download, LogOut } from "lucide-react";
+import { Download, LogOut, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DepartmentCard from "../components/DepartmentCard";
@@ -15,8 +15,11 @@ export default function InsightsPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
-  // Get project name from localStorage
+  const showTeamLink = userRole === "bid_admin" || userRole === "bid_manager" || userRole === "technical_manager";
+
+  // Get project name and user from localStorage
   useEffect(() => {
     const currentDoc = localStorage.getItem("currentDocument");
     if (currentDoc) {
@@ -40,6 +43,18 @@ export default function InsightsPage() {
       } catch (e) {
         console.error("Error parsing analysisData:", e);
       }
+    }
+
+    const u = localStorage.getItem("user");
+    if (u) {
+      try {
+        const parsed = JSON.parse(u);
+        setUserRole((parsed.role || "").toLowerCase());
+      } catch {
+        setUserRole(null);
+      }
+    } else {
+      setUserRole(null);
     }
   }, []);
 
@@ -149,6 +164,16 @@ export default function InsightsPage() {
           }}>
             Analysis
           </button>
+
+          {showTeamLink && (
+            <button
+              className="navbar-btn"
+              onClick={() => navigate("/team")}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <Users size={18} /> Team
+            </button>
+          )}
 
           {/* Logout Button */}
           <button

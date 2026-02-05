@@ -82,6 +82,10 @@ async def analyze_rfp(
         # --- NEW PROJECT-CENTRIC WORKFLOW ---
         if project_name:
             try:
+                from services.role_quota_service import can_create_project
+                allowed, err_msg = can_create_project(current_user)
+                if not allowed:
+                    raise HTTPException(status_code=403, detail=err_msg)
                 # ProjectService handles validation, project creation, and incremental analysis
                 result_data = await ProjectService.process_project_document(
                     project_name=project_name,
@@ -267,8 +271,11 @@ async def enrich_oems_route(products: List[Dict[str, Any]] = Body(...)):
 @router.get("/projects")
 async def list_projects(current_user: dict = Depends(get_current_user)):
     try:
-        projects = ProjectModel.get_all(current_user["id"])
-        return {"success": True, "projects": projects}
+        from services.role_quota_service import get_visible_user_ids, get_team_quota
+        visible_ids = get_visible_user_ids(current_user)
+        projects = ProjectModel.get_all_by_user_ids(visible_ids)
+        quota = get_team_quota(current_user)
+        return {"success": True, "projects": projects, "teamQuota": quota}
     except Exception as e:
         logger.error(f"Error listing projects: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve projects: {str(e)}")
@@ -277,11 +284,11 @@ async def list_projects(current_user: dict = Depends(get_current_user)):
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
     from core.sqlalchemy_db import get_db_session
     from models.sqlalchemy_models import ProjectDocument
-    
+    from services.role_quota_service import get_visible_user_ids
+
     try:
-        project = ProjectModel.get_by_name(project_name, current_user["id"])
-        if project and project.get('user_id') != current_user["id"]:
-            return {"exists": False}
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if project:
             # Also check if it has a base RFP
             db = get_db_session()
@@ -326,11 +333,11 @@ async def get_project_analysis(
     from models.sqlalchemy_models import ProjectDocument
     
     try:
-        project = ProjectModel.get_by_name(project_name, current_user["id"])
+        from services.role_quota_service import get_visible_user_ids
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if project.get('user_id') != current_user["id"]:
-            raise HTTPException(status_code=403, detail="You don't have access to this project")
         
         db = get_db_session()
         try:
@@ -384,11 +391,11 @@ async def get_project_analysis(
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
     try:
-        project = ProjectModel.get_by_name(project_name, current_user["id"])
+        from services.role_quota_service import get_visible_user_ids
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        if project.get('user_id') != current_user["id"]:
-            raise HTTPException(status_code=403, detail="You don't have access to this project")
         
         from core.sqlalchemy_db import get_db_session
         from models.sqlalchemy_models import ProjectDocument
@@ -519,14 +526,13 @@ async def get_eligibility_checklist(
 ):
     """Get eligibility checklist for a project/document"""
     try:
-        user_id = current_user["id"]
-        
-        # Get project
-        project = ProjectModel.get_by_name(project_name, user_id)
+        from services.role_quota_service import get_visible_user_ids
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
         project_id = project["id"]
+        user_id = current_user["id"]
         
         # Get checklist from database
         checklist = EligibilityChecklistModel.get_by_project_and_document(
@@ -554,14 +560,13 @@ async def save_eligibility_checklist(
 ):
     """Save eligibility checklist for a project/document"""
     try:
-        user_id = current_user["id"]
-        
-        # Get project
-        project = ProjectModel.get_by_name(project_name, user_id)
+        from services.role_quota_service import get_visible_user_ids
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
         project_id = project["id"]
+        user_id = current_user["id"]
         
         # Save checklist to database
         success = EligibilityChecklistModel.save_checklist(
@@ -593,14 +598,13 @@ async def update_eligibility_item(
 ):
     """Update a single eligibility checklist item"""
     try:
-        user_id = current_user["id"]
-        
-        # Get project
-        project = ProjectModel.get_by_name(project_name, user_id)
+        from services.role_quota_service import get_visible_user_ids
+        visible_ids = get_visible_user_ids(current_user)
+        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
         project_id = project["id"]
+        user_id = current_user["id"]
         
         # Update item in database
         success = EligibilityChecklistModel.update_item(

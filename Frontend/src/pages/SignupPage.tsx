@@ -1,9 +1,9 @@
-import { ArrowRight, Lock, Mail, User, UserCircle2, UserPlus, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail, User, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
-import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import womenOwnedLogo from '../assets/women-owned-logo.png';
 import { API_BASE_URL } from '../config';
 
 export default function SignupPage() {
@@ -13,6 +13,7 @@ export default function SignupPage() {
         email: "",
         password: "",
         confirmPassword: "",
+        // Only bid_manager can self-register; Technical Managers are created by Bid Managers
         role: "bid_manager",
     });
 
@@ -69,7 +70,7 @@ export default function SignupPage() {
             }
         } catch (error: any) {
             console.error('Signup error:', error);
-            
+
             // Provide more specific error messages
             if (error.message && error.message.includes('fetch')) {
                 setError(`Cannot connect to server. Please make sure the backend is running on ${API_BASE_URL}`);
@@ -93,12 +94,12 @@ export default function SignupPage() {
     return (
         <div className="auth-page-wrapper">
             {/* Women Owned Logo - Top Left */}
-            <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
+                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
             </div>
             {/* Cache Logo - Top Right */}
-            <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>
+                <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
             </div>
 
             {/* Animated Background */}
@@ -107,7 +108,7 @@ export default function SignupPage() {
                 <div className="auth-bg-gradient-2"></div>
                 <div className="auth-bg-gradient-3"></div>
             </div>
-            
+
             {/* Floating Shapes */}
             <div className="floating-shapes">
                 <div className="shape shape-1"></div>
@@ -367,50 +368,7 @@ export default function SignupPage() {
                             </div>
                         </div>
 
-                        {/* Role Selection */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <label style={{
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                color: '#4f46e5',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                            }}>
-                                <UserCircle2 style={{ width: '16px', height: '16px' }} />
-                                Select Your Role
-                            </label>
-                            <select
-                                name="role"
-                                value={formData.role}
-                                onChange={handleChange}
-                                required
-                                style={{
-                                    width: '100%',
-                                    padding: '14px 16px',
-                                    borderRadius: '12px',
-                                    border: '2px solid rgba(139, 92, 246, 0.15)',
-                                    background: 'rgba(255, 255, 255, 0.9)',
-                                    fontSize: '15px',
-                                    color: '#111827',
-                                    outline: 'none',
-                                    transition: 'all 0.2s ease',
-                                    boxSizing: 'border-box',
-                                    cursor: 'pointer'
-                                }}
-                                onFocus={(e) => {
-                                    e.currentTarget.style.borderColor = '#6366f1';
-                                    e.currentTarget.style.boxShadow = '0 0 0 4px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(139, 92, 246, 0.15)';
-                                }}
-                                onBlur={(e) => {
-                                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.15)';
-                                    e.currentTarget.style.boxShadow = 'none';
-                                }}
-                            >
-                                <option value="bid_manager">Bid Manager</option>
-                                <option value="technical_manager">Technical Manager</option>
-                            </select>
-                        </div>
+                        {/* Role is fixed as bid_manager - Technical Managers are created by Bid Managers */}
 
                         {/* Error Message */}
                         {error && (
@@ -429,16 +387,16 @@ export default function SignupPage() {
                         )}
 
                         {/* Submit Button */}
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isLoading}
                             style={{
                                 width: '100%',
                                 padding: '16px',
                                 borderRadius: '12px',
                                 border: 'none',
-                                background: isLoading 
-                                    ? '#9ca3af' 
+                                background: isLoading
+                                    ? '#9ca3af'
                                     : '#6366f1', /* Solid indigo - no gradient */
                                 color: '#fff',
                                 fontSize: '16px',
@@ -449,8 +407,8 @@ export default function SignupPage() {
                                 justifyContent: 'center',
                                 gap: '8px',
                                 transition: 'all 0.3s ease',
-                                boxShadow: isLoading 
-                                    ? 'none' 
+                                boxShadow: isLoading
+                                    ? 'none'
                                     : '0 8px 24px rgba(99, 102, 241, 0.4)',
                                 marginTop: '8px'
                             }}
