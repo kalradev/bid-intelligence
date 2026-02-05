@@ -1,12 +1,41 @@
-import { ChevronRight, Cpu, FileSearch, Globe2, LineChart, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { ChevronRight, Cpu, FileSearch, Globe2, LineChart, LogOut, Users } from "lucide-react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 // Logo imports
-import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import womenOwnedLogo from '../assets/women-owned-logo.png';
+import BidAdminDashboardPage from "./BidAdminDashboardPage";
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [userRole, setUserRole] = useState<string | null>(() => {
+    try {
+      const u = localStorage.getItem("user");
+      if (u) return (JSON.parse(u).role || "").toLowerCase();
+    } catch { }
+    return null;
+  });
+
+  useEffect(() => {
+    const u = localStorage.getItem("user");
+    if (u) {
+      try {
+        const parsed = JSON.parse(u);
+        setUserRole((parsed.role || "").toLowerCase());
+      } catch {
+        setUserRole(null);
+      }
+    } else {
+      setUserRole(null);
+    }
+  }, []);
+
+  if (userRole === "bid_admin") {
+    return <BidAdminDashboardPage />;
+  }
+
+  const showTeamLink = userRole === "bid_manager";
 
   const handleLogout = () => {
     // Clear all auth data
@@ -15,7 +44,7 @@ export default function LandingPage() {
     localStorage.removeItem('analysisData');
     localStorage.removeItem('currentDocument');
     localStorage.removeItem('recentRfpAnalysis');
-    
+
     toast.success("Logged out successfully!");
     navigate("/login");
   };
@@ -24,12 +53,12 @@ export default function LandingPage() {
     <div className="universal-page-wrapper">
       {/* Women Owned Logo - Top Left */}
       <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
       </div>
-      
+
       {/* Cache Logo - Top Right */}
       <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-        <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+        <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
       </div>
 
       {/* Background Animation */}
@@ -58,9 +87,20 @@ export default function LandingPage() {
             AI-driven insights, and real-time opportunity mapping — all in one intuitive platform.
           </p>
 
-          <button onClick={() => navigate("/upload")} className="modern-button">
-            Get Started <ChevronRight className="w-5 h-5" />
-          </button>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => navigate("/upload")} className="modern-button">
+              Get Started <ChevronRight className="w-5 h-5" />
+            </button>
+            {showTeamLink && (
+              <button
+                onClick={() => navigate("/team")}
+                className="modern-button"
+                style={{ background: "linear-gradient(135deg, #059669 0%, #047857 100%)", color: "white", border: "none", borderRadius: 12, padding: "14px 24px", fontSize: 16, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, boxShadow: "0 4px 14px rgba(5, 150, 105, 0.35)" }}
+              >
+                <Users className="w-5 h-5" /> Team & Quota
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Interactive Feature Highlights */}

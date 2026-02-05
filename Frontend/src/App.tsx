@@ -10,14 +10,18 @@ import LandingPage from "./pages/LandingPage";
 import Legal from "./pages/Legal.jsx";
 import LoginPage from "./pages/LoginPage";
 import ProductMappingPage from "./pages/ProductMappingPage";
+import ProjectResultsPage from "./pages/ProjectResultsPage";
 import SCM from "./pages/SCM.jsx";
 import SignupPage from "./pages/SignupPage";
 import SmartRfpPage from "./pages/SmartRfpPage";
+import TeamPage from "./pages/TeamPage";
+import TeamProjectsPage from "./pages/TeamProjectsPage";
+import TeamQuotaPage from "./pages/TeamQuotaPage";
 import Technical from "./pages/Technical.jsx";
 import UploadPage from "./pages/UploadPage";
 
+import AccountPage from "./pages/AccountPage";
 import DocumentViewer from "./pages/DocumentViewer";
-
 
 import { Route, Routes, useLocation } from "react-router-dom";
 
@@ -39,10 +43,12 @@ export default function App() {
     "/scm",
 
     "/document-viewer",
-    // ⬅️ Make navbar full width like Smart RFP
+    "/team",
+    "/team-quota",
+    "/project-results",
   ];
 
-  const isFullWidth = fullWidthPages.includes(currentPath);
+  const isFullWidth = fullWidthPages.includes(currentPath) || currentPath.startsWith("/project-results") || currentPath.startsWith("/team-projects");
 
   return (
     <>
@@ -70,6 +76,11 @@ export default function App() {
           <Route path="/global-intelligence" element={<GlobalIntelligencePage />} />
           <Route path="/technical" element={<Technical />} />
           <Route path="/bid-management" element={<BidManagement />} />
+          <Route path="/team" element={<TeamPage />} />
+          <Route path="/project-results/:projectName" element={<ProjectResultsPage />} />
+          <Route path="/team-projects/:bidManagerId" element={<TeamProjectsPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/team-quota" element={<TeamQuotaPage />} />
 
           <Route path="/document-viewer" element={<DocumentViewer />} />
         </Routes>

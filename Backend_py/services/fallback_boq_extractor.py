@@ -33,9 +33,9 @@ def is_section_header(text: str) -> bool:
     
     # Common section header patterns
     header_patterns = [
-        r'^[A-Z\s]+:?\s*[\.\_\-]{3,}',  # "SECTION NAME: ..."
-        r'^[A-Z\s]+\([A-Z\s]+\)',  # "SECTION (SUBSECTION)"
-        r'^(GENERAL|PARTICULARS|REQUEST|SCOPE|SERVICE|SPECIAL|AUDIT|FORCE|ITIL|TICKETING|EXIT)',  # Common section names
+        r'^[A-Z\s,]+:?\s*[\.\_\-]{3,}',  # "SECTION NAME: ..."
+        r'^[A-Z\s,]+\([A-Z\s,]+\)',  # "SECTION (SUBSECTION)"
+        r'^(GENERAL|PARTICULARS|REQUEST|SCOPE|SERVICE|SPECIAL|AUDIT|FORCE|ITIL|TICKETING|EXIT|CONTRACT|PAYMENT|WARRANTY|PENALTY)',  # Common section names
     ]
     
     for pattern in header_patterns:
@@ -135,10 +135,13 @@ def looks_like_product(text: str) -> bool:
     
     product_indicators = [
         r'[A-Z]{2,}\d+',  # Model codes like "ABC123", "X1-Carbon"
-        r'\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah)',  # Technical specs
-        r'(server|switch|router|firewall|sensor|device|equipment|system|software|license)',
-        r'(laptop|desktop|tablet|monitor|printer|scanner|camera)',
-        r'(processor|memory|storage|hardware|component)',
+        r'\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|core|cores|ram|ssd|hdd)',  # Technical specs
+        r'(server|switch|router|firewall|sensor|device|equipment|system|software|license|subscription|module)',
+        r'(platform|solution|management|interface|gateway|controller|appliance|application|tool|utility)',
+        r'(security|network|cloud|storage|backup|recovery|monitoring|analytical|intelligence|analytics)',
+        r'(laptop|desktop|tablet|monitor|printer|scanner|camera|workstation|handset|terminal)',
+        r'(processor|memory|storage|hardware|component|peripheral|accessory|cable|connector)',
+        r'\b(siem|soar|itsm|tip|dast|sast|iam|pam|endpoint|antivirus|edr|xdr|vulnerability|scanner|gsoc)\b',
     ]
     
     text_lower = text.lower()
@@ -153,7 +156,7 @@ def looks_like_product(text: str) -> bool:
         return False
     
     # If it's too long (likely a sentence/instruction), skip
-    if len(text) > 150:
+    if len(text) > 300:  # Increased from 150 as software products/platforms often have long descriptions
         return False
     
     # Default: if it passes other filters, consider it
@@ -174,10 +177,11 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
     for i, line in enumerate(lines):
         line_lower = line.lower().strip()
         # Prioritize actual BOQ sections
-        if re.search(r'annexure\s+(ii|iii|2|3)', line_lower) or \
-           re.search(r'bill\s+of\s+(quantities|materials|qty)', line_lower) or \
+        if re.search(r'annexure\s+(ii|iii|iv|v|2|3|4|5)', line_lower) or \
+           re.search(r'bill\s+of\s+(quantities|materials|qty|quantity)', line_lower) or \
            re.search(r'\bboq\b', line_lower) or \
-           re.search(r'\bbom\b', line_lower):
+           re.search(r'\bbom\b', line_lower) or \
+           re.search(r'schedule\s+of\s+items', line_lower):
             boq_section_starts.append(i)
             logger.info(f"   Found potential BOQ section at line {i}: {line[:80]}")
     
@@ -195,9 +199,9 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
     
     # Extract table rows from BOQ sections only
     all_table_rows = []
-    for boq_section_start in boq_section_starts[:5]:  # Check up to 5 sections
-        # Extract table rows from BOQ section (next 200 lines after header)
-        table_section = lines[boq_section_start:min(boq_section_start + 200, len(lines))]
+    for boq_section_start in boq_section_starts[:10]:  # Check up to 10 sections
+        # Extract table rows from BOQ section (next 500 lines after header)
+        table_section = lines[boq_section_start:min(boq_section_start + 500, len(lines))]
         
         # Look for rows with delimiters (| or tab) - these are likely table rows
         for line in table_section:
@@ -276,7 +280,7 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
             elif '\t' in remaining_text:
                 cells = [c.strip() for c in remaining_text.split('\t') if c.strip()]
             else:
-                cells = [c.strip() for c in re.split(r'\s{3,}', remaining_text) if c.strip()]
+                cells = [c.strip() for c in re.split(r'\s{2,}', remaining_text) if c.strip()]
             
             if not cells:
                 cells = [remaining_text] if remaining_text else []
@@ -367,7 +371,7 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
         
         # Additional check: If it doesn't have any technical terms, model numbers, or specs, skip
         # This catches generic headers that passed other checks
-        has_technical_content = bool(re.search(r'[A-Z]{2,}\d+|\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|server|switch|router|firewall|sensor|device|equipment|system|software|license|laptop|desktop|tablet|monitor|printer|scanner|camera|processor|memory|storage|hardware|component)', product_name, re.IGNORECASE))
+        has_technical_content = bool(re.search(r'[A-Z]{2,}\d+|\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|core|ram|ssd|hdd|server|switch|router|firewall|sensor|device|equipment|system|software|license|laptop|desktop|tablet|monitor|printer|scanner|camera|processor|memory|storage|hardware|component|platform|solution|management|interface|gateway|controller|appliance|application|tool|security|network|cloud|storage|backup|recovery|monitoring|analytical|intelligence|analytics|siem|soar|itsm|tip|dast|sast|iam|pam|endpoint|antivirus|edr|xdr|vulnerability|scanner)', product_name, re.IGNORECASE))
         if not has_technical_content and len(product_name) < 20:
             # Short text without technical content is likely not a product
             skipped_count += 1

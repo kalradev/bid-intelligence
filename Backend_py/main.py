@@ -1,3 +1,17 @@
+from pathlib import Path
+import sys
+
+# Ensure Backend_py is on path so "data" and other packages resolve correctly when run from any cwd
+_backend_dir = Path(__file__).resolve().parent
+if str(_backend_dir) not in sys.path:
+    sys.path.insert(0, str(_backend_dir))
+
+# Load .env from Backend_py so password/port are correct
+_env_file = _backend_dir / ".env"
+if _env_file.exists():
+    from dotenv import load_dotenv
+    load_dotenv(_env_file)
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -8,6 +22,7 @@ import asyncio
 import os
 
 from core.config import settings
+from core.sqlalchemy_db import init_db
 from api.rfp_routes import router as rfp_router
 from api.auth_routes import router as auth_router
 
@@ -21,10 +36,13 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS Middleware
+# CORS Middleware - use CORS_ORIGINS from env for deployment
+_cors_origins = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+if not _cors_origins:
+    _cors_origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,6 +86,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"success": False, "error": str(exc), "message": "An unexpected error occurred"}
     )
+
+# Initialize PostgreSQL tables on startup (creates if not exist)
+try:
+    init_db()
+except Exception as e:
+    logger.warning(f"⚠️ Could not init DB tables (ensure PostgreSQL is running): {e}")
 
 # Register Routes
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])

@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     NODE_ENV: str = "development"
     MAX_FILE_SIZE_MB: int = 50
     
+    # CORS - For deployment, set allowed origins (comma-separated)
+    # e.g. CORS_ORIGINS=https://yourdomain.com,https://app.yourdomain.com
+    CORS_ORIGINS: str = "*"  # "*" allows all; restrict in production
+    
     # Database Config (PostgreSQL) - Kept for migration period
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "12345"  # Match your PostgreSQL password
@@ -24,8 +28,14 @@ class Settings(BaseSettings):
     MONGODB_STRING: Optional[str] = None  # Connection string from .env
     MONGODB_DB: str = "bid_intelligence"  # Database name in MongoDB
     
+    # JWT
+    JWT_SECRET: str = "change-me-in-production"
+    
+    # Team quota: max projects per Bid Manager team (shared among BM + their Technical Managers)
+    TEAM_PROJECT_LIMIT: int = 10
+
     # Versioning
-    PROCESSING_VERSION: int = 31
+    PROCESSING_VERSION: int = 32
     
     # Paths
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -1,15 +1,31 @@
+import { LayoutDashboard, LogOut, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { RefreshCw, LogOut } from "lucide-react";
 // Logo imports
-import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import womenOwnedLogo from '../assets/women-owned-logo.png';
 import { API_BASE_URL } from '../config';
 
 export default function UploadPage() {
     const navigate = useNavigate();
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+
+    useEffect(() => {
+        const u = localStorage.getItem("user");
+        if (u) {
+            try {
+                const parsed = JSON.parse(u);
+                setUserRole((parsed.role || "").toLowerCase());
+            } catch {
+                setUserRole(null);
+            }
+        } else {
+            setUserRole(null);
+        }
+    }, []);
+
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisTime, setAnalysisTime] = useState(0); // Time in seconds
     const [analysisStage, setAnalysisStage] = useState<string>("");
@@ -32,6 +48,7 @@ export default function UploadPage() {
     const [projectSearchTerm, setProjectSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const [teamQuota, setTeamQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -40,31 +57,38 @@ export default function UploadPage() {
                 if (!token) {
                     console.error("No authentication token found");
                     setAllProjects([]);
+                    setTeamQuota(null);
                     return;
                 }
-                
+
                 const response = await fetch(`${API_BASE_URL}/api/rfp/projects`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
-                
+
                 if (response.status === 401) {
-                    // Token expired or invalid
                     localStorage.removeItem('token');
                     localStorage.removeItem('user');
                     console.error("Authentication failed");
                     setAllProjects([]);
+                    setTeamQuota(null);
                     return;
                 }
-                
+
                 const data = await response.json();
                 if (data.success) {
                     setAllProjects(data.projects);
+                    if (data.teamQuota && data.teamQuota.appliesToTeam) {
+                        setTeamQuota(data.teamQuota);
+                    } else {
+                        setTeamQuota(null);
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching projects:", error);
                 setAllProjects([]);
+                setTeamQuota(null);
             }
         };
         fetchProjects();
@@ -87,12 +111,12 @@ export default function UploadPage() {
             const handleWheel = (e: WheelEvent) => {
                 const target = e.target as HTMLElement;
                 const scrollableArea = dropdownRef.current?.querySelector('[style*="overflowY"]') as HTMLElement;
-                
+
                 if (scrollableArea && (scrollableArea.contains(target) || scrollableArea === target)) {
                     const { scrollTop, scrollHeight, clientHeight } = scrollableArea;
                     const isAtTop = scrollTop <= 0;
                     const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
-                    
+
                     // Only prevent default if we're at the boundaries
                     if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
                         e.preventDefault();
@@ -101,7 +125,7 @@ export default function UploadPage() {
                     e.stopPropagation();
                 }
             };
-            
+
             document.addEventListener("wheel", handleWheel, { passive: false });
             return () => {
                 document.removeEventListener("wheel", handleWheel);
@@ -115,26 +139,26 @@ export default function UploadPage() {
         const now = new Date();
         const isToday = date.toDateString() === now.toDateString();
         const isThisYear = date.getFullYear() === now.getFullYear();
-        
-        const timeStr = date.toLocaleTimeString('en-US', { 
-            hour: 'numeric', 
+
+        const timeStr = date.toLocaleTimeString('en-US', {
+            hour: 'numeric',
             minute: '2-digit',
-            hour12: true 
+            hour12: true
         });
-        
+
         if (isToday) {
             // Today: just show time "2:30 PM"
             return timeStr;
         } else if (isThisYear) {
             // This year: "Jan 19, 2:30 PM"
-            return date.toLocaleDateString('en-US', { 
-                month: 'short', 
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
                 day: 'numeric'
             }) + ', ' + timeStr;
         } else {
             // Other years: "Jan 19, 2024, 2:30 PM"
-            return date.toLocaleDateString('en-US', { 
-                month: 'short', 
+            return date.toLocaleDateString('en-US', {
+                month: 'short',
                 day: 'numeric',
                 year: 'numeric'
             }) + ', ' + timeStr;
@@ -161,7 +185,7 @@ export default function UploadPage() {
                 setIsLoadingStatus(false);
                 return;
             }
-            
+
             const response = await fetch(`${API_BASE_URL}/api/rfp/project-status/${encodeURIComponent(name)}`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -196,7 +220,7 @@ export default function UploadPage() {
     const handleProjectSelect = (selectedName: string) => {
         console.log("🔵 handleProjectSelect called:", selectedName);
         console.log("   Previous projectName:", projectName);
-        
+
         if (!selectedName) {
             setProjectName("");
             setProjectExists(null);
@@ -204,16 +228,16 @@ export default function UploadPage() {
             setIsDropdownOpen(false);
             return;
         }
-        
+
         // Clear previous project state when switching to a different project
         setProjectExists(null);
         setTenderId("");
         setClientName("");
-        
+
         setProjectName(selectedName);
         // Don't set projectSearchTerm - it should only be used for search filtering
         setIsDropdownOpen(false);
-        
+
         console.log("✅ Project changed to:", selectedName);
         checkProjectStatus(selectedName);
     };
@@ -237,7 +261,7 @@ export default function UploadPage() {
         localStorage.removeItem('analysisData');
         localStorage.removeItem('currentDocument');
         localStorage.removeItem('recentRfpAnalysis');
-        
+
         toast.success("Logged out successfully!");
         navigate("/login");
     };
@@ -395,7 +419,7 @@ export default function UploadPage() {
                 setIsAnalyzing(false);
                 return;
             }
-            
+
             const formData = new FormData();
             uploadedFiles.forEach(file => formData.append("files", file));
             formData.append("project_name", projectName);
@@ -471,13 +495,13 @@ export default function UploadPage() {
     return (
         <div className="universal-page-wrapper">
             {/* Women Owned Logo - Top Left */}
-            <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
+                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
             </div>
-            
+
             {/* Cache Logo - Top Right */}
-            <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>
+                <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
             </div>
 
             <div className="universal-background">
@@ -580,6 +604,12 @@ export default function UploadPage() {
                         <h3 style={{ margin: 0, fontSize: "18px", color: "#111827", fontWeight: "700", background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                             {isExistingMode ? "Existing Project Selection" : "Define New Project"}
                         </h3>
+
+                        {!isExistingMode && teamQuota && teamQuota.appliesToTeam && (
+                            <div style={{ padding: "12px 16px", borderRadius: "12px", background: teamQuota.teamProjectsLeft === 0 ? "rgba(239, 68, 68, 0.1)" : "rgba(79, 70, 229, 0.08)", border: `1px solid ${teamQuota.teamProjectsLeft === 0 ? "rgba(239, 68, 68, 0.3)" : "rgba(79, 70, 229, 0.2)"}`, fontSize: "14px", color: "#374151" }}>
+                                <strong>Team quota:</strong> {teamQuota.teamProjectsUsed} / {teamQuota.teamProjectsLimit} used — <strong>{teamQuota.teamProjectsLeft} left</strong>
+                            </div>
+                        )}
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -713,182 +743,182 @@ export default function UploadPage() {
                                                         touchAction: "pan-y"
                                                     }}
                                                 >
-                                                {/* Search Input */}
-                                                <div style={{ 
-                                                    padding: "12px", 
-                                                    borderBottom: "1px solid rgba(99, 102, 241, 0.1)", 
-                                                    position: "relative", 
-                                                    background: "#ffffff",
-                                                    zIndex: 1
-                                                }}>
-                                                    <input
-                                                        type="text"
-                                                        placeholder="🔍 Search projects..."
-                                                        value={projectSearchTerm}
-                                                        onChange={(e) => {
-                                                            setProjectSearchTerm(e.target.value);
-                                                            setIsDropdownOpen(true);
-                                                        }}
-                                                        onClick={(e) => e.stopPropagation()}
-                                                        onFocus={(e) => {
-                                                            e.stopPropagation();
-                                                            setIsDropdownOpen(true);
-                                                            e.currentTarget.style.borderColor = "#6366f1";
-                                                        }}
-                                                        onBlur={(e) => {
-                                                            e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
-                                                        }}
-                                                        style={{
-                                                            width: "100%",
-                                                            padding: "10px 12px",
-                                                            paddingRight: projectSearchTerm ? "35px" : "12px",
-                                                            borderRadius: "8px",
-                                                            border: "1px solid rgba(99, 102, 241, 0.2)",
-                                                            fontSize: "14px",
-                                                            outline: "none",
-                                                            transition: "all 0.2s ease"
-                                                        }}
-                                                    />
-                                                    {projectSearchTerm && (
-                                                        <button
-                                                            onClick={(e) => {
+                                                    {/* Search Input */}
+                                                    <div style={{
+                                                        padding: "12px",
+                                                        borderBottom: "1px solid rgba(99, 102, 241, 0.1)",
+                                                        position: "relative",
+                                                        background: "#ffffff",
+                                                        zIndex: 1
+                                                    }}>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="🔍 Search projects..."
+                                                            value={projectSearchTerm}
+                                                            onChange={(e) => {
+                                                                setProjectSearchTerm(e.target.value);
+                                                                setIsDropdownOpen(true);
+                                                            }}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            onFocus={(e) => {
                                                                 e.stopPropagation();
-                                                                setProjectSearchTerm("");
+                                                                setIsDropdownOpen(true);
+                                                                e.currentTarget.style.borderColor = "#6366f1";
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)";
                                                             }}
                                                             style={{
-                                                                position: "absolute",
-                                                                right: "20px",
-                                                                top: "50%",
-                                                                transform: "translateY(-50%)",
-                                                                background: "transparent",
-                                                                border: "none",
-                                                                cursor: "pointer",
-                                                                fontSize: "18px",
-                                                                color: "#9ca3af",
-                                                                padding: "4px",
-                                                                display: "flex",
-                                                                alignItems: "center",
-                                                                justifyContent: "center",
-                                                                transition: "color 0.2s ease"
+                                                                width: "100%",
+                                                                padding: "10px 12px",
+                                                                paddingRight: projectSearchTerm ? "35px" : "12px",
+                                                                borderRadius: "8px",
+                                                                border: "1px solid rgba(99, 102, 241, 0.2)",
+                                                                fontSize: "14px",
+                                                                outline: "none",
+                                                                transition: "all 0.2s ease"
                                                             }}
-                                                            onMouseEnter={(e) => {
-                                                                e.currentTarget.style.color = "#6366f1";
-                                                            }}
-                                                            onMouseLeave={(e) => {
-                                                                e.currentTarget.style.color = "#9ca3af";
-                                                            }}
-                                                        >
-                                                            ×
-                                                        </button>
-                                                    )}
-                                                </div>
-                                                {/* Project List */}
-                                                <div
-                                                    onWheel={(e) => {
-                                                        e.stopPropagation();
-                                                        const element = e.currentTarget;
-                                                        const { scrollTop, scrollHeight, clientHeight } = element;
-                                                        const isAtTop = scrollTop === 0;
-                                                        const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
-                                                        
-                                                        if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
-                                                            e.preventDefault();
-                                                        }
-                                                    }}
-                                                    onTouchMove={(e) => {
-                                                        e.stopPropagation();
-                                                    }}
-                                                    style={{
-                                                        maxHeight: "320px",
-                                                        overflowY: "auto",
-                                                        overflowX: "hidden",
-                                                        background: "#ffffff",
-                                                        position: "relative",
-                                                        zIndex: 1,
-                                                        WebkitOverflowScrolling: "touch",
-                                                        touchAction: "pan-y",
-                                                        overscrollBehavior: "contain"
-                                                    }}
-                                                >
-                                                    {filteredProjects.length > 0 ? (
-                                                        filteredProjects.map((p: any) => (
-                                                            <div
-                                                                key={p.id}
+                                                        />
+                                                        {projectSearchTerm && (
+                                                            <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    console.log("🟢 Project item clicked:", p.project_name);
-                                                                    handleProjectSelect(p.project_name);
+                                                                    setProjectSearchTerm("");
                                                                 }}
                                                                 style={{
-                                                                    padding: "12px 16px",
+                                                                    position: "absolute",
+                                                                    right: "20px",
+                                                                    top: "50%",
+                                                                    transform: "translateY(-50%)",
+                                                                    background: "transparent",
+                                                                    border: "none",
                                                                     cursor: "pointer",
-                                                                    fontSize: "14px",
-                                                                    color: "#111827",
-                                                                    transition: "all 0.2s ease",
-                                                                    borderBottom: "1px solid rgba(99, 102, 241, 0.05)",
-                                                                    backgroundColor: projectName === p.project_name ? "rgba(99, 102, 241, 0.12)" : "#ffffff",
+                                                                    fontSize: "18px",
+                                                                    color: "#9ca3af",
+                                                                    padding: "4px",
                                                                     display: "flex",
-                                                                    justifyContent: "space-between",
                                                                     alignItems: "center",
-                                                                    gap: "12px"
+                                                                    justifyContent: "center",
+                                                                    transition: "color 0.2s ease"
                                                                 }}
                                                                 onMouseEnter={(e) => {
-                                                                    if (projectName !== p.project_name) {
-                                                                        e.currentTarget.style.backgroundColor = "rgba(99, 102, 241, 0.08)";
-                                                                    }
+                                                                    e.currentTarget.style.color = "#6366f1";
                                                                 }}
                                                                 onMouseLeave={(e) => {
-                                                                    if (projectName !== p.project_name) {
-                                                                        e.currentTarget.style.backgroundColor = "#ffffff";
-                                                                    }
+                                                                    e.currentTarget.style.color = "#9ca3af";
                                                                 }}
                                                             >
-                                                                <span style={{ flex: 1, fontWeight: "500" }}>{p.project_name}</span>
-                                                                <span style={{ 
-                                                                    fontSize: "11px", 
-                                                                    color: "#6b7280", 
-                                                                    whiteSpace: "nowrap",
-                                                                    fontWeight: "400"
-                                                                }}>
-                                                                    {p.created_at ? formatDate(p.created_at) : ''}
-                                                                </span>
+                                                                ×
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {/* Project List */}
+                                                    <div
+                                                        onWheel={(e) => {
+                                                            e.stopPropagation();
+                                                            const element = e.currentTarget;
+                                                            const { scrollTop, scrollHeight, clientHeight } = element;
+                                                            const isAtTop = scrollTop === 0;
+                                                            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+
+                                                            if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
+                                                                e.preventDefault();
+                                                            }
+                                                        }}
+                                                        onTouchMove={(e) => {
+                                                            e.stopPropagation();
+                                                        }}
+                                                        style={{
+                                                            maxHeight: "320px",
+                                                            overflowY: "auto",
+                                                            overflowX: "hidden",
+                                                            background: "#ffffff",
+                                                            position: "relative",
+                                                            zIndex: 1,
+                                                            WebkitOverflowScrolling: "touch",
+                                                            touchAction: "pan-y",
+                                                            overscrollBehavior: "contain"
+                                                        }}
+                                                    >
+                                                        {filteredProjects.length > 0 ? (
+                                                            filteredProjects.map((p: any) => (
+                                                                <div
+                                                                    key={p.id}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        console.log("🟢 Project item clicked:", p.project_name);
+                                                                        handleProjectSelect(p.project_name);
+                                                                    }}
+                                                                    style={{
+                                                                        padding: "12px 16px",
+                                                                        cursor: "pointer",
+                                                                        fontSize: "14px",
+                                                                        color: "#111827",
+                                                                        transition: "all 0.2s ease",
+                                                                        borderBottom: "1px solid rgba(99, 102, 241, 0.05)",
+                                                                        backgroundColor: projectName === p.project_name ? "rgba(99, 102, 241, 0.12)" : "#ffffff",
+                                                                        display: "flex",
+                                                                        justifyContent: "space-between",
+                                                                        alignItems: "center",
+                                                                        gap: "12px"
+                                                                    }}
+                                                                    onMouseEnter={(e) => {
+                                                                        if (projectName !== p.project_name) {
+                                                                            e.currentTarget.style.backgroundColor = "rgba(99, 102, 241, 0.08)";
+                                                                        }
+                                                                    }}
+                                                                    onMouseLeave={(e) => {
+                                                                        if (projectName !== p.project_name) {
+                                                                            e.currentTarget.style.backgroundColor = "#ffffff";
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <span style={{ flex: 1, fontWeight: "500" }}>{p.project_name}</span>
+                                                                    <span style={{
+                                                                        fontSize: "11px",
+                                                                        color: "#6b7280",
+                                                                        whiteSpace: "nowrap",
+                                                                        fontWeight: "400"
+                                                                    }}>
+                                                                        {p.created_at ? formatDate(p.created_at) : ''}
+                                                                    </span>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <div
+                                                                style={{
+                                                                    padding: "20px 16px",
+                                                                    textAlign: "center",
+                                                                    color: "#9ca3af",
+                                                                    fontSize: "14px",
+                                                                    background: "#ffffff",
+                                                                    position: "relative",
+                                                                    zIndex: 1
+                                                                }}
+                                                            >
+                                                                No projects found matching "{projectSearchTerm}"
                                                             </div>
-                                                        ))
-                                                    ) : (
+                                                        )}
+                                                    </div>
+                                                    {/* Footer with count */}
+                                                    {filteredProjects.length > 0 && (
                                                         <div
                                                             style={{
-                                                                padding: "20px 16px",
-                                                                textAlign: "center",
-                                                                color: "#9ca3af",
-                                                                fontSize: "14px",
-                                                                background: "#ffffff",
+                                                                padding: "8px 16px",
+                                                                borderTop: "1px solid rgba(99, 102, 241, 0.1)",
+                                                                fontSize: "12px",
+                                                                color: "#6b7280",
+                                                                background: "#f9fafb",
                                                                 position: "relative",
                                                                 zIndex: 1
                                                             }}
                                                         >
-                                                            No projects found matching "{projectSearchTerm}"
+                                                            Showing {filteredProjects.length} of {allProjects.length} projects
                                                         </div>
                                                     )}
                                                 </div>
-                                                {/* Footer with count */}
-                                                {filteredProjects.length > 0 && (
-                                                    <div
-                                                        style={{
-                                                            padding: "8px 16px",
-                                                            borderTop: "1px solid rgba(99, 102, 241, 0.1)",
-                                                            fontSize: "12px",
-                                                            color: "#6b7280",
-                                                            background: "#f9fafb",
-                                                            position: "relative",
-                                                            zIndex: 1
-                                                        }}
-                                                    >
-                                                        Showing {filteredProjects.length} of {allProjects.length} projects
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
+                                            )}
+                                        </div>
                                     </>
                                 ) : (
                                     <div style={{ position: "relative" }}>
@@ -1143,13 +1173,13 @@ export default function UploadPage() {
                                             }}>
                                                 {/* Current Stage */}
                                                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-                                                    <div style={{ 
-                                                        width: "24px", 
-                                                        height: "24px", 
-                                                        border: "3px solid #6366f1", 
-                                                        borderTop: "3px solid transparent", 
-                                                        borderRadius: "50%", 
-                                                        animation: "spin 1s linear infinite" 
+                                                    <div style={{
+                                                        width: "24px",
+                                                        height: "24px",
+                                                        border: "3px solid #6366f1",
+                                                        borderTop: "3px solid transparent",
+                                                        borderRadius: "50%",
+                                                        animation: "spin 1s linear infinite"
                                                     }} />
                                                     <div style={{ flex: 1 }}>
                                                         <div style={{ fontSize: "14px", fontWeight: "700", color: "#4f46e5", marginBottom: "4px" }}>
@@ -1195,11 +1225,11 @@ export default function UploadPage() {
                                                 </div>
 
                                                 {/* Progress Percentage */}
-                                                <div style={{ 
-                                                    display: "flex", 
-                                                    justifyContent: "space-between", 
-                                                    alignItems: "center", 
-                                                    marginTop: "8px" 
+                                                <div style={{
+                                                    display: "flex",
+                                                    justifyContent: "space-between",
+                                                    alignItems: "center",
+                                                    marginTop: "8px"
                                                 }}>
                                                     <span style={{ fontSize: "11px", color: "#6b7280", fontWeight: "600" }}>
                                                         Progress
@@ -1210,21 +1240,21 @@ export default function UploadPage() {
                                                 </div>
                                             </div>
 
-                                            <div style={{ 
-                                                display: "flex", 
-                                                gap: "12px", 
+                                            <div style={{
+                                                display: "flex",
+                                                gap: "12px",
                                                 alignItems: "center",
                                                 width: "100%"
                                             }}>
-                                                <button disabled className="btn-primary" style={{ 
+                                                <button disabled className="btn-primary" style={{
                                                     flex: 1,
-                                                    background: "#6b7280", 
-                                                    padding: "14px", 
-                                                    borderRadius: "12px", 
-                                                    cursor: "not-allowed", 
-                                                    display: "flex", 
-                                                    alignItems: "center", 
-                                                    justifyContent: "center", 
+                                                    background: "#6b7280",
+                                                    padding: "14px",
+                                                    borderRadius: "12px",
+                                                    cursor: "not-allowed",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "center",
                                                     gap: "10px",
                                                     fontSize: "15px",
                                                     fontWeight: "600"
@@ -1232,15 +1262,15 @@ export default function UploadPage() {
                                                     <div style={{ width: "16px", height: "16px", border: "2px solid #fff", borderTop: "2px solid transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                                                     Analysis in Progress
                                                 </button>
-                                                <button 
-                                                    onClick={handleCancel} 
-                                                    style={{ 
-                                                        padding: "14px 20px", 
-                                                        background: "transparent", 
-                                                        color: "#6b7280", 
-                                                        border: "2px solid rgba(107, 114, 128, 0.3)", 
-                                                        borderRadius: "12px", 
-                                                        fontWeight: "600", 
+                                                <button
+                                                    onClick={handleCancel}
+                                                    style={{
+                                                        padding: "14px 20px",
+                                                        background: "transparent",
+                                                        color: "#6b7280",
+                                                        border: "2px solid rgba(107, 114, 128, 0.3)",
+                                                        borderRadius: "12px",
+                                                        fontWeight: "600",
                                                         cursor: "pointer",
                                                         transition: "all 0.2s ease",
                                                         fontSize: "14px",
@@ -1288,6 +1318,44 @@ export default function UploadPage() {
                     </button>
                 </div>
             </div>
+
+            {userRole === "bid_admin" && (
+                <button
+                    type="button"
+                    onClick={() => navigate("/home")}
+                    title="Back to Bid Admin Dashboard"
+                    style={{
+                        position: 'fixed',
+                        bottom: '20px',
+                        left: '20px',
+                        zIndex: 1000,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '12px 20px',
+                        background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
+                        border: '1px solid rgba(99,102,241,0.4)',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        color: '#fff',
+                        boxShadow: '0 4px 12px rgba(79,70,229,0.3)',
+                        transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(79,70,229,0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,70,229,0.3)';
+                    }}
+                >
+                    <LayoutDashboard size={20} />
+                    Go to Dashboard
+                </button>
+            )}
 
             {/* Logout Button - Bottom Right Corner */}
             <button

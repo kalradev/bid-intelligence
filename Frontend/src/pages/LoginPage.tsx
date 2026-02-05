@@ -1,9 +1,9 @@
-import { ArrowRight, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
-import womenOwnedLogo from '../assets/women-owned-logo.png';
 import cacheLogo from '../assets/Cache-Logo.png';
+import womenOwnedLogo from '../assets/women-owned-logo.png';
 import { API_BASE_URL } from '../config';
 
 export default function LoginPage() {
@@ -56,7 +56,7 @@ export default function LoginPage() {
             }
         } catch (error: any) {
             console.error('Login error:', error);
-            
+
             // Provide more specific error messages
             if (error.message && error.message.includes('fetch')) {
                 setError(`Cannot connect to server. Please make sure the backend is running on ${API_BASE_URL}`);
@@ -80,12 +80,12 @@ export default function LoginPage() {
     return (
         <div className="auth-page-wrapper">
             {/* Women Owned Logo - Top Left */}
-            <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: '114px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
+                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
             </div>
             {/* Cache Logo - Top Right */}
-            <div style={{ position: 'fixed', top: '4px', right: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-                <img src={cacheLogo} alt="Cache" style={{ height: '104px', width: 'auto', display: 'block' }} />
+            <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>
+                <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
             </div>
 
             {/* Animated Background */}
@@ -94,7 +94,7 @@ export default function LoginPage() {
                 <div className="auth-bg-gradient-2"></div>
                 <div className="auth-bg-gradient-3"></div>
             </div>
-            
+
             {/* Floating Shapes */}
             <div className="floating-shapes">
                 <div className="shape shape-1"></div>
@@ -202,8 +202,8 @@ export default function LoginPage() {
                         )}
 
                         {/* Submit Button */}
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={isLoading}
                             className="auth-submit-btn"
                         >

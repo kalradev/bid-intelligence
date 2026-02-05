@@ -245,6 +245,13 @@ Return 2-3 recommendations per product."""
                         logger.info(f"✅ Replaced generic model with '{model}' for {product_name}")
                 
                 validated_list.append(rec)
+            
+            # 🇮🇳 PRIORITIZE INDIAN OEMs - Sort to show Make in India OEMs first
+            validated_list.sort(key=lambda x: (
+                0 if x.get("miiStatus") == "Indian OEM" else 1,  # Indian OEMs first
+                -x.get("matchScore", 0)  # Then by match score descending
+            ))
+            
             validated_recs[product_name] = validated_list
         
         logger.info(f"✅ Generated batch recommendations for {len(validated_recs)} products")
@@ -419,6 +426,12 @@ Return exactly 2-3 recommendations, ranked by best match score."""
         
         # Validate and return
         if validated_recommendations:
+            # 🇮🇳 PRIORITIZE INDIAN OEMs - Sort to show Make in India OEMs first
+            validated_recommendations.sort(key=lambda x: (
+                0 if x.get("miiStatus") == "Indian OEM" else 1,  # Indian OEMs first
+                -x.get("matchScore", 0)  # Then by match score descending
+            ))
+            
             logger.info(f"Generated {len(validated_recommendations)} OEM recommendations for {product_name}")
             return validated_recommendations[:3]  # Ensure max 3 recommendations
         else:
@@ -585,6 +598,12 @@ async def enrich_products_with_recommendations(
                             rec["model"] = model
                             logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
                         validated_recommendations.append(rec)
+                    
+                    # 🇮🇳 PRIORITIZE INDIAN OEMs - Sort to show Make in India OEMs first
+                    validated_recommendations.sort(key=lambda x: (
+                        0 if x.get("miiStatus") == "Indian OEM" else 1,  # Indian OEMs first
+                        -x.get("matchScore", 0)  # Then by match score descending
+                    ))
                     
                     # Store all recommendations
                     p_copy["oemRecommendations"] = validated_recommendations

@@ -28,11 +28,11 @@ class FileCache:
                 db.commit()
                 
                 result = {
-                    "id": cached_file.id,
+                    "id": str(cached_file.id) if cached_file.id else None,
                     "file_hash": cached_file.file_hash,
                     "processing_version": cached_file.processing_version,
                     "original_filename": cached_file.original_filename,
-                    "extracted_text": cached_file.extracted_text,
+                    "extracted_text": cached_file.extracted_text or "",
                     "departmental_summaries": cached_file.departmental_summaries or {},
                     "metadata": cached_file.cache_metadata or {},
                     "created_at": cached_file.created_at,
@@ -55,16 +55,16 @@ class FileCache:
             file_hash = data["fileHash"]
             version = data["processingVersion"]
             filename = data["originalFilename"]
-            text = data["extractedText"]
-            summaries = data["departmentalSummaries"]
+            text = data.get("extractedText") or ""
+            summaries = data.get("departmentalSummaries") or {}
             metadata = data.get("metadata")
-            
+
             # Try to find existing cache entry
             cached_file = db.query(FileCacheModel).filter(
                 FileCacheModel.file_hash == file_hash,
                 FileCacheModel.processing_version == version
             ).first()
-            
+
             if cached_file:
                 # Update existing entry
                 cached_file.original_filename = filename
@@ -73,7 +73,7 @@ class FileCache:
                 cached_file.cache_metadata = metadata
                 cached_file.last_accessed_at = datetime.utcnow()
             else:
-                # Create new entry
+                # Create new entry (extracted_text and departmental_summaries NOT NULL in DB)
                 cached_file = FileCacheModel(
                     file_hash=file_hash,
                     processing_version=version,

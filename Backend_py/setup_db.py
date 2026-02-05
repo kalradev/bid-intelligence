@@ -9,7 +9,7 @@ def setup_postgres():
     password = os.getenv("POSTGRES_PASSWORD", "password")
     host = os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("POSTGRES_PORT", "5432")
-    dbname = os.getenv("POSTGRES_DB", "bid_intelligence")
+    dbname = os.getenv("POSTGRES_DB", "Bid2")
 
     print(f"🔄 Connecting to PostgreSQL as '{user}' at {host}:{port}...")
 
