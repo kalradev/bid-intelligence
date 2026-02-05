@@ -31,6 +31,9 @@ MAX_TOKENS_OPENAI = 16384
 CHUNK_SIZE_OPENAI = 150000
 MAX_CONTEXT_OPENAI = 100000
 
+# Eligibility second pass: if first-pass rule count is below this, run second pass automatically
+ELIGIBILITY_SECOND_PASS_THRESHOLD = 15
+
 def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
@@ -92,6 +95,22 @@ async def generate_departmental_summaries(document_text: str, file_name: str) ->
                 logger.info(f"📦 Returning {product_count} products without OEM enrichment")
                 # Don't update result - keep original products without enrichment
         
+        # If extracted eligibility rule count < threshold, run second pass automatically
+        eligibility_count = _get_eligibility_count(summaries)
+        if eligibility_count < ELIGIBILITY_SECOND_PASS_THRESHOLD:
+            logger.info(f"📋 Eligibility count ({eligibility_count}) < {ELIGIBILITY_SECOND_PASS_THRESHOLD}; running second-pass verification...")
+            existing = _get_eligibility_list(summaries)
+            additional = await run_eligibility_second_pass(document_text, file_name, existing)
+            if additional:
+                merged = existing + additional
+                _set_eligibility_list(summaries, merged)
+                result["summaries"] = summaries
+                logger.info(f"✅ Second pass added {len(additional)} eligibility criteria (total now {len(merged)})")
+            else:
+                logger.info("✅ Second pass found no additional criteria")
+        else:
+            logger.info(f"✅ Eligibility count ({eligibility_count}) >= {ELIGIBILITY_SECOND_PASS_THRESHOLD}; accepting output without second pass")
+        
         return result
     except Exception as e:
         logger.error(f"❌ OpenAI generation failed: {str(e)}")
@@ -140,8 +159,109 @@ async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Di
         "provider": "openai"
     }
 
+
+def _get_eligibility_list(summaries: Dict[str, Any]) -> List[str]:
+    """Return preQualificationCriteria list from summaries; empty list if missing."""
+    bm = summaries.get("bidManagement") or {}
+    sf = bm.get("successFactors") or {}
+    criteria = sf.get("preQualificationCriteria")
+    return list(criteria) if isinstance(criteria, list) else []
+
+
+def _get_eligibility_count(summaries: Dict[str, Any]) -> int:
+    return len(_get_eligibility_list(summaries))
+
+
+def _set_eligibility_list(summaries: Dict[str, Any], criteria_list: List[str]) -> None:
+    """Set preQualificationCriteria in summaries (mutates summaries)."""
+    if "bidManagement" not in summaries:
+        summaries["bidManagement"] = {}
+    if "successFactors" not in summaries["bidManagement"]:
+        summaries["bidManagement"]["successFactors"] = {}
+    summaries["bidManagement"]["successFactors"]["preQualificationCriteria"] = list(criteria_list)
+
+
+def _build_eligibility_second_pass_prompt(document_text: str, existing_criteria: List[str]) -> str:
+    """Prompt for second-pass extraction: find ADDITIONAL eligibility conditions only."""
+    existing_block = "\n".join(f"- {i + 1}. {c[:200]}{'...' if len(c) > 200 else ''}" for i, c in enumerate(existing_criteria[:50]))
+    if len(existing_criteria) > 50:
+        existing_block += f"\n... and {len(existing_criteria) - 50} more."
+    return f"""You are an Expert Government Tender Eligibility Analyst. This is a SECOND PASS only.
+
+The document below has ALREADY had eligibility criteria extracted. Your task is to find ANY ADDITIONAL eligibility conditions that may have been missed, especially:
+
+1. Conditions OUTSIDE the "Eligibility Criteria" section (e.g. in Technical, Commercial, General Conditions, Instructions to Bidders, Rejection/Disqualification clauses)
+2. Certificate-related eligibility (mandatory certificates, test reports, OEM authorization, ISO/quality certs stated as eligibility or disqualification)
+3. Warranty & SLA eligibility (minimum warranty, SLA commitments, or support terms stated as qualifying/eligibility or rejection triggers)
+4. Rejection-triggering clauses (bid will be rejected, declared non-responsive, or disqualified if not met)
+5. Conditional eligibility (MSE/MSME, Startup India, OEM-only, Class-I/Class-II local, women/SC/ST exemptions or conditions)
+6. Reverse Auction participation rules (who can participate, L1 eligibility, post-qualification for RA)
+
+ALREADY EXTRACTED (do NOT duplicate these):
+{existing_block}
+
+DOCUMENT:
+=== START ===
+{document_text[:120000]}
+=== END ===
+
+Return a JSON object with a single key "additionalCriteria" (array of strings). Each string must be ONE eligibility condition in FULL text exactly as written in the document. Include ONLY conditions that are NOT already in the list above (no duplicates). If nothing new is found, return {{"additionalCriteria": []}}.
+
+Return ONLY valid JSON, no other text."""
+
+
+def _call_eligibility_second_pass_sync(prompt: str, system: str) -> List[str]:
+    """Sync OpenAI call for second pass; run in executor from async code."""
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2,
+        max_tokens=4096,
+        response_format={"type": "json_object"}
+    )
+    out = json.loads(response.choices[0].message.content)
+    return out.get("additionalCriteria") or []
+
+
+async def run_eligibility_second_pass(document_text: str, file_name: str, existing_criteria: List[str]) -> List[str]:
+    """Run second-pass extraction for eligibility; returns list of ADDITIONAL criteria only (no duplicates)."""
+    if not client:
+        return []
+    prompt = _build_eligibility_second_pass_prompt(document_text, existing_criteria)
+    system = "You are an Expert Government Tender Eligibility Analyst. Return only valid JSON with key 'additionalCriteria' (array of strings). Extract ONLY eligibility conditions explicitly stated in the document. Do not duplicate; do not infer."
+    try:
+        loop = asyncio.get_event_loop()
+        additional = await loop.run_in_executor(None, lambda: _call_eligibility_second_pass_sync(prompt, system))
+        if not isinstance(additional, list):
+            return []
+        # Dedupe by normalized text (strip, lower) against existing
+        existing_normalized = {c.strip().lower()[:500] for c in existing_criteria}
+        new_list = []
+        for item in additional:
+            if not isinstance(item, str) or not item.strip():
+                continue
+            norm = item.strip().lower()[:500]
+            if norm not in existing_normalized:
+                existing_normalized.add(norm)
+                new_list.append(item.strip())
+        return new_list
+    except Exception as e:
+        logger.warning(f"⚠️ Eligibility second pass failed: {e}")
+        return []
+
+
 def get_system_prompt() -> str:
-    return """You are an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
+    return """You are an Expert Government Tender Eligibility Analyst.
+
+Your primary responsibility is to extract ALL eligibility conditions from tender/bid documents with ZERO omissions.
+Missing any eligibility condition is considered a critical failure.
+You must behave like a compliance officer, not a summarizer.
+Completeness is more important than brevity.
+
+You are also an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
 
 🚨 CRITICAL PRIORITY: PRODUCT EXTRACTION IS MANDATORY
 - You MUST extract ALL products from BOQ/BOM/product lists if they exist in the document
@@ -233,7 +353,7 @@ For bidManagement.successFactors: Extract 12-20 items per category:
 - Timeline: Bid submission, technical opening, financial opening, pre-bid meeting, clarifications, site visit, contract signing, delivery milestones
 - emdExemption: MSME exemption conditions, Startup India exemption, women entrepreneurs, SC/ST exemptions, specific exemption clauses
 - technicalEvaluationCriteria: Scoring pattern, marks distribution, evaluation parameters, minimum qualifying criteria, comparative methodology, weightage allocation
-- preQualificationCriteria: 🚨 CRITICAL - Extract ALL eligibility-related requirements from the ENTIRE document EXACTLY AS WRITTEN! 
+- preQualificationCriteria: 🚨 CRITICAL - Extract ALL eligibility-related requirements from the ENTIRE document EXACTLY AS WRITTEN! ZERO omissions: missing any eligibility condition is a critical failure. Behave as a compliance officer; completeness over brevity. Then run SECOND PASS VERIFICATION: re-scan for eligibility outside the main section (certificates, warranty/SLA, rejection clauses, conditional eligibility like MSE/Startup/OEM-only, reverse auction rules) and append any new items to preQualificationCriteria without duplicating or modifying existing ones.
   * ⚠️ VALIDATION RULE: Extract ONLY what is EXPLICITLY written in the document - DO NOT infer, create, or generate criteria that are not in the document
   * ⚠️ DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" exactly - do NOT change to "₹10 crores" or any other amount)
   * ⚠️ DO NOT add criteria that are not in the document (e.g., if document doesn't explicitly mention "blacklisting", do NOT add it)
@@ -406,70 +526,69 @@ EXTRACTION RULES:
 5. Use alternative search terms and synonyms for every field
 6. Extract from tables, annexures, appendices, footnotes, conditions, clauses, all sections
 
-**🚨 ELIGIBILITY CRITERIA / PRE-QUALIFICATION CRITERIA EXTRACTION (CRITICAL - HIGHEST PRIORITY):**
-
-You are a document extraction engine for eligibility criteria.
+**🚨 ELIGIBILITY CRITERIA EXTRACTION (CRITICAL - HIGHEST PRIORITY):**
 
 TASK:
-Extract ALL eligibility criteria EXACTLY as written in the document into bidManagement.successFactors.preQualificationCriteria array.
-Do NOT add, rephrase, summarize, or infer anything.
-Do NOT generate points that are not present in the document.
-Do NOT shorten the text.
+Extract ALL eligibility criteria from the provided bid document. Output goes into bidManagement.successFactors.preQualificationCriteria. ZERO omissions; missing any condition is a critical failure. Behave as a compliance officer; completeness over brevity.
 
-RULES:
-- Only use text that appears in the provided document context
-- If something is not present, DO NOT create it
-- Keep original numbering if present (1, 2, 3…)
-- Keep full sentences as-is
-- Preserve table structure meaning
-- Output all points even if they are long
-- If criteria span multiple pages, merge them and extract ALL
-- Look for tables with columns like: "S. No.", "Eligibility Criteria", "Compliance (Yes/No)", "Documents to be submitted", "Criteria", "Requirement", "Bidder's Eligibility Criteria", "Appendix-B"
-- Search for section headings like: "Bidder's Eligibility Criteria", "Eligibility Criteria", "Pre-Qualification Criteria", "Qualification Criteria", "Appendix-B"
-- Each row in the eligibility criteria table = ONE separate item in bidManagement.successFactors.preQualificationCriteria array
-- Extract the FULL text of each eligibility criterion from the "Eligibility Criteria" column (or equivalent column name)
-- DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" exactly)
-- DO NOT add criteria that are not in the document
-- DO NOT infer or create criteria based on context
-- If eligibility criteria are not found in the document, return empty array []
+SCOPE (MANDATORY):
+- All tables explicitly titled or structured as eligibility / pre-qualification / bidder qualification criteria (every row).
+- All sections under headings that denote eligibility, pre-qualification, or bidder qualification (every listed criterion).
+- Appendix-B, Annexure-B, or equivalent "Eligibility Criteria" / "Bidder's Eligibility" annexures (full text of each criterion).
+- Eligibility-related requirements from Financial, Technical, or Operational sections ONLY when the document explicitly labels them as eligibility/pre-qualification criteria.
+- Criteria types to include when present: registration (company/LLP/partnership), turnover/financial, net worth, experience, compliance with government orders/OEM, blacklisting/debarment, MSME status, certifications, client references, litigations, profitability, documents to be submitted for eligibility.
+- If criteria span multiple pages or tables, merge and extract ALL; do not skip any page or row.
+- If no eligibility content is found anywhere in the document, return empty array [].
 
-OUTPUT FORMAT:
-Extract each criterion as a separate string in the preQualificationCriteria array:
-["Full criterion 1 text exactly as written", "Full criterion 2 text exactly as written", ...]
+DETECTION RULE:
+- Section headings (search case-insensitively): "Bidder's Eligibility Criteria", "Eligibility Criteria", "Pre-Qualification Criteria", "Qualification Criteria", "Pre-Qualification", "Appendix-B", "Annexure-B", "Bidder Eligibility", "Qualifying Criteria", "Eligibility Conditions", "Pre-Qualification Conditions".
+- Table columns (match any): "S. No." / "Sl. No.", "Eligibility Criteria", "Criteria", "Requirement", "Compliance (Yes/No)", "Documents to be submitted", "Bidder's Eligibility Criteria", "Appendix-B", "Eligibility", "Pre-Qualification".
+- Phrases in body text: "bidder must", "bidder shall", "eligible if", "qualification criteria", "pre-qualification", "must comply with", "required to have", "minimum turnover", "average turnover", "net worth", "registered under", "not blacklisted", "debarred", "MSME", "experience of", "similar work".
 
-⚠️ CRITICAL: The user expects to see ALL eligibility criteria EXACTLY as written in the document - do NOT create, infer, or modify any criteria
+OUTPUT FORMAT (STRICT):
+- JSON path: bidManagement.successFactors.preQualificationCriteria
+- Type: array of strings
+- Each string = one eligibility criterion in FULL, exactly as written in the document (word-for-word). One table row = one array element; do not merge rows unless the document has a single criterion spanning multiple rows.
+- Example: ["Full criterion 1 text exactly as written.", "Full criterion 2 text exactly as written.", ...]
+- If none found: preQualificationCriteria = []
 
-**EXAMPLE - Correct Eligibility Criteria Extraction:**
+STRICT RULES:
+- Extract ONLY text that appears in the document. Do NOT add, infer, rephrase, summarize, or create any criterion.
+- Do NOT shorten or abbreviate. Preserve amounts, dates, numbers, and wording exactly (e.g. "Rs. 20 crore" not "₹20 crores").
+- Do NOT deduplicate; each row or listed criterion = one separate item even if similar.
+- Do NOT add criteria from other sections unless they are explicitly stated as eligibility/pre-qualification in the document.
+- If you cannot find the exact text in the document, do NOT add it.
+- When in doubt, include (extract) rather than omit; when clearly not eligibility, omit.
 
-If the document has an eligibility criteria table:
+**EXAMPLE - Correct Extraction:**
 
 DOCUMENT TABLE SHOWS:
 S. No. 1: "The Bidder must be an Indian Company/ LLP /Partnership firm registered under applicable Act in India."
-S. No. 2: "The Bidder (including its OEM, if any) must comply with the requirements contained in O.M. No. 6/18/2019-PPD, dated 23.07.2020 order (Public Procurement No. 1), order (Public Procurement No. 2) dated 23.07.2020 and order (Public Procurement No. 3) dated 24.07.2020"
-S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore during last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25. In case of MSME, the Bidder must have a cumulative turnover of minimum Rs.20 crore for last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25."
+S. No. 2: "The Bidder (including its OEM, if any) must comply with the requirements contained in O.M. No. 6/18/2019-PPD..."
+S. No. 3: "The Bidder must have an average turnover of minimum Rs. 20 crore during last 03 (three) financial year(s)..."
 
-❌ WRONG OUTPUT:
-- Extract only 4-5 "most important" criteria
-- Shorten: "Bidder must be Indian company"
-- Change amounts: "₹10 crores" or "₹20 crores" (document says "Rs. 20 crore")
-- Add criteria not in document: "No blacklisting status" (if not in document)
-- Infer criteria based on context
+❌ WRONG: Few criteria only; shortened text; changed "Rs. 20 crore" to "₹20 crores"; added criteria not in document.
 
-✅ CORRECT OUTPUT (preQualificationCriteria array):
-[
+✅ CORRECT (preQualificationCriteria): [
   "The Bidder must be an Indian Company/ LLP /Partnership firm registered under applicable Act in India.",
   "The Bidder (including its OEM, if any) must comply with the requirements contained in O.M. No. 6/18/2019-PPD, dated 23.07.2020 order (Public Procurement No. 1), order (Public Procurement No. 2) dated 23.07.2020 and order (Public Procurement No. 3) dated 24.07.2020",
   "The Bidder must have an average turnover of minimum Rs. 20 crore during last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25. In case of MSME, the Bidder must have a cumulative turnover of minimum Rs.20 crore for last 03 (three) financial year(s) i.e. FY22-23, FY23-24 and FY24-25."
 ]
 
-⚠️ CRITICAL VALIDATION CHECKLIST:
-- ✅ Extract EXACTLY as written - preserve "Rs. 20 crore" not "₹20 crores" or "₹10 crores"
-- ✅ Extract ALL rows from the table - if table has 10 rows, extract all 10
-- ✅ Each criterion is COMPLETE text exactly as it appears in the document
-- ✅ DO NOT add criteria that are not in the document
-- ✅ DO NOT infer or create criteria based on what "makes sense"
-- ✅ If you cannot find the exact text in the document, DO NOT add it
-- ✅ If eligibility criteria are not found in the document, return empty array []
+**SECOND PASS VERIFICATION (MANDATORY):**
+After completing the first-pass eligibility extraction, re-scan the SAME document and find ANY eligibility conditions that may have been missed, especially:
+1. Conditions outside the "Eligibility Criteria" section (e.g. in Technical, Commercial, General Conditions, Instructions to Bidders, Rejection/Disqualification clauses)
+2. Certificate-related eligibility (mandatory certificates, test reports, OEM authorization, ISO/quality certs that are stated as eligibility or disqualification)
+3. Warranty & SLA eligibility (minimum warranty period, SLA commitments, or support terms that are stated as qualifying/eligibility or rejection triggers)
+4. Rejection-triggering clauses (any clause that says bid will be rejected, declared non-responsive, or disqualified if not met - treat as eligibility)
+5. Conditional eligibility (MSE/MSME, Startup India, OEM-only, Class-I/Class-II local, women/SC/ST exemptions or conditions that affect who can bid or how)
+6. Reverse Auction participation rules (who can participate, minimum number of bidders, L1 eligibility, post-qualification for RA, etc.)
+
+If any NEW eligibility conditions are found in this second pass:
+- APPEND them to the existing preQualificationCriteria array (same JSON path: bidManagement.successFactors.preQualificationCriteria)
+- Do NOT duplicate: if a criterion is already in the array (same or substantially same text), do NOT add it again
+- Do NOT modify any criterion from the first pass: preserve exact wording and order of previously extracted items; only append new ones at the end
+- Each new item must be FULL text exactly as written in the document; same STRICT RULES as first pass
 
 **🚨 FINANCIAL VALUES (bidValue, EMD) - STRICT RULES:**
 - ONLY extract if EXPLICITLY stated in document

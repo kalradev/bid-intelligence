@@ -133,7 +133,7 @@ for MULTIPLE products based on specifications provided."""
 """
 
     user_prompt = f"""**YOUR TASK:**
-Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH of the following products:
+Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models for EACH of the following products. Prefer giving MORE Indian OEMs (e.g. 2-3 Indian + 0-1 Global) to capture the Indian market; include Global OEMs where relevant but do not make them the majority.
 
 {products_text}
 
@@ -150,14 +150,20 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 1. Provide REAL manufacturers that exist in the market
 2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
-4. Prioritize Indian OEMs first (for Make in India compliance)
+4. **Prefer MORE Indian OEMs per product (e.g. 2-3 Indian, 0-1 Global)** to capture the Indian market; include Global OEMs but keep Indian as the majority when good options exist
 5. **If an OEM is pre-approved/mentioned in "Existing OEM", you MUST include it and provide specific model names for it**
 6. Consider availability, pricing tier, and quality
 7. **For each OEM you recommend, ALWAYS provide a specific model name/number - this is MANDATORY**
 
+**MATCH SCORE (matchScore):**
+- Use **100** when the recommended model exactly matches the specification, part number, or is the standard/catalog match for that product
+- Use **95-99** when the match is very close (minor variation)
+- Use **85-94** when the match is good but not exact
+- Do not avoid 100; use it whenever the match is exact
+
 **CATEGORY-SPECIFIC GUIDANCE:**
 - Furniture: Consider brands like Godrej, Durian, Featherlite, Nilkamal, Steelcase
-- IT Equipment: Consider HP, Dell, Lenovo, HCL, Wipro, Acer, ASUS
+- IT Equipment: Consider HCL, Wipro, Dell, HP, Lenovo, Acer, ASUS (prioritize Indian: HCL, Wipro)
 - Electrical: Consider Philips, Havells, Crompton, Anchor, Syska, Legrand
 - Cooling/HVAC: Consider Daikin, Voltas, Blue Star, Carrier, Hitachi
 - Networking: Consider Cisco, HPE, D-Link, TP-Link, Netgear
@@ -171,7 +177,7 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
         "oem": "Manufacturer Name",
         "model": "Specific Model Name/Number (MANDATORY - extract from specs or provide real model)",
         "miiStatus": "Indian OEM" or "Global OEM",
-        "matchScore": 85-100,
+        "matchScore": 85-100 (use 100 when match is exact),
         "priceRange": "Budget" or "Mid-Range" or "Premium",
         "availability": "Readily Available" or "On Order" or "Limited",
         "reasoning": "Brief explanation including how model matches specifications"
@@ -184,7 +190,7 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 
 **IMPORTANT:** The "model" field MUST contain a specific, real model name/number. Extract from specifications first, then product name, then provide a real model from OEM catalog. NEVER use "N/A" or generic names.
 
-Return 2-3 recommendations per product."""
+Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Global when relevant)."""
 
     try:
         response = await async_client.chat.completions.create(
@@ -281,7 +287,7 @@ async def recommend_oem_models(
         existing_oem: OEM mentioned in tender (if any) - will be prioritized
     
     Returns:
-        List of 2-3 OEM recommendations with model names, match scores, and reasoning
+        List of 2-5 OEM recommendations with model names, match scores, and reasoning
     """
     
     # Check if OpenAI client is initialized
@@ -307,7 +313,7 @@ based on product specifications provided."""
 {f"- Pre-approved/Mentioned OEM: {existing_oem}" if existing_oem and existing_oem != "Unspecified" else ""}
 
 **YOUR TASK:**
-Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that match these specifications.
+Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models that match these specifications. Prefer MORE Indian OEMs (e.g. 2-3 Indian + 0-1 Global); include Global OEMs where relevant but keep Indian as the majority.
 
 **🚨 CRITICAL MODEL NAME EXTRACTION RULES:**
 1. **MANDATORY: Extract model names/numbers from specifications if mentioned** (e.g., "HP LaserJet Pro M404dn", "Dell OptiPlex 7090", "192x15x2400", "Model XYZ-123")
@@ -322,14 +328,20 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 1. Provide REAL manufacturers that exist in the market
 2. Extract model names from specifications FIRST, then from product name, then from OEM catalog
 3. Match the specifications as closely as possible
-4. Prioritize Indian OEMs first (for Make in India compliance)
+4. **Prefer MORE Indian OEMs (e.g. 2-3 Indian, 0-1 Global)** to capture the Indian market; include Global OEMs but keep Indian as the majority when good options exist
 5. **If an OEM is pre-approved/mentioned above, you MUST include it and provide specific model names for it**
 6. Consider availability, pricing tier, and quality
 7. **For each OEM you recommend, ALWAYS provide a specific model name/number - this is MANDATORY**
 
+**MATCH SCORE (matchScore):**
+- Use **100** when the recommended model exactly matches the specification, part number, or is the standard/catalog match for that product
+- Use **95-99** when the match is very close (minor variation)
+- Use **85-94** when the match is good but not exact
+- Do not avoid 100; use it whenever the match is exact
+
 **CATEGORY-SPECIFIC GUIDANCE:**
 - Furniture: Consider brands like Godrej, Durian, Featherlite, Nilkamal, Steelcase
-- IT Equipment: Consider HP, Dell, Lenovo, HCL, Wipro, Acer, ASUS
+- IT Equipment: Consider HCL, Wipro, Dell, HP, Lenovo, Acer, ASUS (prioritize Indian: HCL, Wipro)
 - Electrical: Consider Philips, Havells, Crompton, Anchor, Syska, Legrand
 - Cooling/HVAC: Consider Daikin, Voltas, Blue Star, Carrier, Hitachi
 - Networking: Consider Cisco, HPE, D-Link, TP-Link, Netgear
@@ -350,7 +362,7 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that mat
       "oem": "Manufacturer Name",
       "model": "Specific Model Name/Number (MANDATORY - extract from specs or provide real model)",
       "miiStatus": "Indian OEM" or "Global OEM",
-      "matchScore": 85-100,
+      "matchScore": 85-100 (use 100 when match is exact),
       "priceRange": "Budget" or "Mid-Range" or "Premium",
       "availability": "Readily Available" or "On Order" or "Limited",
       "reasoning": "Brief explanation including how model matches specifications"
@@ -360,7 +372,7 @@ Recommend 2-3 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 
 **IMPORTANT:** The "model" field MUST contain a specific, real model name/number. Extract from specifications first, then product name, then provide a real model from OEM catalog. NEVER use "N/A" or generic names.
 
-Return exactly 2-3 recommendations, ranked by best match score."""
+Return 2-5 recommendations, ranked by best match score (prefer more Indian OEMs)."""
 
     try:
         response = await async_client.chat.completions.create(
