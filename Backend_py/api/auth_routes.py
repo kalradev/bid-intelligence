@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 router = APIRouter()
 security = HTTPBearer()
+security_optional = HTTPBearer(auto_error=False)
 
 # JWT Secret
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
@@ -97,14 +98,14 @@ async def get_current_user(
     payload = verify_jwt_token(token)
     
     try:
-        user_id = payload["userId"]
+        user_id = payload.get("userId")
         if not user_id:
-            raise HTTPException(status_code=404, detail="Invalid user ID")
+            raise HTTPException(status_code=401, detail="Invalid user ID")
         
         user = db.query(User).filter(User.id == user_id).first()
         
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=401, detail="User not found")
         
         return {
             "id": user.id,
@@ -118,6 +119,40 @@ async def get_current_user(
     except Exception as e:
         logger.error(f"Error getting current user: {str(e)}")
         raise HTTPException(status_code=500, detail="Database error")
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_optional),
+    db: Session = Depends(get_db),
+):
+    """Like get_current_user but does not raise when Authorization is missing; returns None. Use to avoid 403/404 on missing auth."""
+    if not credentials:
+        return None
+    token = credentials.credentials
+    try:
+        payload = verify_jwt_token(token)
+    except HTTPException:
+        raise
+    try:
+        user_id = payload.get("userId")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid user ID")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
+        return {
+            "id": user.id,
+            "fullName": user.full_name,
+            "email": user.email,
+            "role": user.role or "bid_manager",
+            "parentId": getattr(user, "parent_id", None),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting current user: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database error")
+
 
 @router.post("/register")
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):

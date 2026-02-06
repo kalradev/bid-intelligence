@@ -24,12 +24,21 @@ interface BidManagerCard {
   teamProjectsLeft: number;
 }
 
+interface AssignedUser {
+  id: number;
+  fullName: string;
+  email?: string;
+  role?: string;
+}
+
 interface ProjectItem {
   id: number;
   project_name: string;
   tender_id: string | null;
   client_name: string | null;
   user_id: number | null;
+  assigned_user_ids?: number[];
+  assigned_users?: AssignedUser[];
 }
 
 export default function TeamProjectsPage() {
@@ -115,7 +124,12 @@ export default function TeamProjectsPage() {
     navigate(`/project-results/${encodeURIComponent(projectName)}`);
   };
 
-  const getWorkingOnLabel = (userId: number | null): string => {
+  const getWorkingOnLabel = (p: ProjectItem): string => {
+    const assigned = p.assigned_users;
+    if (assigned && assigned.length > 0) {
+      return assigned.map((u) => `${u.fullName} (Technical Manager)`).join(", ");
+    }
+    const userId = p.user_id;
     if (userId == null || !bm) return "—";
     if (userId === bm.id) return `${bm.fullName} (Bid Manager)`;
     const tm = (bm.technicalManagers || []).find((t) => t.id === userId);
@@ -237,7 +251,7 @@ export default function TeamProjectsPage() {
                         <td style={{ padding: "14px 20px", fontWeight: 600, color: "#0f172a", fontSize: 14 }}>{p.project_name}</td>
                         <td style={{ padding: "14px 20px", color: "#64748b", fontSize: 14 }}>{p.client_name || "—"}</td>
                         <td style={{ padding: "14px 20px", color: "#475569", fontSize: 14 }}>{bm.fullName}</td>
-                        <td style={{ padding: "14px 20px", color: "#4338ca", fontSize: 14, fontWeight: 500 }}>{getWorkingOnLabel(p.user_id)}</td>
+                        <td style={{ padding: "14px 20px", color: "#4338ca", fontSize: 14, fontWeight: 500 }}>{getWorkingOnLabel(p)}</td>
                         <td style={{ padding: "14px 20px", textAlign: "right" }}>
                           <button
                             onClick={() => handleViewResult(p.project_name)}

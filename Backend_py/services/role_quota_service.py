@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Tuple
 
 from core.sqlalchemy_db import get_db_session
 from core.config import settings
-from models.sqlalchemy_models import User, Project
+from models.sqlalchemy_models import User, Project, ProjectAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,34 @@ def get_visible_user_ids(current_user: dict) -> List[int]:
 
     # technical_manager or fallback
     return [user_id]
+
+
+def get_visible_project_ids(current_user: dict) -> List[int]:
+    """
+    Return list of project ids the current user can see.
+    - bid_admin: all project ids
+    - bid_manager: project ids owned by visible_user_ids (self + their TMs)
+    - technical_manager: only project ids assigned to this user (project_assignments)
+    """
+    user_id = current_user["id"]
+    role = (current_user.get("role") or "bid_manager").lower()
+
+    db = get_db_session()
+    try:
+        if role == ROLE_BID_ADMIN:
+            rows = db.query(Project.id).all()
+            return [r[0] for r in rows]
+
+        if role == ROLE_BID_MANAGER:
+            visible_ids = get_visible_user_ids(current_user)
+            rows = db.query(Project.id).filter(Project.user_id.in_(visible_ids)).all()
+            return [r[0] for r in rows]
+
+        # technical_manager: only assigned projects
+        rows = db.query(ProjectAssignment.project_id).filter(ProjectAssignment.user_id == user_id).all()
+        return [r[0] for r in rows]
+    finally:
+        db.close()
 
 
 def get_team_member_ids_for_quota(current_user: dict) -> List[int]:

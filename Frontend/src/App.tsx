@@ -12,7 +12,6 @@ import LoginPage from "./pages/LoginPage";
 import ProductMappingPage from "./pages/ProductMappingPage";
 import ProjectResultsPage from "./pages/ProjectResultsPage";
 import SCM from "./pages/SCM.jsx";
-import SignupPage from "./pages/SignupPage";
 import SmartRfpPage from "./pages/SmartRfpPage";
 import TeamPage from "./pages/TeamPage";
 import TeamProjectsPage from "./pages/TeamProjectsPage";
@@ -58,7 +57,6 @@ export default function App() {
           {/* Login is now the default page */}
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
 
           {/* Landing page moved to /home (after login) */}
           <Route path="/home" element={<LandingPage />} />

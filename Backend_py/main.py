@@ -12,7 +12,7 @@ if _env_file.exists():
     from dotenv import load_dotenv
     load_dotenv(_env_file)
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Path as FPath, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -65,6 +65,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         status_code=exc.status_code,
         content={
             "success": False,
+            "detail": exc.detail,
             "message": exc.detail,
             "error": exc.detail
         }
@@ -93,7 +94,16 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Could not init DB tables (ensure PostgreSQL is running): {e}")
 
-# Register Routes
+# Register Routes (team-member-assignments first so it is always reachable)
+from api.rfp_routes import get_team_member_assignments
+from api.auth_routes import get_current_user_optional
+
+_team_router = APIRouter()
+@_team_router.get("/team-member-assignments")
+async def _team_assignments(current_user = Depends(get_current_user_optional)):
+    return await get_team_member_assignments(current_user)
+
+app.include_router(_team_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 
@@ -113,14 +123,11 @@ if FRONTEND_DIR:
     # Mount static assets (JS, CSS, images)
     app.mount("/assets", StaticFiles(directory=os.path.join(FRONTEND_DIR, "assets")), name="assets")
     
-    # Serve static files from root of frontend-build
+    # Serve static files from root of frontend-build (path excludes "api/" so API routes are never matched here)
     @app.get("/{path:path}")
-    async def serve_frontend(path: str, request: Request):
-        # Don't interfere with API routes
-        if path.startswith("api/") or path == "health":
+    async def serve_frontend(path: str = FPath(..., pattern=r"^(?!api/).*"), request: Request = None):
+        if path == "health":
             raise HTTPException(status_code=404, detail="Not found")
-        
-        # Try to serve the requested file
         file_path = os.path.join(FRONTEND_DIR, path)
         if os.path.exists(file_path) and os.path.isfile(file_path):
             return FileResponse(file_path)
@@ -133,7 +140,7 @@ if FRONTEND_DIR:
         raise HTTPException(status_code=404, detail="Not found")
 
 logger.info("✅ Routes registered:")
-logger.info("   - /api/rfp")
+logger.info("   - /api/rfp (includes GET /api/rfp/team-member-assignments)")
 logger.info("   - /api/auth (login, register, me, logout)")
 if os.path.exists(FRONTEND_BUILD_PATH):
     logger.info("   - Frontend static files: enabled")

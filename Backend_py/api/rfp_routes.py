@@ -18,7 +18,7 @@ from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
 from models.eligibility_checklist import EligibilityChecklistModel
-from api.auth_routes import get_current_user
+from api.auth_routes import get_current_user, get_current_user_optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -82,13 +82,18 @@ async def analyze_rfp(
         # --- NEW PROJECT-CENTRIC WORKFLOW ---
         if project_name:
             try:
+                from services.role_quota_service import ROLE_TECHNICAL_MANAGER
+                role = (current_user.get("role") or "").lower()
                 # Check if project exists first
-                from services.role_quota_service import get_visible_user_ids
-                visible_ids = get_visible_user_ids(current_user)
-                existing_project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
-                
-                # Only check quota if creating a NEW project (not updating existing)
+                existing_project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+
                 if not existing_project:
+                    # Creating a new project: only Bid Manager or Admin
+                    if role == ROLE_TECHNICAL_MANAGER:
+                        raise HTTPException(
+                            status_code=403,
+                            detail="Technical Managers cannot create new projects. Only Bid Managers can create and assign projects."
+                        )
                     from services.role_quota_service import can_create_project
                     allowed, err_msg = can_create_project(current_user)
                     if not allowed:
@@ -96,6 +101,14 @@ async def analyze_rfp(
                     logger.info(f"✅ Quota check passed for new project: {project_name}")
                 else:
                     logger.info(f"📁 Updating existing project: {project_name} (skipping quota check)")
+                    # Technical Managers may only add corrigendum or reference documents
+                    if role == ROLE_TECHNICAL_MANAGER:
+                        allowed_types = ("CORRIGENDUM", "REFERENCE_UPDATE")
+                        if (update_type or "").upper() not in allowed_types:
+                            raise HTTPException(
+                                status_code=403,
+                                detail=f"Technical Managers can only upload corrigendum or reference documents. Allowed types: {', '.join(allowed_types)}."
+                            )
                 # ProjectService handles validation, project creation, and incremental analysis
                 result_data = await ProjectService.process_project_document(
                     project_name=project_name,
@@ -281,24 +294,210 @@ async def enrich_oems_route(products: List[Dict[str, Any]] = Body(...)):
 @router.get("/projects")
 async def list_projects(current_user: dict = Depends(get_current_user)):
     try:
-        from services.role_quota_service import get_visible_user_ids, get_team_quota
-        visible_ids = get_visible_user_ids(current_user)
-        projects = ProjectModel.get_all_by_user_ids(visible_ids)
+        from services.role_quota_service import get_team_quota
+        from models.sqlalchemy_models import User
+        from models.project_assignment import ProjectAssignmentModel
+        from core.sqlalchemy_db import get_db_session
+        projects = ProjectModel.get_all_visible_projects(current_user)
+        role = (current_user.get("role") or "").lower()
+        # For every project: add assigned_user_ids and assigned_users (from project_assignments) so admin/BM can see who is working on it
+        for p in projects:
+            p["assigned_user_ids"] = []
+            p["assigned_users"] = []
+        if projects:
+            db = get_db_session()
+            try:
+                all_assigned_ids = {}
+                for p in projects:
+                    try:
+                        aids = ProjectAssignmentModel.get_assigned_user_ids(p["id"])
+                        all_assigned_ids[p["id"]] = aids
+                    except Exception as e:
+                        logger.warning(f"get_assigned_user_ids project_id={p['id']}: {e}")
+                        all_assigned_ids[p["id"]] = []
+                unique_user_ids = list({uid for aids in all_assigned_ids.values() for uid in aids})
+                users_by_id = {}
+                if unique_user_ids:
+                    users = db.query(User).filter(User.id.in_(unique_user_ids)).all()
+                    users_by_id = {u.id: {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or "technical_manager"} for u in users}
+                for p in projects:
+                    aids = all_assigned_ids.get(p["id"], [])
+                    p["assigned_user_ids"] = aids
+                    p["assigned_users"] = [users_by_id[uid] for uid in aids if uid in users_by_id]
+            except Exception as e:
+                logger.warning(f"Attaching assigned_users to projects: {e}")
+            finally:
+                db.close()
+        if role == "technical_manager" and projects:
+            owner_ids = list({p["user_id"] for p in projects if p.get("user_id")})
+            if owner_ids:
+                db = get_db_session()
+                try:
+                    users = db.query(User).filter(User.id.in_(owner_ids)).all()
+                    owner_names = {u.id: u.full_name for u in users}
+                finally:
+                    db.close()
+                for p in projects:
+                    p["assigned_by_full_name"] = owner_names.get(p["user_id"]) if p.get("user_id") else None
+            else:
+                for p in projects:
+                    p["assigned_by_full_name"] = None
         quota = get_team_quota(current_user)
         return {"success": True, "projects": projects, "teamQuota": quota}
     except Exception as e:
         logger.error(f"Error listing projects: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve projects: {str(e)}")
 
+
+def _can_manage_assignments(current_user: dict) -> bool:
+    """Only Bid Manager and Bid Admin can assign TMs to projects."""
+    role = (current_user.get("role") or "").lower()
+    return role in ("bid_admin", "bid_manager")
+
+
+@router.get("/team-member-assignments")
+async def get_team_member_assignments(current_user: Optional[dict] = Depends(get_current_user_optional)):
+    """For Bid Manager or Bid Admin: list Technical Managers (BM's team or all TMs for Admin) with their assigned projects."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    role_raw = (current_user.get("role") or "").strip().lower()
+    role = role_raw.replace(" ", "_")  # e.g. "bid manager" -> "bid_manager"
+    if role not in ("bid_manager", "bid_admin"):
+        raise HTTPException(status_code=403, detail="Only Bid Manager or Bid Admin can view team member assignments")
+    from services.role_quota_service import get_my_team, ROLE_TECHNICAL_MANAGER, ROLE_BID_ADMIN
+    from models.project_assignment import ProjectAssignmentModel
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import User
+    team = []
+    if role == ROLE_BID_ADMIN:
+        db = get_db_session()
+        try:
+            team = [
+                {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER}
+                for u in db.query(User).filter(User.role == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
+            ]
+        finally:
+            db.close()
+    else:
+        bm_id = current_user.get("id")
+        if bm_id is None:
+            return {"success": True, "teamMembers": []}
+        team = get_my_team(current_user)
+        if not team:
+            db = get_db_session()
+            try:
+                children = db.query(User).filter(User.parent_id == bm_id, User.role == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
+                team = [{"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER} for u in children]
+            finally:
+                db.close()
+    if not team:
+        return {"success": True, "teamMembers": []}
+    out = []
+    for tm in team:
+        tm_id = tm.get("id")
+        if tm_id is None:
+            tm_id = tm.get("userId")
+        if tm_id is None:
+            continue
+        project_ids = ProjectAssignmentModel.get_assigned_project_ids(int(tm_id))
+        projects = ProjectModel.get_all_by_project_ids(project_ids) if project_ids else []
+        full_name = tm.get("fullName") or tm.get("full_name") or ""
+        out.append({
+            "id": int(tm_id),
+            "fullName": full_name,
+            "email": tm.get("email") or "",
+            "role": tm.get("role") or "technical_manager",
+            "assignedProjects": [{"id": p["id"], "project_name": p["project_name"], "tender_id": p.get("tender_id"), "client_name": p.get("client_name")} for p in projects],
+        })
+    logger.info(f"team-member-assignments: current_user_id={current_user.get('id')} role={role} team_count={len(team)} out_count={len(out)}")
+    return {"success": True, "teamMembers": out}
+
+
+@router.get("/project-assignments/{project_name}")
+async def get_project_assignments(project_name: str, current_user: dict = Depends(get_current_user)):
+    """Get list of users assigned to this project. Only BM/Admin, and only for visible projects."""
+    if not _can_manage_assignments(current_user):
+        raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can view project assignments")
+    project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    from models.project_assignment import ProjectAssignmentModel
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import User
+    assigned_ids = ProjectAssignmentModel.get_assigned_user_ids(project["id"])
+    if not assigned_ids:
+        return {"success": True, "projectName": project_name, "assignedUserIds": [], "assignedUsers": []}
+    db = get_db_session()
+    try:
+        users = db.query(User).filter(User.id.in_(assigned_ids)).all()
+        assigned_users = [{"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or "technical_manager"} for u in users]
+        return {"success": True, "projectName": project_name, "assignedUserIds": assigned_ids, "assignedUsers": assigned_users}
+    finally:
+        db.close()
+
+
+@router.post("/project-assignments/{project_name}")
+async def set_project_assignments(
+    project_name: str,
+    body: dict = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Set which Technical Managers are assigned to this project. Only BM/Admin."""
+    if not _can_manage_assignments(current_user):
+        raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can assign TMs to projects")
+    project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    raw_ids = body.get("userIds") or body.get("user_ids") or []
+    # Coerce to list of ints (JSON may send numbers or strings)
+    try:
+        userIds = [int(uid) for uid in raw_ids]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="userIds must be a list of user ids")
+    from models.project_assignment import ProjectAssignmentModel
+    from services.role_quota_service import get_visible_user_ids, ROLE_TECHNICAL_MANAGER
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import User
+    # Only allow assigning users who are technical_managers (and under this BM if BM)
+    role = (current_user.get("role") or "").lower()
+    if role == "bid_manager":
+        my_team_ids = get_visible_user_ids(current_user)
+        allowed_ids = set(my_team_ids)
+        db = get_db_session()
+        try:
+            tms = db.query(User.id).filter(User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER, User.parent_id == current_user["id"]).all()
+            allowed_tm_ids = [r[0] for r in tms]
+        finally:
+            db.close()
+        invalid = [u for u in userIds if u not in allowed_tm_ids]
+        if invalid:
+            raise HTTPException(status_code=400, detail=f"Cannot assign users that are not your Technical Managers: {invalid}")
+        userIds = [u for u in userIds if u in allowed_tm_ids]
+    else:
+        # bid_admin: allow any technical_manager
+        db = get_db_session()
+        try:
+            tms = db.query(User.id).filter(User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER).all()
+            userIds = [r[0] for r in tms]
+        finally:
+            db.close()
+    project_id = project["id"]
+    ok = ProjectAssignmentModel.set_assignments(project_id, userIds)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to save assignments")
+    # Verify and return persisted state (so TM will see these projects)
+    verified = ProjectAssignmentModel.get_assigned_user_ids(project_id)
+    logger.info(f"Assign TMs: project_name={project_name!r} project_id={project_id} requested={userIds} verified={verified}")
+    return {"success": True, "projectName": project_name, "assignedUserIds": verified}
+
+
 @router.get("/project-status/{project_name}")
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
     from core.sqlalchemy_db import get_db_session
     from models.sqlalchemy_models import ProjectDocument
-    from services.role_quota_service import get_visible_user_ids
 
     try:
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if project:
             # Also check if it has a base RFP
             db = get_db_session()
@@ -343,9 +542,7 @@ async def get_project_analysis(
     from models.sqlalchemy_models import ProjectDocument
     
     try:
-        from services.role_quota_service import get_visible_user_ids
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
@@ -401,9 +598,7 @@ async def get_project_analysis(
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
     try:
-        from services.role_quota_service import get_visible_user_ids
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
@@ -536,9 +731,7 @@ async def get_eligibility_checklist(
 ):
     """Get eligibility checklist for a project/document"""
     try:
-        from services.role_quota_service import get_visible_user_ids
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]
@@ -576,9 +769,7 @@ async def save_eligibility_checklist(
         logger.info(f"📥 Saving checklist for project: {project_name}, document: {document_id}")
         logger.info(f"📋 Checklist data: {checklist}")
         
-        from services.role_quota_service import get_visible_user_ids
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]
@@ -623,9 +814,7 @@ async def update_eligibility_item(
 ):
     """Update a single eligibility checklist item"""
     try:
-        from services.role_quota_service import get_visible_user_ids
-        visible_ids = get_visible_user_ids(current_user)
-        project = ProjectModel.get_by_name_if_visible(project_name, visible_ids)
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]

@@ -81,6 +81,22 @@ CREATE INDEX IF NOT EXISTS ix_eligibility_checklist_document_id ON public.eligib
 CREATE INDEX IF NOT EXISTS ix_eligibility_checklist_project_id ON public.eligibility_checklist(project_id);
 CREATE INDEX IF NOT EXISTS ix_eligibility_checklist_user_id ON public.eligibility_checklist(user_id);
 
+-- 5b. project_assignments (Bid Manager assigns Technical Managers to projects)
+CREATE TABLE IF NOT EXISTS public.project_assignments (
+    id serial NOT NULL,
+    project_id integer NOT NULL,
+    user_id integer NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT project_assignments_pkey PRIMARY KEY (id),
+    CONSTRAINT project_assignments_project_id_user_id_key UNIQUE (project_id, user_id)
+);
+ALTER TABLE IF EXISTS public.project_assignments
+    ADD CONSTRAINT project_assignments_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects (id) ON DELETE CASCADE;
+ALTER TABLE IF EXISTS public.project_assignments
+    ADD CONSTRAINT project_assignments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users (id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS ix_project_assignments_project_id ON public.project_assignments(project_id);
+CREATE INDEX IF NOT EXISTS ix_project_assignments_user_id ON public.project_assignments(user_id);
+
 -- 6. file_cache (UUID, NOT NULL extracted_text/departmental_summaries, extra columns)
 CREATE TABLE IF NOT EXISTS public.file_cache (
     id uuid NOT NULL DEFAULT gen_random_uuid(),

@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
@@ -108,7 +108,7 @@ export default function LoginPage() {
                     {/* Header */}
                     <div className="auth-header">
                         <div className="auth-icon-wrapper">
-                            <Lock size={32} />
+                            <Sparkles size={32} />
                         </div>
                         <h1 className="auth-title">
                             Welcome Back
@@ -140,7 +140,7 @@ export default function LoginPage() {
                         {/* Password Input */}
                         <div className="form-group">
                             <label className="form-label">
-                                <Lock size={18} />
+                                <LockKeyhole size={18} />
                                 Password
                             </label>
                             <div style={{ position: 'relative' }}>
@@ -226,19 +226,6 @@ export default function LoginPage() {
                             )}
                         </button>
                     </form>
-
-                    {/* Footer Links */}
-                    <div className="auth-footer">
-                        <p className="auth-footer-text">
-                            Don't have an account?{" "}
-                            <button
-                                onClick={() => navigate("/signup")}
-                                className="auth-link"
-                            >
-                                Sign Up
-                            </button>
-                        </p>
-                    </div>
                 </div>
             </div>
         </div>
