@@ -20,18 +20,6 @@ export default function ProjectResultsPage() {
       navigate("/login");
       return;
     }
-    let parsed: { role?: string };
-    try {
-      parsed = JSON.parse(u);
-    } catch {
-      navigate("/login");
-      return;
-    }
-    const role = (parsed.role || "").toLowerCase();
-    if (role !== "bid_admin") {
-      navigate("/home");
-      return;
-    }
   }, [navigate]);
 
   useEffect(() => {

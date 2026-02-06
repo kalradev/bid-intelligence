@@ -11,6 +11,11 @@ from models.sqlalchemy_models import Project, ProjectDocument, AnalysisRecord
 
 logger = logging.getLogger(__name__)
 
+
+def _get_visible_project_ids(current_user: dict) -> List[int]:
+    from services.role_quota_service import get_visible_project_ids
+    return get_visible_project_ids(current_user)
+
 class ProjectModel:
     @staticmethod
     def get_by_name(project_name: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -38,29 +43,65 @@ class ProjectModel:
             db.close()
 
     @staticmethod
-    def get_by_name_if_visible(project_name: str, visible_user_ids: List[int]) -> Optional[Dict[str, Any]]:
-        """Get project by name if its owner is in visible_user_ids (for role-based access)."""
-        if not visible_user_ids:
-            return None
+    def get_by_name_if_visible(project_name: str, visible_user_ids: Optional[List[int]] = None, current_user: Optional[dict] = None) -> Optional[Dict[str, Any]]:
+        """Get project by name if visible to the user. Use current_user for role-based visibility (incl. TM assigned projects)."""
         db = get_db_session()
         try:
-            project = db.query(Project).filter(
-                Project.project_name == project_name,
-                Project.user_id.in_(visible_user_ids)
-            ).first()
-            if project:
-                return {
-                    "id": project.id,
-                    "project_name": project.project_name,
-                    "tender_id": project.tender_id,
-                    "client_name": project.client_name,
-                    "user_id": project.user_id,
-                    "created_at": project.created_at
-                }
-            return None
+            project = db.query(Project).filter(Project.project_name == project_name).first()
+            if not project:
+                return None
+            if current_user is not None:
+                visible_ids = _get_visible_project_ids(current_user)
+                if project.id not in visible_ids:
+                    return None
+            elif visible_user_ids:
+                if project.user_id not in visible_user_ids:
+                    return None
+            else:
+                return None
+            return {
+                "id": project.id,
+                "project_name": project.project_name,
+                "tender_id": project.tender_id,
+                "client_name": project.client_name,
+                "user_id": project.user_id,
+                "created_at": project.created_at
+            }
         except Exception as e:
             logger.error(f"Error getting project: {str(e)}")
             return None
+        finally:
+            db.close()
+
+    @staticmethod
+    def get_all_visible_projects(current_user: dict) -> List[Dict[str, Any]]:
+        """Get all projects visible to the current user (by role: admin all, BM team-owned, TM assigned only)."""
+        visible_ids = _get_visible_project_ids(current_user)
+        if not visible_ids:
+            return []
+        return ProjectModel.get_all_by_project_ids(visible_ids)
+
+    @staticmethod
+    def get_all_by_project_ids(project_ids: List[int]) -> List[Dict[str, Any]]:
+        """Get all projects with id in project_ids."""
+        if not project_ids:
+            return []
+        db = get_db_session()
+        try:
+            projects = db.query(Project).filter(
+                Project.id.in_(project_ids)
+            ).order_by(Project.project_name).all()
+            return [{
+                "id": p.id,
+                "project_name": p.project_name,
+                "tender_id": p.tender_id,
+                "client_name": p.client_name,
+                "user_id": p.user_id,
+                "created_at": p.created_at
+            } for p in projects]
+        except Exception as e:
+            logger.error(f"Error getting projects by ids: {str(e)}")
+            return []
         finally:
             db.close()
 

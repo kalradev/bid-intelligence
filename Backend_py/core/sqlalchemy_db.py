@@ -78,10 +78,18 @@ def get_db_session() -> Session:
 def init_db():
     """
     Initialize database tables.
-    Creates all tables defined in Base.metadata
+    Creates all tables defined in Base.metadata (including project_assignments).
+    Also ensures project_assignments exists for raw SQL path.
     """
     try:
+        # Ensure all models (e.g. ProjectAssignment) are registered before create_all
+        import models.sqlalchemy_models  # noqa: F401
         Base.metadata.create_all(bind=engine)
+        try:
+            from models.project_assignment import _ensure_table_exists
+            _ensure_table_exists()
+        except Exception as e:
+            logger.warning(f"project_assignments ensure: {e}")
         logger.info("✅ SQLAlchemy database tables initialized")
     except Exception as e:
         logger.error(f"❌ Error initializing database tables: {str(e)}")

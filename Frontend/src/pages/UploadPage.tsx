@@ -1,7 +1,7 @@
-import { LayoutDashboard, LogOut, RefreshCw } from "lucide-react";
+import { LayoutDashboard, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 // Logo imports
 import cacheLogo from '../assets/Cache-Logo.png';
 import womenOwnedLogo from '../assets/women-owned-logo.png';
@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../config';
 
 export default function UploadPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [userRole, setUserRole] = useState<string | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
 
@@ -17,7 +18,9 @@ export default function UploadPage() {
         if (u) {
             try {
                 const parsed = JSON.parse(u);
-                setUserRole((parsed.role || "").toLowerCase());
+                const role = (parsed.role || "").toLowerCase();
+                setUserRole(role);
+                if (role === "technical_manager") setIsExistingMode(true);
             } catch {
                 setUserRole(null);
             }
@@ -49,6 +52,12 @@ export default function UploadPage() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [teamQuota, setTeamQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
+
+    const [showAssignTMs, setShowAssignTMs] = useState(false);
+    const [lastAnalyzedProjectName, setLastAnalyzedProjectName] = useState("");
+    const [myTeam, setMyTeam] = useState<{ id: number; fullName: string; email: string; role?: string }[]>([]);
+    const [assignedUserIds, setAssignedUserIds] = useState<number[]>([]);
+    const [assignSaving, setAssignSaving] = useState(false);
 
     useEffect(() => {
         const fetchProjects = async () => {
@@ -242,6 +251,19 @@ export default function UploadPage() {
         checkProjectStatus(selectedName);
     };
 
+    // Preselected project from TM dashboard "Upload docs" — run once when landing with state
+    useEffect(() => {
+        const preselected = (location.state as { preselectedProjectName?: string } | null)?.preselectedProjectName;
+        if (preselected && preselected.trim()) {
+            setProjectName(preselected.trim());
+            setIsExistingMode(true);
+            setProjectSearchTerm("");
+            checkProjectStatus(preselected.trim());
+            navigate(location.pathname, { replace: true, state: {} });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const handleResetProject = () => {
         setProjectName("");
         setProjectExists(null);
@@ -254,17 +276,7 @@ export default function UploadPage() {
         toast.success("Project selection reset! Choose a new project.", { icon: '🔄', duration: 2000 });
     };
 
-    const handleLogout = () => {
-        // Clear all auth data
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('analysisData');
-        localStorage.removeItem('currentDocument');
-        localStorage.removeItem('recentRfpAnalysis');
 
-        toast.success("Logged out successfully!");
-        navigate("/login");
-    };
 
     const handleViewOldAnalysis = async () => {
         if (!projectName) return;
@@ -465,7 +477,34 @@ export default function UploadPage() {
             setProgressPercent(100);
             setAnalysisStage("Analysis complete!");
             toast.success(`Analysis complete! (${formatTime(totalTime)})`, { duration: 3000 });
-            setTimeout(() => navigate("/insights"), 1500);
+            const userStr = localStorage.getItem("user");
+            const role = (userStr ? (JSON.parse(userStr).role || "") : "").toString().toLowerCase();
+            if (projectName && role === "bid_manager") {
+                setLastAnalyzedProjectName(projectName);
+                setShowAssignTMs(true);
+                const token = localStorage.getItem("token");
+                if (token) {
+                    try {
+                        const [assignRes, teamRes] = await Promise.all([
+                            fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(projectName)}`, { headers: { Authorization: `Bearer ${token}` } }),
+                            fetch(`${API_BASE_URL}/api/auth/my-team`, { headers: { Authorization: `Bearer ${token}` } })
+                        ]);
+                        if (assignRes.ok) {
+                            const assignData = await assignRes.json();
+                            setAssignedUserIds(assignData.assignedUserIds || []);
+                        }
+                        if (teamRes.ok) {
+                            const teamData = await teamRes.json();
+                            const list = teamData.team || teamData.technicalManagers || teamData.members || [];
+                            setMyTeam((Array.isArray(list) ? list : []).map((m: any) => ({ id: m.id, fullName: m.fullName || m.full_name, email: m.email, role: m.role })));
+                        }
+                    } catch (e) {
+                        console.error("Failed to load team/assignments", e);
+                    }
+                }
+            } else {
+                setTimeout(() => navigate("/insights"), 1500);
+            }
         } catch (error: any) {
             if (error.name === 'AbortError') {
                 if (timerIntervalRef.current) {
@@ -521,6 +560,83 @@ export default function UploadPage() {
                 <Toaster />
 
                 <div className="upload-container">
+                    {showAssignTMs && lastAnalyzedProjectName && (
+                        <div style={{
+                            marginBottom: "24px",
+                            padding: "24px",
+                            borderRadius: "20px",
+                            background: "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(249,250,251,0.98) 100%)",
+                            border: "2px solid rgba(99, 102, 241, 0.3)",
+                            boxShadow: "0 20px 50px rgba(99, 102, 241, 0.15)"
+                        }}>
+                            <h3 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#4f46e5" }}>
+                                Assign Technical Managers to “{lastAnalyzedProjectName}”
+                            </h3>
+                            <p style={{ margin: "0 0 8px", fontSize: "14px", color: "#64748b" }}>
+                                Optional: assign Technical Managers who can upload corrigendum and reference documents. You can also add TMs to your team and assign them to this project later from your dashboard.
+                            </p>
+                            {myTeam.length > 0 ? (
+                                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
+                                    {myTeam.map((m) => (
+                                        <label key={m.id} style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", padding: "10px 14px", borderRadius: "12px", background: assignedUserIds.includes(m.id) ? "rgba(99, 102, 241, 0.1)" : "transparent", border: `1px solid ${assignedUserIds.includes(m.id) ? "rgba(99, 102, 241, 0.3)" : "rgba(0,0,0,0.06)"}` }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={assignedUserIds.includes(m.id)}
+                                                onChange={() => setAssignedUserIds(prev => prev.includes(m.id) ? prev.filter(x => x !== m.id) : [...prev, m.id])}
+                                            />
+                                            <span style={{ fontWeight: 600, color: "#1e293b" }}>{m.fullName}</span>
+                                            <span style={{ fontSize: "13px", color: "#64748b" }}>{m.email}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p style={{ margin: "0 0 16px", fontSize: "14px", color: "#64748b" }}>
+                                    Add Technical Managers from <strong>Manage Teams</strong>, then assign them to this or any analysed project from your dashboard.
+                                </p>
+                            )}
+                            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
+                                {myTeam.length > 0 && (
+                                    <button
+                                        disabled={assignSaving}
+                                        onClick={async () => {
+                                            setAssignSaving(true);
+                                            try {
+                                                const token = localStorage.getItem("token");
+                                                if (!token) return;
+                                                const res = await fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(lastAnalyzedProjectName)}`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                                                    body: JSON.stringify({ userIds: assignedUserIds })
+                                                });
+                                                if (!res.ok) throw new Error((await res.json()).detail || "Failed to save");
+                                                toast.success("Assignments saved.");
+                                            } catch (e: any) {
+                                                toast.error(e.message || "Failed to save assignments");
+                                            } finally {
+                                                setAssignSaving(false);
+                                            }
+                                        }}
+                                        style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}
+                                    >
+                                        {assignSaving ? "Saving…" : "Save assignments"}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => { setShowAssignTMs(false); setLastAnalyzedProjectName(""); navigate("/insights"); }}
+                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "rgba(99, 102, 241, 0.15)", color: "#4f46e5", border: "2px solid rgba(99, 102, 241, 0.4)", cursor: "pointer" }}
+                                >
+                                    View results
+                                </button>
+                                <button
+                                    onClick={() => { setShowAssignTMs(false); setLastAnalyzedProjectName(""); }}
+                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 600, background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0", cursor: "pointer" }}
+                                >
+                                    Skip for now
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     <h1 className="upload-title">Bid Preparation & Analysis</h1>
 
                     {/* Enhanced Toggle */}
@@ -534,35 +650,37 @@ export default function UploadPage() {
                         boxShadow: "0 8px 24px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255,255,255,0.5)",
                         border: "1px solid rgba(139, 92, 246, 0.25)"
                     }}>
-                        <button
-                            onClick={() => { setIsExistingMode(false); setProjectExists(null); setProjectName(""); setTenderId(""); setClientName(""); setProjectSearchTerm(""); setIsDropdownOpen(false); }}
-                            onMouseEnter={(e) => {
-                                if (!isExistingMode) {
-                                    e.currentTarget.style.transform = "translateY(-2px)";
-                                    e.currentTarget.style.boxShadow = "0 8px 20px rgba(59, 130, 246, 0.5)";
-                                }
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = "translateY(0)";
-                                e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none";
-                            }}
-                            style={{
-                                flex: 1,
-                                padding: "13px",
-                                borderRadius: "12px",
-                                border: "none",
-                                background: !isExistingMode ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)" : "transparent",
-                                color: !isExistingMode ? "#fff" : "#6b7280",
-                                fontWeight: "700",
-                                cursor: "pointer",
-                                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                                fontSize: "14px",
-                                boxShadow: !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none",
-                                letterSpacing: "0.3px"
-                            }}
-                        >
-                            🆕 New Project
-                        </button>
+                        {(userRole || "").toLowerCase() !== "technical_manager" && (
+                            <button
+                                onClick={() => { setIsExistingMode(false); setProjectExists(null); setProjectName(""); setTenderId(""); setClientName(""); setProjectSearchTerm(""); setIsDropdownOpen(false); }}
+                                onMouseEnter={(e) => {
+                                    if (!isExistingMode) {
+                                        e.currentTarget.style.transform = "translateY(-2px)";
+                                        e.currentTarget.style.boxShadow = "0 8px 20px rgba(59, 130, 246, 0.5)";
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = "translateY(0)";
+                                    e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none";
+                                }}
+                                style={{
+                                    flex: 1,
+                                    padding: "13px",
+                                    borderRadius: "12px",
+                                    border: "none",
+                                    background: !isExistingMode ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)" : "transparent",
+                                    color: !isExistingMode ? "#fff" : "#6b7280",
+                                    fontWeight: "700",
+                                    cursor: "pointer",
+                                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                                    fontSize: "14px",
+                                    boxShadow: !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none",
+                                    letterSpacing: "0.3px"
+                                }}
+                            >
+                                🆕 New Project
+                            </button>
+                        )}
                         <button
                             onClick={() => { setIsExistingMode(true); setProjectExists(null); setProjectName(""); setTenderId(""); setClientName(""); setProjectSearchTerm(""); setIsDropdownOpen(false); }}
                             onMouseEnter={(e) => {
@@ -1078,7 +1196,7 @@ export default function UploadPage() {
                                             >
                                                 <option value="CORRIGENDUM">📋 Corrigendum / Amendment</option>
                                                 <option value="REFERENCE_UPDATE">📚 Reference / Supplementary File</option>
-                                                {!hasBaseRfp && <option value="BASE_RFP">🛠️ Baseline RFP</option>}
+                                                {!hasBaseRfp && (userRole || "").toLowerCase() !== "technical_manager" && <option value="BASE_RFP">🛠️ Baseline RFP</option>}
                                             </select>
                                         </div>
                                     )}
@@ -1363,44 +1481,6 @@ export default function UploadPage() {
                     Go to Dashboard
                 </button>
             )}
-
-            {/* Logout Button - Bottom Right Corner */}
-            <button
-                onClick={handleLogout}
-                title="Logout"
-                style={{
-                    position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
-                    zIndex: 1000,
-                    background: '#dc2626',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    padding: '12px 20px',
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    boxShadow: '0 4px 12px rgba(220, 38, 38, 0.3)',
-                }}
-                onMouseOver={(e) => {
-                    e.currentTarget.style.background = '#b91c1c';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 6px 16px rgba(220, 38, 38, 0.4)';
-                }}
-                onMouseOut={(e) => {
-                    e.currentTarget.style.background = '#dc2626';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(220, 38, 38, 0.3)';
-                }}
-            >
-                <LogOut size={18} />
-                <span>Logout</span>
-            </button>
         </div>
     );
 }

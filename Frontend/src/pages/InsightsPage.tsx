@@ -1,4 +1,4 @@
-import { Download, LogOut, Users } from "lucide-react";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DepartmentCard from "../components/DepartmentCard";
@@ -15,11 +15,7 @@ export default function InsightsPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
-
-  const showTeamLink = userRole === "bid_admin" || userRole === "bid_manager" || userRole === "technical_manager";
-
-  // Get project name and user from localStorage
+  // Get project name from localStorage
   useEffect(() => {
     const currentDoc = localStorage.getItem("currentDocument");
     if (currentDoc) {
@@ -45,17 +41,6 @@ export default function InsightsPage() {
       }
     }
 
-    const u = localStorage.getItem("user");
-    if (u) {
-      try {
-        const parsed = JSON.parse(u);
-        setUserRole((parsed.role || "").toLowerCase());
-      } catch {
-        setUserRole(null);
-      }
-    } else {
-      setUserRole(null);
-    }
   }, []);
 
   // Handle scroll to section on page load if hash is present
@@ -98,18 +83,6 @@ export default function InsightsPage() {
     }
   };
 
-  const handleLogout = () => {
-    // Clear all auth data
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('analysisData');
-    localStorage.removeItem('currentDocument');
-    localStorage.removeItem('recentRfpAnalysis');
-    
-    toast.success("Logged out successfully!");
-    navigate("/login");
-  };
-
   return (
     <div className="universal-page-wrapper" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* 🌟 NAVBAR START */}
@@ -120,7 +93,29 @@ export default function InsightsPage() {
           <button style={{ padding: '10px 24px' }}>Analysis</button>
         </div>
 
-        <div className="navbar-title">Bid Intelligence.AI</div>
+        <div className="navbar-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+          <span
+            className="navbar-logo-icon"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 40,
+              height: 40,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
+              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+              flexShrink: 0,
+            }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3L13.5 9.5L20 11L13.5 12.5L12 19L10.5 12.5L4 11L10.5 9.5L12 3Z" fill="white" opacity="0.95"/>
+              <circle cx="16" cy="8" r="1.2" fill="white"/>
+              <circle cx="18" cy="10" r="0.8" fill="white"/>
+            </svg>
+          </span>
+          <span style={{ background: 'linear-gradient(90deg, #c4b5fd 0%, #e9d5ff 50%, #fbcfe8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', color: '#e9d5ff' }}>Bid Intelligence.AI</span>
+        </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {/* Document Filter */}
@@ -163,41 +158,6 @@ export default function InsightsPage() {
             navigate("/upload");
           }}>
             Analysis
-          </button>
-
-          {showTeamLink && (
-            <button
-              className="navbar-btn"
-              onClick={() => navigate("/team")}
-              style={{ display: "flex", alignItems: "center", gap: 8 }}
-            >
-              <Users size={18} /> Team
-            </button>
-          )}
-
-          {/* Logout Button */}
-          <button
-            className="navbar-btn-icon"
-            onClick={handleLogout}
-            title="Logout"
-            style={{
-              background: '#dc2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '10px',
-              padding: '10px 16px',
-              fontSize: '16px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: '0.3s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#b91c1c')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#dc2626')}
-          >
-            <LogOut size={20} />
           </button>
         </div>
       </nav>

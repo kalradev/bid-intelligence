@@ -6,6 +6,8 @@ import { useNavigate } from "react-router-dom";
 import cacheLogo from '../assets/Cache-Logo.png';
 import womenOwnedLogo from '../assets/women-owned-logo.png';
 import BidAdminDashboardPage from "./BidAdminDashboardPage";
+import BidManagerDashboardPage from "./BidManagerDashboardPage";
+import TechnicalManagerDashboardPage from "./TechnicalManagerDashboardPage";
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -33,6 +35,14 @@ export default function LandingPage() {
 
   if (userRole === "bid_admin") {
     return <BidAdminDashboardPage />;
+  }
+
+  if (userRole === "bid_manager") {
+    return <BidManagerDashboardPage />;
+  }
+
+  if (userRole === "technical_manager") {
+    return <TechnicalManagerDashboardPage />;
   }
 
   const showTeamLink = userRole === "bid_manager";

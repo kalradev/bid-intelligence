@@ -29,6 +29,22 @@ class User(Base):
 
     parent = relationship("User", remote_side=[id], foreign_keys=[parent_id], backref="children")
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
+    project_assignments_link = relationship("ProjectAssignment", back_populates="user", cascade="all, delete-orphan")
+
+
+class ProjectAssignment(Base):
+    """Assigns a Technical Manager (user) to a project. Many-to-many between Project and User."""
+    __tablename__ = "project_assignments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=False), server_default=func.now())
+
+    project = relationship("Project", back_populates="assigned_users_link")
+    user = relationship("User", back_populates="project_assignments_link")
+
+    __table_args__ = (UniqueConstraint("project_id", "user_id", name="project_assignments_project_id_user_id_key"),)
 
 
 class Project(Base):
@@ -43,6 +59,7 @@ class Project(Base):
     created_at = Column(DateTime(timezone=False), server_default=func.now())
 
     user = relationship("User", back_populates="projects")
+    assigned_users_link = relationship("ProjectAssignment", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("ProjectDocument", back_populates="project", cascade="all, delete-orphan")
 
 

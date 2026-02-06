@@ -96,7 +96,7 @@ export default function TeamPage() {
 
   const role = (user?.role || "").toLowerCase();
   const isBidAdmin = role === "bid_admin";
-  const canCreateBidManager = false; // Bid Managers sign up via signup page
+  const canCreateBidManager = false; // Bid Managers are created by Bid Admin from admin dashboard
   const canCreateTechnicalManager = role === "bid_manager";
 
   const handleCreateUser = async (e: React.FormEvent) => {
