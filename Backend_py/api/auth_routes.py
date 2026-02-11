@@ -247,6 +247,17 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             detail=f"Internal server error during registration: {str(e)}"
         )
 
+def _verify_password_safe(password: str, hashed: str) -> bool:
+    """Verify password; return False on invalid hash or mismatch (avoids 500 from bcrypt)."""
+    if not hashed or not isinstance(hashed, str):
+        return False
+    try:
+        return verify_password(password, hashed)
+    except (ValueError, TypeError, Exception) as e:
+        logger.warning(f"Password verification failed (invalid hash or error): {e}")
+        return False
+
+
 @router.post("/login")
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Login user"""
@@ -261,8 +272,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Invalid email or password"
             )
         
-        # Verify password
-        if not verify_password(request.password, user.password):
+        # Verify password (safe: malformed hashes don't cause 500)
+        if not _verify_password_safe(request.password, user.password or ""):
             raise HTTPException(
                 status_code=401,
                 detail="Invalid email or password"
@@ -291,7 +302,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         logger.error(f"Login error: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error during login: {str(e)}"
+            detail="Internal server error during login"
         )
 
 @router.get("/me")

@@ -38,11 +38,12 @@ def create_bid_admin():
         
         if existing:
             print(f"[OK] User {BID_ADMIN_EMAIL} already exists (ID: {existing.id})")
-            print(f"     Updating role to 'bid_admin'...")
+            print(f"     Updating role to 'bid_admin' and resetting password...")
             existing.role = "bid_admin"
             existing.parent_id = None
+            existing.password = hash_password(BID_ADMIN_PASSWORD)
             db.commit()
-            print(f"[OK] Updated user {existing.id} to Bid Admin")
+            print(f"[OK] Updated user {existing.id} to Bid Admin (password reset to default)")
         else:
             print(f"Creating new Bid Admin user: {BID_ADMIN_EMAIL}")
             hashed_password = hash_password(BID_ADMIN_PASSWORD)
