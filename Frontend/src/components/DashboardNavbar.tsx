@@ -1,6 +1,6 @@
-import { Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 
@@ -80,7 +80,7 @@ export default function DashboardNavbar() {
         }}
         title="Go to Dashboard"
       >
-        <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+        <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
         <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

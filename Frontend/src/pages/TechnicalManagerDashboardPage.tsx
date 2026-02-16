@@ -1,7 +1,8 @@
-import { ArrowRight, FileUp, FolderOpen, LayoutDashboard, LogOut, RefreshCw, Sparkles, Users } from "lucide-react";
+import { ArrowRight, FileUp, FolderOpen, LayoutDashboard, LogOut, RefreshCw, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
@@ -117,11 +118,43 @@ export default function TechnicalManagerDashboardPage() {
           <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         </div>
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
           <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            onClick={() => navigate("/account")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "8px 16px 8px 8px",
+              background: "rgba(255,179,179,0.5)",
+              border: "1px solid rgba(255,143,143,0.4)",
+              borderRadius: 14,
+              cursor: "pointer",
+              outline: "none",
+              transition: "all 0.3s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#FFB3B3";
+              e.currentTarget.style.transform = "translateY(-2px)";
+              e.currentTarget.style.boxShadow = "0 6px 20px rgba(255,143,143,0.25)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
+            title="Account & security"
+          >
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(255,143,143,0.3)" }}>
+              {(userDisplayName || "T").charAt(0).toUpperCase()}
+            </div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
+          </button>
+          <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
         </div>
       </header>
 
@@ -197,39 +230,8 @@ export default function TechnicalManagerDashboardPage() {
             <span>Upload Corrigendum / Reference</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid #EAEFEF", display: "flex", flexDirection: "column", gap: 4 }}>
-          <button
-            type="button"
-            onClick={() => navigate("/account")}
-            title="Profile – change password and account settings"
-            style={{
-              width: "100%",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-              padding: "12px 14px",
-              background: "#FF8F8F",
-              border: "1px solid rgba(255,255,255,0.2)",
-              borderRadius: 14,
-              cursor: "pointer",
-              boxShadow: "0 4px 14px rgba(139,92,246,0.4), 0 2px 6px rgba(0,0,0,0.06)",
-              transition: "transform 0.2s ease, box-shadow 0.2s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(139,92,246,0.45), 0 2px 8px rgba(0,0,0,0.08)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "0 4px 14px rgba(139,92,246,0.4), 0 2px 6px rgba(0,0,0,0.06)";
-            }}
-          >
-            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(255,255,255,0.25)", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              {(userDisplayName || "T").charAt(0).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>Profile</span>
-          </button>
-          <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#b91c1c" }} title="Logout">
+        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
+          <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#6b5344" }} title="Logout">
             <LogOut size={20} style={{ flexShrink: 0 }} />
             <span>Logout</span>
           </button>

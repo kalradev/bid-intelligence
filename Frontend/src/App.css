@@ -1501,6 +1501,65 @@ tbody tr:hover {
   background: linear-gradient(90deg, #3b82f6, #6366f1);
 }
 
+/* Insights navbar – dashboard theme (warm coral / dark green) */
+.insights-navbar-dashboard-theme {
+  background: #5a6340 !important;
+  box-shadow: 0 4px 20px rgba(90, 99, 64, 0.35);
+}
+.insights-navbar-dashboard-theme .navbar-btn.insights-nav-analysis,
+.insights-navbar-dashboard-theme .navbar-btn.insights-nav-analysis:hover {
+  background: #FF8F8F !important;
+  box-shadow: 0 4px 12px rgba(255, 143, 143, 0.4);
+}
+.insights-navbar-dashboard-theme .navbar-btn.insights-nav-analysis:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 143, 143, 0.5);
+  background: #E87878 !important;
+}
+
+/* Insights page – prominent cards matching dashboard */
+.insights-page .feature-card {
+  background: linear-gradient(145deg, #ffffff, rgba(255, 250, 245, 0.9)) !important;
+  border: 1px solid rgba(255, 143, 143, 0.35) !important;
+  box-shadow: 0 4px 16px rgba(255, 143, 143, 0.12) !important;
+}
+.insights-page .feature-card:hover {
+  border-color: rgba(255, 143, 143, 0.6) !important;
+  background: linear-gradient(145deg, #ffffff, rgba(255, 243, 235, 0.98)) !important;
+  box-shadow: 0 12px 28px rgba(255, 143, 143, 0.22) !important;
+}
+.insights-page .feature-icon,
+.insights-page .feature-icon svg,
+.insights-page .feature-icon > * {
+  color: #E87878 !important;
+}
+.insights-page .hover-blue:hover,
+.insights-page .hover-green:hover,
+.insights-page .hover-purple:hover,
+.insights-page .hover-orange:hover,
+.insights-page .hover-pink:hover,
+.insights-page .hover-cyan:hover {
+  background: linear-gradient(135deg, rgba(255, 179, 179, 0.25), rgba(255, 143, 143, 0.15)) !important;
+}
+.insights-page .dept-card {
+  border: 1px solid rgba(255, 143, 143, 0.25) !important;
+  background: linear-gradient(145deg, #ffffff, rgba(255, 250, 245, 0.7)) !important;
+  box-shadow: 0 3px 12px rgba(255, 143, 143, 0.08) !important;
+}
+.insights-page .dept-card:hover {
+  border-color: rgba(255, 143, 143, 0.5) !important;
+  background: linear-gradient(145deg, #ffffff, rgba(255, 243, 235, 0.95)) !important;
+  box-shadow: 0 10px 24px rgba(255, 143, 143, 0.18) !important;
+}
+.insights-page .dept-card .text-blue-600,
+.insights-page .dept-card .text-green-600,
+.insights-page .dept-card .text-purple-600,
+.insights-page .dept-card .text-yellow-600,
+.insights-page .dept-card .text-red-600,
+.insights-page .dept-card .text-indigo-600 {
+  color: #5a6340 !important;
+}
+
 /* ==== NEW UPLOAD PAGE STYLES (palette + 3D) ==== */
 .upload-container {
   max-width: 560px;
@@ -1914,6 +1973,24 @@ tbody tr:hover {
 .auth-icon-wrapper svg {
   color: white !important;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+/* Logo only (no box) - e.g. login page */
+.auth-logo-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  background: none !important;
+  box-shadow: none !important;
+  border-radius: 0;
+  animation: none;
+}
+.auth-logo-only:hover {
+  transform: none;
+}
+.auth-logo-only img {
+  display: block;
 }
 
 .auth-title {

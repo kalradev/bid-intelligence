@@ -14,10 +14,17 @@ interface BidManagerQuota {
     teamProjectsLeft: number;
 }
 
+interface OrgQuotaInfo {
+    teamProjectsUsed: number;
+    teamProjectsLimit: number;
+    teamProjectsLeft: number;
+}
+
 export default function TeamQuotaPage() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(true);
     const [bidManagers, setBidManagers] = useState<BidManagerQuota[]>([]);
+    const [orgQuota, setOrgQuota] = useState<OrgQuotaInfo | null>(null);
     const [hoveredTeam, setHoveredTeam] = useState<number | null>(null);
 
     useEffect(() => {
@@ -57,6 +64,9 @@ export default function TeamQuotaPage() {
                 if (dashData.success && dashData.bidManagers) {
                     setBidManagers(dashData.bidManagers);
                 }
+                if (dashData.success && dashData.orgQuota) {
+                    setOrgQuota(dashData.orgQuota);
+                }
             } catch (e) {
                 console.error(e);
                 toast.error("Failed to load quota data");
@@ -68,9 +78,10 @@ export default function TeamQuotaPage() {
         fetchData();
     }, []);
 
-    const totalUsed = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
-    const totalLimit = bidManagers.reduce((s, b) => s + b.teamProjectsLimit, 0);
-    const totalLeft = totalLimit - totalUsed;
+    // Org-wide quota (shared by Bid Admin + all Bid Managers) - not per-BM
+    const totalLimit = orgQuota?.teamProjectsLimit ?? 0;
+    const totalUsed = orgQuota?.teamProjectsUsed ?? 0;
+    const totalLeft = orgQuota?.teamProjectsLeft ?? 0;
     const usagePercentage = totalLimit > 0 ? (totalUsed / totalLimit) * 100 : 0;
 
     // Generate colors for each team
@@ -241,8 +252,9 @@ export default function TeamQuotaPage() {
                                 border: "1px solid rgba(139,92,246,0.2)",
                             }}
                         >
-                            <div style={{ fontSize: 13, color: "#7c3aed", fontWeight: 600, marginBottom: 6 }}>Total Limit</div>
+                            <div style={{ fontSize: 13, color: "#7c3aed", fontWeight: 600, marginBottom: 6 }}>Org Limit</div>
                             <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b" }}>{totalLimit}</div>
+                            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Shared by Bid Admin + all BMs</div>
                         </div>
                         <div
                             style={{
@@ -252,7 +264,7 @@ export default function TeamQuotaPage() {
                                 border: "1px solid rgba(59,130,246,0.2)",
                             }}
                         >
-                            <div style={{ fontSize: 13, color: "#2563eb", fontWeight: 600, marginBottom: 6 }}>Total Used</div>
+                            <div style={{ fontSize: 13, color: "#2563eb", fontWeight: 600, marginBottom: 6 }}>Org Used</div>
                             <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b" }}>{totalUsed}</div>
                         </div>
                         <div
@@ -263,7 +275,7 @@ export default function TeamQuotaPage() {
                                 border: "1px solid rgba(34,197,94,0.2)",
                             }}
                         >
-                            <div style={{ fontSize: 13, color: "#16a34a", fontWeight: 600, marginBottom: 6 }}>Available</div>
+                            <div style={{ fontSize: 13, color: "#16a34a", fontWeight: 600, marginBottom: 6 }}>Org Available</div>
                             <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b" }}>{totalLeft}</div>
                         </div>
                         <div
@@ -477,11 +489,11 @@ export default function TeamQuotaPage() {
                                                 <div style={{ fontSize: 18, fontWeight: 700, color: "#1e293b" }}>{team.used}</div>
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>Limit</div>
+                                                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>Org limit</div>
                                                 <div style={{ fontSize: 18, fontWeight: 700, color: "#1e293b" }}>{team.limit}</div>
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>Available</div>
+                                                <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>Org left</div>
                                                 <div
                                                     style={{
                                                         fontSize: 18,

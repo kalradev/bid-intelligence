@@ -84,9 +84,9 @@ export default function InsightsPage() {
   };
 
   return (
-    <div className="universal-page-wrapper" style={{ position: 'relative', overflow: 'hidden' }}>
+    <div className="universal-page-wrapper insights-page" style={{ position: 'relative', overflow: 'hidden' }}>
       {/* 🌟 NAVBAR START */}
-      <nav className="insights-navbar" style={{ zIndex: 20, position: 'relative' }}>
+      <nav className="insights-navbar insights-navbar-dashboard-theme" style={{ zIndex: 20, position: 'relative' }}>
         {/* Left spacer to balance right buttons */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', visibility: 'hidden' }}>
           <button style={{ padding: '10px 16px' }}><span style={{ width: '20px', display: 'inline-block' }}></span></button>
@@ -103,8 +103,8 @@ export default function InsightsPage() {
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+              background: 'linear-gradient(135deg, #FF8F8F 0%, #E87878 100%)',
+              boxShadow: '0 4px 12px rgba(255, 143, 143, 0.4)',
               flexShrink: 0,
             }}
           >
@@ -114,7 +114,7 @@ export default function InsightsPage() {
               <circle cx="18" cy="10" r="0.8" fill="white"/>
             </svg>
           </span>
-          <span style={{ background: 'linear-gradient(90deg, #c4b5fd 0%, #e9d5ff 50%, #fbcfe8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', color: '#e9d5ff' }}>Bid Intelligence.AI</span>
+          <span style={{ color: '#fff', fontWeight: 700 }}>Bid Intelligence.AI</span>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -129,31 +129,31 @@ export default function InsightsPage() {
           
           {/* Download Summary Button */}
           <button
-            className="navbar-btn-icon"
+            className="navbar-btn-icon insights-nav-download"
             onClick={handleDownloadSummary}
             title="Download Summary PDF"
             style={{
-              background: '#0891b2',
-              color: 'white',
-              border: 'none',
+              background: 'rgba(255,255,255,0.95)',
+              color: '#2d3319',
+              border: '1px solid rgba(255,143,143,0.5)',
               borderRadius: '10px',
               padding: '10px 16px',
               fontSize: '16px',
-              fontWeight: 500,
+              fontWeight: 600,
               cursor: 'pointer',
               transition: '0.3s',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
             }}
-            onMouseOver={(e) => (e.currentTarget.style.background = '#0e7490')}
-            onMouseOut={(e) => (e.currentTarget.style.background = '#0891b2')}
+            onMouseOver={(e) => { e.currentTarget.style.background = '#FFB3B3'; e.currentTarget.style.color = '#2d3319'; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.95)'; e.currentTarget.style.color = '#2d3319'; }}
           >
             <Download size={20} />
           </button>
 
           {/* Analysis Button */}
-          <button className="navbar-btn" onClick={() => {
+          <button className="navbar-btn insights-nav-analysis" onClick={() => {
             window.scrollTo({ top: 0, behavior: "instant" });
             navigate("/upload");
           }}>
@@ -175,14 +175,14 @@ export default function InsightsPage() {
 
       {/* 🌟 MAIN CONTENT */}
       <div
-        className="min-h-screen hero-background"
-        style={{ position: "relative", zIndex: 10 }}
+        className="min-h-screen"
+        style={{ position: "relative", zIndex: 10, background: "#FAF3E1" }}
       >
         <div className="w-full max-w-screen-xl mx-auto px-4 lg:px-8 py-16">
           {/* ===== HEADER ===== */}
           <div className="text-center mb-16">
-            <div className="inline-block mb-4 px-4 py-2 bg-blue-100 rounded-full">
-              <span className="text-blue-600 font-semibold text-sm">
+            <div className="inline-block mb-4 px-4 py-2 rounded-full" style={{ background: 'rgba(255,179,179,0.45)', border: '1px solid rgba(255,143,143,0.4)' }}>
+              <span className="font-semibold text-sm" style={{ color: '#5a6340' }}>
                 AI-Powered Bid Intelligence
               </span>
             </div>
@@ -204,11 +204,12 @@ export default function InsightsPage() {
                 alignItems: "center",
                 gap: "8px",
                 padding: "8px 16px",
-                background: "rgba(99, 102, 241, 0.1)",
+                background: "rgba(255,179,179,0.35)",
+                border: "1px solid rgba(255,143,143,0.4)",
                 borderRadius: "20px",
                 fontSize: "14px",
                 fontWeight: "600",
-                color: "#4f46e5",
+                color: "#2d3319",
                 marginTop: "16px"
               }}>
                 <span>📄</span>

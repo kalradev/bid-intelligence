@@ -1,7 +1,8 @@
-import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, Sparkles } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
+import bidIntelligenceLogo from '../assets/bid-intelligence-logo.svg';
 import cacheLogo from '../assets/Cache-Logo.png';
 import womenOwnedLogo from '../assets/women-owned-logo.png';
 import { API_BASE_URL } from '../config';
@@ -176,8 +177,8 @@ export default function LoginPage() {
                 >
                     {/* Header */}
                     <div className="auth-header">
-                        <div className="auth-icon-wrapper">
-                            <Sparkles size={32} />
+                        <div className="auth-icon-wrapper auth-logo-only">
+                            <img src={bidIntelligenceLogo} alt="Bid Intelligence" style={{ width: 72, height: 72 }} />
                         </div>
                         <h1 className="auth-title auth-title-shine">
                             Welcome Back

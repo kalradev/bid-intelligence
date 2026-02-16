@@ -1,10 +1,12 @@
-import { ArrowRight, ChevronDown, ChevronRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Sparkles, UserCircle, Users, UserPlus, X } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { ArrowRight, ChevronDown, ChevronRight, CreditCard, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, UserCircle, Users, UserPlus, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 interface TeamMember {
   id: number;
@@ -61,9 +63,16 @@ export default function BidAdminDashboardPage() {
   const [createBidManagerLoading, setCreateBidManagerLoading] = useState(false);
   const [activeToggle, setActiveToggle] = useState<"projects" | "people" | "personal" | null>(null);
   const [expandedBmIdForProjects, setExpandedBmIdForProjects] = useState<number | null>(null);
+  const [showGrandTotalProjects, setShowGrandTotalProjects] = useState(false);
   const [expandedBmIdForPeople, setExpandedBmIdForPeople] = useState<number | null>(null);
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [pendingViewMode, setPendingViewMode] = useState<ViewMode | null>(null);
+  const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number } | null>(null);
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [paypalClientId, setPaypalClientId] = useState<string>("");
+  const [paypalConfigured, setPaypalConfigured] = useState(false);
+  const [paymentConfigLoaded, setPaymentConfigLoaded] = useState(false);
+  const [addQuotaLoading, setAddQuotaLoading] = useState<"single" | "bulk" | null>(null);
   const TEAMS_PER_PAGE = 8;
   const SIDEBAR_WIDTH = 240;
 
@@ -130,6 +139,9 @@ export default function BidAdminDashboardPage() {
         if (dashData.success && dashData.bidManagers) {
           setBidManagers(dashData.bidManagers);
         }
+        if (dashData.success && dashData.orgQuota) {
+          setOrgQuota(dashData.orgQuota);
+        }
       } catch (e) {
         console.error(e);
         toast.error("Failed to load dashboard");
@@ -144,6 +156,26 @@ export default function BidAdminDashboardPage() {
   useEffect(() => {
     setTeamPage(1);
   }, [teamSearch]);
+
+  useEffect(() => {
+    if (!showRechargeModal) {
+      setPaymentConfigLoaded(false);
+      return;
+    }
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    setPaymentConfigLoaded(false);
+    fetch(`${API_BASE_URL}/api/payment/config`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          setPaypalClientId(d.clientId || "");
+          setPaypalConfigured(!!d.paypalConfigured);
+        }
+        setPaymentConfigLoaded(true);
+      })
+      .catch(() => setPaymentConfigLoaded(true));
+  }, [showRechargeModal]);
 
   useEffect(() => {
     if (currentUserId == null) return;
@@ -222,6 +254,18 @@ export default function BidAdminDashboardPage() {
     navigate(`/project-results/${encodeURIComponent(projectName)}`);
   };
 
+  const refreshDashboard = useCallback(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.bidManagers) setBidManagers(d.bidManagers);
+        if (d.success && d.orgQuota) setOrgQuota(d.orgQuota);
+      })
+      .catch(() => {});
+  }, []);
+
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -287,10 +331,12 @@ export default function BidAdminDashboardPage() {
   const totalProjects = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
   const totalPeople = bidManagers.reduce((s, b) => s + 1 + (b.technicalManagers?.length || 0), 0);
   const adminProjects = currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : [];
-  const totalQuotaLeft = bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
-  const totalQuotaLimit = bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
+  const totalQuotaLeft = orgQuota?.teamProjectsLeft ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
+  const totalQuotaLimit = orgQuota?.teamProjectsLimit ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
+  const totalQuotaUsed = orgQuota?.teamProjectsUsed ?? totalProjects;
   const quotaLeftPercent = totalQuotaLimit > 0 ? (totalQuotaLeft / totalQuotaLimit) * 100 : 100;
   const isQuotaLow = totalQuotaLeft === 0 || quotaLeftPercent < 50;
+  const isQuotaExhausted = totalQuotaLeft === 0;
 
   const teamSearchLower = teamSearch.trim().toLowerCase();
   const filteredTeams = teamSearchLower
@@ -351,7 +397,7 @@ export default function BidAdminDashboardPage() {
           <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         </div>
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
           <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -531,32 +577,46 @@ export default function BidAdminDashboardPage() {
         </div>
       </aside>
 
-      <div style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        <div style={{
+      <div className="dashboard-bg-wrap" style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
+        <div className="dashboard-bg-base" style={{
           position: "absolute",
           inset: 0,
-          background: "linear-gradient(160deg, rgba(250,243,225,0.6) 0%, rgba(234,239,239,0.5) 50%, rgba(255,179,179,0.2) 100%)",
-          animation: "pulse 8s ease-in-out infinite"
+          background: "linear-gradient(160deg, rgba(250,243,225,0.85) 0%, rgba(234,239,239,0.8) 50%, rgba(255,179,179,0.4) 100%)",
+          animation: "dashboardBgPulse 8s ease-in-out infinite"
         }} />
-        <div className="background-shape" style={{
-          top: "10%", left: "15%", width: 300, height: 300,
-          background: "rgba(255,179,179,0.35)", borderRadius: "50%", filter: "blur(40px)",
-          animation: "float 20s ease-in-out infinite"
+        <div className="dashboard-bg-move" style={{
+          position: "absolute",
+          inset: -100,
+          background: "linear-gradient(120deg, transparent 0%, rgba(255,179,179,0.2) 25%, rgba(255,143,143,0.15) 50%, rgba(234,239,239,0.2) 75%, transparent 100%)",
+          backgroundSize: "200% 200%",
+          animation: "dashboardBgMove 15s linear infinite"
         }} />
-        <div className="background-shape" style={{
-          top: "60%", right: "10%", width: 250, height: 250,
-          background: "rgba(255,143,143,0.2)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(35px)",
-          animation: "floatSlow 25s ease-in-out infinite reverse"
+        <div className="dashboard-bg-shimmer" style={{
+          position: "absolute",
+          inset: -80,
+          background: "radial-gradient(ellipse 70% 60% at 30% 30%, rgba(255,179,179,0.28) 0%, transparent 55%), radial-gradient(ellipse 50% 70% at 70% 70%, rgba(255,143,143,0.2) 0%, transparent 55%)",
+          animation: "dashboardBgShimmer 14s ease-in-out infinite"
         }} />
-        <div className="background-shape" style={{
-          bottom: "15%", left: "25%", width: 200, height: 200,
-          background: "rgba(234,239,239,0.5)", borderRadius: "50%", filter: "blur(30px)",
-          animation: "float 18s ease-in-out infinite 5s"
+        <div className="background-shape dashboard-float-1" style={{
+          top: "8%", left: "12%", width: 380, height: 380,
+          background: "rgba(255,179,179,0.45)", borderRadius: "50%", filter: "blur(50px)",
+        }} />
+        <div className="background-shape dashboard-float-2" style={{
+          top: "55%", right: "5%", width: 320, height: 320,
+          background: "rgba(255,143,143,0.35)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(45px)",
+        }} />
+        <div className="background-shape dashboard-float-3" style={{
+          bottom: "10%", left: "20%", width: 280, height: 280,
+          background: "rgba(234,239,239,0.6)", borderRadius: "50%", filter: "blur(40px)",
+        }} />
+        <div className="background-shape dashboard-float-4" style={{
+          top: "30%", right: "20%", width: 220, height: 220,
+          background: "rgba(13,148,136,0.12)", borderRadius: "50%", filter: "blur(38px)",
         }} />
         <div style={{
           position: "absolute", inset: 0,
-          background: "rgba(255, 255, 255, 0.25)",
-          backdropFilter: "blur(2px)"
+          background: "rgba(255, 255, 255, 0.12)",
+          backdropFilter: "blur(1px)"
         }} />
       </div>
 
@@ -612,6 +672,31 @@ export default function BidAdminDashboardPage() {
               </p>
             </div>
             {viewMode === "teams" && !loading && (bidManagers.length > 0 || currentUserId != null) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setShowRechargeModal(true)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "12px 20px",
+                    background: isQuotaExhausted ? "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)" : "rgba(13,148,136,0.15)",
+                    border: `1px solid ${isQuotaExhausted ? "rgba(13,148,136,0.4)" : "rgba(13,148,136,0.3)"}`,
+                    borderRadius: 12,
+                    cursor: "pointer",
+                    fontWeight: 700,
+                    fontSize: 15,
+                    color: isQuotaExhausted ? "#fff" : "#0d9488",
+                    boxShadow: isQuotaExhausted ? "0 4px 12px rgba(13,148,136,0.3)" : "none",
+                    transition: "all 0.2s",
+                    outline: "none",
+                  }}
+                  title="Recharge quota to add more projects"
+                >
+                  <CreditCard size={18} />
+                  Recharge quota
+                </button>
               <button
                 type="button"
                 onClick={() => navigate("/team-quota")}
@@ -645,6 +730,7 @@ export default function BidAdminDashboardPage() {
                 <span style={{ opacity: 0.9 }}>Quota left</span>
                 <span style={{ fontSize: 18, fontWeight: 800 }}>{totalQuotaLeft}</span>
               </button>
+              </div>
             )}
           </div>
 
@@ -844,7 +930,26 @@ export default function BidAdminDashboardPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setActiveToggle(activeToggle === "projects" ? null : "projects")}
+                    onClick={() => {
+                      if (activeToggle === "projects") {
+                        setActiveToggle(null);
+                        setExpandedBmIdForProjects(null);
+                        setShowGrandTotalProjects(false);
+                      } else {
+                        setActiveToggle("projects");
+                        const firstBmWithProjects = bidManagers.find((bm) => {
+                          const teamUserIds = [bm.id, ...(bm.technicalManagers || []).map((t) => t.id)];
+                          return personalProjects.some((p) => p.user_id != null && teamUserIds.includes(p.user_id));
+                        });
+                        if (firstBmWithProjects) {
+                          setExpandedBmIdForProjects(firstBmWithProjects.id);
+                          setShowGrandTotalProjects(false);
+                        } else {
+                          setShowGrandTotalProjects(true);
+                          setExpandedBmIdForProjects(null);
+                        }
+                      }
+                    }}
                     style={{
                       padding: "22px 20px",
                       background: activeToggle === "projects" ? "rgba(255,143,143,0.15)" : "#fff",
@@ -966,7 +1071,7 @@ export default function BidAdminDashboardPage() {
               {activeToggle && (
                 <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "20px 24px", marginBottom: 24, position: "relative" }}>
                   {activeToggle === "projects" && (
-                    <div>
+                    <div style={{ width: "100%", minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                         <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#2d3319", display: "flex", alignItems: "center", gap: 10 }}>
                           <FolderKanban size={20} />
@@ -974,7 +1079,7 @@ export default function BidAdminDashboardPage() {
                         </h3>
                         <button
                           type="button"
-                          onClick={() => { setActiveToggle(null); setExpandedBmIdForProjects(null); }}
+                          onClick={() => { setActiveToggle(null); setExpandedBmIdForProjects(null); setShowGrandTotalProjects(false); }}
                           style={{
                             padding: "6px",
                             background: "transparent",
@@ -1000,68 +1105,153 @@ export default function BidAdminDashboardPage() {
                           <X size={20} />
                         </button>
                       </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16 }}>
+                      {/* Name selector: click a name to show their projects in the stretch container below */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
                         {bidManagers.map((bm) => {
-                          const teamUserIds = [bm.id, ...(bm.technicalManagers || []).map((t) => t.id)];
-                          const bmProjects = personalProjects.filter((p) => p.user_id != null && teamUserIds.includes(p.user_id));
-                          const isExpanded = expandedBmIdForProjects === bm.id;
+                          const isSelected = expandedBmIdForProjects === bm.id;
                           return (
-                            <div key={bm.id}>
-                              <button
-                                type="button"
-                                onClick={() => setExpandedBmIdForProjects(isExpanded ? null : bm.id)}
-                                style={{
-                                  width: "100%",
-                                  padding: "14px 16px",
-                                  background: isExpanded ? "rgba(255,143,143,0.12)" : "#f8fafc",
-                                  borderRadius: 12,
-                                  border: isExpanded ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
-                                  cursor: "pointer",
-                                  textAlign: "left",
-                                  outline: "none",
-                                  boxShadow: isExpanded ? "0 4px 12px rgba(255,143,143,0.15)" : "none",
-                                }}
-                              >
-                                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{bm.fullName}</div>
-                                <div style={{ fontSize: 20, fontWeight: 800, color: "#1e293b" }}>{bm.teamProjectsUsed}</div>
-                                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>projects {isExpanded ? "▼" : "▶"}</div>
-                              </button>
-                              {isExpanded && (
-                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-                                  <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 12 }}>{bm.fullName} – projects</div>
-                                  {bmProjects.length === 0 ? (
-                                    <div style={{ padding: "16px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
-                                  ) : (
-                                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                                      <thead>
-                                        <tr style={{ borderBottom: "2px solid #EAEFEF" }}>
-                                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
-                                          <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
-                                          <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {bmProjects.map((p) => (
-                                          <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                            <td style={{ padding: "10px 12px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
-                                            <td style={{ padding: "10px 12px", color: "#64748b" }}>{p.tender_id || "—"}</td>
-                                            <td style={{ padding: "10px 12px", textAlign: "right" }}>
-                                              <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ padding: "6px 12px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>View result</button>
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              key={bm.id}
+                              type="button"
+                              onClick={() => { setExpandedBmIdForProjects(isSelected ? null : bm.id); setShowGrandTotalProjects(false); }}
+                              style={{
+                                padding: "10px 18px",
+                                background: isSelected ? "rgba(255,143,143,0.2)" : "#f8fafc",
+                                border: isSelected ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                                borderRadius: 10,
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                fontSize: 14,
+                                color: isSelected ? "#2d3319" : "#64748b",
+                                transition: "all 0.2s",
+                                boxShadow: isSelected ? "0 2px 8px rgba(255,143,143,0.2)" : "none",
+                              }}
+                            >
+                              {bm.fullName} ({bm.teamProjectsUsed})
+                            </button>
                           );
                         })}
                       </div>
-                      <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(255,143,143,0.15)", borderRadius: 12, border: "1px solid rgba(255,143,143,0.3)" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>Grand Total: {totalProjects} projects</div>
+                      {/* Single stretch container: table fills full width; data changes when name changes */}
+                      <div
+                        style={{
+                          width: "100%",
+                          minWidth: 0,
+                          padding: "20px",
+                          background: "#fff",
+                          borderRadius: 12,
+                          border: "1px solid #EAEFEF",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                          overflow: "auto",
+                        }}
+                      >
+                        {showGrandTotalProjects ? (() => {
+                          const allTeamUserIds = bidManagers.flatMap((bm) => [bm.id, ...(bm.technicalManagers || []).map((t: { id: number }) => t.id)]);
+                          const grandTotalProjects = personalProjects.filter((p) => p.user_id != null && allTeamUserIds.includes(p.user_id));
+                          return (
+                            <>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 14 }}>All projects (Grand Total)</div>
+                              {grandTotalProjects.length === 0 ? (
+                                <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
+                              ) : (
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "auto" }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: "2px solid #EAEFEF", background: "#f8fafc" }}>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {grandTotalProjects.map((p) => (
+                                      <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
+                                        <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                          <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>View result</button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </>
+                          );
+                        })() : expandedBmIdForProjects == null ? (
+                          <div style={{ padding: "24px", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>Select a name above or click Grand Total to view all projects.</div>
+                        ) : (() => {
+                          const selectedBm = bidManagers.find((bm) => bm.id === expandedBmIdForProjects);
+                          if (!selectedBm) return null;
+                          const teamUserIds = [selectedBm.id, ...(selectedBm.technicalManagers || []).map((t: { id: number }) => t.id)];
+                          const bmProjects = personalProjects.filter((p) => p.user_id != null && teamUserIds.includes(p.user_id));
+                          return (
+                            <>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 14 }}>{selectedBm.fullName} – projects</div>
+                              {bmProjects.length === 0 ? (
+                                <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
+                              ) : (
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "auto" }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: "2px solid #EAEFEF", background: "#f8fafc" }}>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {bmProjects.map((p) => (
+                                      <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
+                                        <td style={{ padding: "12px 16px", textAlign: "right" }}>
+                                          <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>View result</button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => { setShowGrandTotalProjects(true); setExpandedBmIdForProjects(null); }}
+                        style={{
+                          marginTop: 16,
+                          width: "100%",
+                          padding: "12px 16px",
+                          background: showGrandTotalProjects ? "rgba(255,143,143,0.25)" : "rgba(255,143,143,0.15)",
+                          borderRadius: 12,
+                          border: showGrandTotalProjects ? "2px solid #FF8F8F" : "1px solid rgba(255,143,143,0.3)",
+                          cursor: "pointer",
+                          fontSize: 14,
+                          fontWeight: 700,
+                          color: "#2d3319",
+                          textAlign: "left",
+                          transition: "all 0.2s",
+                          boxShadow: showGrandTotalProjects ? "0 2px 8px rgba(255,143,143,0.2)" : "none",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!showGrandTotalProjects) {
+                            e.currentTarget.style.background = "rgba(255,143,143,0.22)";
+                            e.currentTarget.style.borderColor = "rgba(255,143,143,0.5)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!showGrandTotalProjects) {
+                            e.currentTarget.style.background = "rgba(255,143,143,0.15)";
+                            e.currentTarget.style.borderColor = "rgba(255,143,143,0.3)";
+                          }
+                        }}
+                      >
+                        Grand Total: {totalProjects} projects
+                      </button>
                     </div>
                   )}
                   {activeToggle === "people" && (
@@ -1652,8 +1842,280 @@ export default function BidAdminDashboardPage() {
         </div>
       </main>
 
+      {showRechargeModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
+            background: "rgba(0,0,0,0.4)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          onClick={() => setShowRechargeModal(false)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 20,
+              padding: 32,
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.2)",
+              position: "relative",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowRechargeModal(false)}
+              style={{
+                position: "absolute",
+                top: 16,
+                right: 16,
+                padding: 6,
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                color: "#64748b",
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <X size={22} />
+            </button>
+            <h2 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 800, color: "#1e293b" }}>Recharge quota</h2>
+            <p style={{ margin: "0 0 24px", color: "#64748b", fontSize: 14 }}>
+              Add more projects to your organization quota. Your limit is shared by Bid Admin and all Bid Managers.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {paypalClientId ? (
+                <PayPalScriptProvider options={{ clientId: paypalClientId, currency: "USD", intent: "capture" }}>
+                  <div style={{ padding: 16, borderRadius: 12, border: "1px solid #EAEFEF", background: "#f8fafc" }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "#1e293b", marginBottom: 4 }}>1 project — $3</div>
+                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>Add 1 project to your quota</p>
+                    <div style={{ marginTop: 12 }}>
+                      <PayPalButtons
+                        createOrder={async () => {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/create-order`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ type: "single" }),
+                          });
+                          const data = await res.json();
+                          if (!data.success || !data.orderId) throw new Error("Failed to create order");
+                          return data.orderId;
+                        }}
+                        onApprove={async (data) => {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/capture-order`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ orderId: data.orderID }),
+                          });
+                          const result = await res.json();
+                          if (result.success) {
+                            toast.success(`Added ${result.projectsAdded} project(s) to quota`);
+                            refreshDashboard();
+                            setShowRechargeModal(false);
+                          } else {
+                            toast.error(result.detail || result.message || "Payment failed");
+                          }
+                        }}
+                        onError={() => toast.error("PayPal error. Please try again.")}
+                        style={{ layout: "horizontal", color: "gold", shape: "rect", label: "pay" }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ padding: 16, borderRadius: 12, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.06)" }}>
+                    <div style={{ fontWeight: 700, fontSize: 16, color: "#15803d", marginBottom: 4 }}>10 projects — $25 <span style={{ fontSize: 12, color: "#22c55e" }}>Save $5</span></div>
+                    <p style={{ margin: 0, fontSize: 13, color: "#64748b" }}>Add 10 projects at a discount</p>
+                    <div style={{ marginTop: 12 }}>
+                      <PayPalButtons
+                        createOrder={async () => {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/create-order`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ type: "bulk" }),
+                          });
+                          const data = await res.json();
+                          if (!data.success || !data.orderId) throw new Error("Failed to create order");
+                          return data.orderId;
+                        }}
+                        onApprove={async (data) => {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/capture-order`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ orderId: data.orderID }),
+                          });
+                          const result = await res.json();
+                          if (result.success) {
+                            toast.success(`Added ${result.projectsAdded} project(s) to quota`);
+                            refreshDashboard();
+                            setShowRechargeModal(false);
+                          } else {
+                            toast.error(result.detail || result.message || "Payment failed");
+                          }
+                        }}
+                        onError={() => toast.error("PayPal error. Please try again.")}
+                        style={{ layout: "horizontal", color: "gold", shape: "rect", label: "pay" }}
+                      />
+                    </div>
+                  </div>
+                </PayPalScriptProvider>
+              ) : !paymentConfigLoaded ? (
+                <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>Loading…</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
+                    PayPal not configured. Use informal mode to add quota for now:
+                  </p>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      disabled={addQuotaLoading !== null}
+                      onClick={async () => {
+                        setAddQuotaLoading("single");
+                        try {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/add-quota`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ type: "single" }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (data.success) {
+                            toast.success(`Added ${data.projectsAdded} project(s) to quota`);
+                            refreshDashboard();
+                            setShowRechargeModal(false);
+                          } else {
+                            toast.error(data.detail || data.message || "Failed to add quota");
+                          }
+                        } catch (e) {
+                          toast.error("Network error. Is the backend running?");
+                        } finally {
+                          setAddQuotaLoading(null);
+                        }
+                      }}
+                      style={{
+                        padding: "14px 20px",
+                        background: "rgba(13,148,136,0.12)",
+                        border: "1px solid rgba(13,148,136,0.4)",
+                        borderRadius: 12,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: 15,
+                        color: "#0d9488",
+                      }}
+                    >
+                      {addQuotaLoading === "single" ? "Adding…" : "Add 1 project"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={addQuotaLoading !== null}
+                      onClick={async () => {
+                        setAddQuotaLoading("bulk");
+                        try {
+                          const res = await fetch(`${API_BASE_URL}/api/payment/add-quota`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${localStorage.getItem("token")}`,
+                            },
+                            body: JSON.stringify({ type: "bulk" }),
+                          });
+                          const data = await res.json().catch(() => ({}));
+                          if (data.success) {
+                            toast.success(`Added ${data.projectsAdded} project(s) to quota`);
+                            refreshDashboard();
+                            setShowRechargeModal(false);
+                          } else {
+                            toast.error(data.detail || data.message || "Failed to add quota");
+                          }
+                        } catch (e) {
+                          toast.error("Network error. Is the backend running?");
+                        } finally {
+                          setAddQuotaLoading(null);
+                        }
+                      }}
+                      style={{
+                        padding: "14px 20px",
+                        background: "rgba(34,197,94,0.12)",
+                        border: "1px solid rgba(34,197,94,0.4)",
+                        borderRadius: 12,
+                        cursor: "pointer",
+                        fontWeight: 700,
+                        fontSize: 15,
+                        color: "#15803d",
+                      }}
+                    >
+                      {addQuotaLoading === "bulk" ? "Adding…" : "Add 10 projects"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes dashboardBgPulse {
+          0%, 100% { opacity: 1; filter: brightness(1); }
+          50% { opacity: 0.82; filter: brightness(1.08); }
+        }
+        @keyframes dashboardBgMove {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 200% 50%; }
+        }
+        @keyframes dashboardBgShimmer {
+          0%, 100% { opacity: 0.7; transform: scale(1) translate(0, 0); }
+          50% { opacity: 1; transform: scale(1.12) translate(6%, -4%); }
+        }
+        @keyframes dashboardFloat1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(45px, -35px) scale(1.08); }
+          66% { transform: translate(-30px, 40px) scale(0.95); }
+        }
+        @keyframes dashboardFloat2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          50% { transform: translate(-50px, -25px) scale(1.1); }
+        }
+        @keyframes dashboardFloat3 {
+          0%, 100% { transform: translate(0, 0); }
+          50% { transform: translate(35px, -45px); }
+        }
+        @keyframes dashboardFloat4 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(-40px, 30px) scale(1.05); }
+          66% { transform: translate(25px, -20px) scale(0.98); }
+        }
+        .dashboard-bg-wrap .background-shape {
+          position: absolute;
+          will-change: transform;
+        }
+        .dashboard-bg-wrap .dashboard-float-1 { animation: dashboardFloat1 22s ease-in-out infinite; }
+        .dashboard-bg-wrap .dashboard-float-2 { animation: dashboardFloat2 26s ease-in-out infinite reverse; }
+        .dashboard-bg-wrap .dashboard-float-3 { animation: dashboardFloat3 20s ease-in-out infinite 3s; }
+        .dashboard-bg-wrap .dashboard-float-4 { animation: dashboardFloat4 24s ease-in-out infinite 1s reverse; }
         .sidebar-nav-toggle:hover:not(.active) {
           transform: translateX(4px);
           box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;

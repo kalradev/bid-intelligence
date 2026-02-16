@@ -1,7 +1,8 @@
-import { ArrowRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Sparkles, UserCircle, Users, X } from "lucide-react";
+import { ArrowRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, UserCircle, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
@@ -275,7 +276,7 @@ export default function BidManagerDashboardPage() {
           <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         </div>
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
           <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -324,9 +325,9 @@ export default function BidManagerDashboardPage() {
           bottom: 0,
           width: SIDEBAR_WIDTH,
           zIndex: 110,
-          background: "rgba(248,250,252,0.7)",
+          background: "rgba(234,239,239,0.95)",
           backdropFilter: "blur(20px)",
-          borderRight: "1px solid rgba(226,232,240,0.6)",
+          borderRight: "1px solid rgba(255,143,143,0.2)",
           boxShadow: "4px 0 24px rgba(0,0,0,0.06)",
           display: "flex",
           flexDirection: "column",
@@ -334,7 +335,7 @@ export default function BidManagerDashboardPage() {
         }}
       >
         <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, background: "#FF8F8F", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
@@ -343,11 +344,11 @@ export default function BidManagerDashboardPage() {
             onClick={() => setViewMode("dashboard")}
             style={{
               ...navButtonBase,
-              background: viewMode === "dashboard" ? "#FF8F8F" : "linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.08) 100%)",
-              color: viewMode === "dashboard" ? "#fff" : "#5b21b6",
+              background: viewMode === "dashboard" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: viewMode === "dashboard" ? "#fff" : "#2d3319",
               fontWeight: viewMode === "dashboard" ? 700 : 600,
-              boxShadow: viewMode === "dashboard" ? "0 4px 12px rgba(102,126,234,0.3)" : "none",
-              border: viewMode === "dashboard" ? "none" : "1px solid rgba(102,126,234,0.2)",
+              boxShadow: viewMode === "dashboard" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
+              border: viewMode === "dashboard" ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="Dashboard"
           >
@@ -360,19 +361,19 @@ export default function BidManagerDashboardPage() {
             onClick={() => setViewMode("personal")}
             style={{
               ...navButtonBase,
-              background: viewMode === "personal" ? "#FFB3B3" : "rgba(255,179,179,0.3)",
-              color: viewMode === "personal" ? "#fff" : "#be185d",
+              background: viewMode === "personal" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: viewMode === "personal" ? "#fff" : "#2d3319",
               fontWeight: viewMode === "personal" ? 700 : 600,
-              boxShadow: viewMode === "personal" ? "0 4px 12px rgba(240,147,251,0.3)" : "none",
-              border: viewMode === "personal" ? "none" : "1px solid rgba(240,147,251,0.2)",
+              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
+              border: viewMode === "personal" ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="All projects"
           >
             <FolderOpen size={20} style={{ flexShrink: 0 }} />
             <span>All projects</span>
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.4) 50%, transparent 100%)", margin: "12px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
           <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload")} style={{ ...navButtonBase, background: "rgba(255,179,179,0.4)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.3)" }} title="Upload & Analyze">
@@ -384,8 +385,8 @@ export default function BidManagerDashboardPage() {
             <span>Manage Teams</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid #EAEFEF", display: "flex", flexDirection: "column", gap: 4 }}>
-          <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#b91c1c" }} title="Logout">
+        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
+          <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#6b5344" }} title="Logout">
             <LogOut size={20} style={{ flexShrink: 0 }} />
             <span>Logout</span>
           </button>

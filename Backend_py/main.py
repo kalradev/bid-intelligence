@@ -25,6 +25,8 @@ from core.config import settings
 from core.sqlalchemy_db import init_db
 from api.rfp_routes import router as rfp_router
 from api.auth_routes import router as auth_router
+from api.payment_routes import router as payment_router
+from api.admin_routes import router as admin_router
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -106,6 +108,8 @@ async def _team_assignments(current_user = Depends(get_current_user_optional)):
 app.include_router(_team_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+app.include_router(payment_router, prefix="/api/payment", tags=["Payment"])
+app.include_router(admin_router, prefix="/api/admin", tags=["Admin"])
 
 # Serve static files from frontend build (if exists)
 # Check both Backend_py parent directory and current directory

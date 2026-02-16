@@ -308,6 +308,30 @@ class Product(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class OrgQuota(Base):
+    """Organization-wide project quota. Single row: base 10 + purchased."""
+    __tablename__ = "org_quota"
+
+    id = Column(Integer, primary_key=True, index=True)
+    base_limit = Column(Integer, nullable=False, default=10)
+    purchased_quota = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
+
+
+class QuotaTransaction(Base):
+    """Recharge transaction history."""
+    __tablename__ = "quota_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    amount_usd = Column(Numeric(10, 2), nullable=False)
+    projects_added = Column(Integer, nullable=False)
+    recharge_type = Column(String(20), nullable=False)  # 'single' or 'bulk'
+    paypal_order_id = Column(String(255), nullable=True, index=True)
+    paypal_status = Column(String(50), nullable=True)
+    created_at = Column(DateTime(timezone=False), server_default=func.now())
+
+
 class ProductOem(Base):
     """Product-OEM mapping - matches public.product_oems"""
     __tablename__ = "product_oems"

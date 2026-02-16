@@ -31,8 +31,17 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = "change-me-in-production"
     
-    # Team quota: max projects per Bid Manager team (shared among BM + their Technical Managers)
-    TEAM_PROJECT_LIMIT: int = 10
+    # Org-wide quota: 10 base + purchased (shared by Bid Admin + all Bid Managers)
+    ORG_QUOTA_BASE: int = 10
+    RECHARGE_SINGLE_AMOUNT: float = 3.0   # 1 project = $3
+    RECHARGE_BULK_AMOUNT: float = 25.0    # 10 projects = $25
+    RECHARGE_SINGLE_PROJECTS: int = 1
+    RECHARGE_BULK_PROJECTS: int = 10
+
+    # PayPal (set in .env for production)
+    PAYPAL_MODE: str = "sandbox"  # sandbox | live
+    PAYPAL_CLIENT_ID: Optional[str] = None
+    PAYPAL_CLIENT_SECRET: Optional[str] = None
 
     # Versioning
     PROCESSING_VERSION: int = 32
