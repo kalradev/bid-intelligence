@@ -128,6 +128,7 @@ def get_team_project_count(team_user_ids: List[int], db: Optional[Session] = Non
 def get_team_quota(current_user: dict, db: Optional[Session] = None) -> Dict[str, Any]:
     """
     Returns teamProjectsUsed, teamProjectsLimit, teamProjectsLeft for current user's team.
+    Quota display is capped at limit so used never exceeds 10. When over quota, teamProjectsOverQuota=True.
     For bid_admin returns org-wide or null (no quota).
     """
     limit = TEAM_PROJECT_LIMIT
@@ -139,13 +140,17 @@ def get_team_quota(current_user: dict, db: Optional[Session] = None) -> Dict[str
             "teamProjectsLeft": None,
             "appliesToTeam": False,
         }
-    used = get_team_project_count(team_ids, db=db)
+    actual_used = get_team_project_count(team_ids, db=db)
+    # Cap displayed "used" at limit so quota never shows greater than 10
+    used = min(actual_used, limit)
     left = max(0, limit - used)
     return {
         "teamProjectsUsed": used,
         "teamProjectsLimit": limit,
         "teamProjectsLeft": left,
         "appliesToTeam": True,
+        "teamProjectsOverQuota": actual_used > limit,
+        "actualProjectCount": actual_used,
     }
 
 
@@ -258,16 +263,20 @@ def get_bid_admin_dashboard(current_user: dict, db: Optional[Session] = None) ->
                 for tm in tms_list
             ]
             team_ids = [bm.id] + [tm.id for tm in tms_list]
-            team_project_count = sum(count_by_user.get(uid, 0) for uid in team_ids)
+            actual_count = sum(count_by_user.get(uid, 0) for uid in team_ids)
+            # Cap displayed used at limit so quota never shows greater than 10
+            used_capped = min(actual_count, TEAM_PROJECT_LIMIT)
             result.append({
                 "id": bm.id,
                 "fullName": bm.full_name,
                 "email": bm.email,
                 "role": bm.role,
                 "technicalManagers": technical_managers,
-                "teamProjectsUsed": team_project_count,
+                "teamProjectsUsed": used_capped,
                 "teamProjectsLimit": TEAM_PROJECT_LIMIT,
-                "teamProjectsLeft": max(0, TEAM_PROJECT_LIMIT - team_project_count),
+                "teamProjectsLeft": max(0, TEAM_PROJECT_LIMIT - used_capped),
+                "teamProjectsOverQuota": actual_count > TEAM_PROJECT_LIMIT,
+                "actualProjectCount": actual_count,
             })
         return {"bidManagers": result}
     finally:

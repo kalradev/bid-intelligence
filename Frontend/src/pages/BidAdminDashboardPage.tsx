@@ -22,6 +22,8 @@ interface BidManagerCard {
   teamProjectsUsed: number;
   teamProjectsLimit: number;
   teamProjectsLeft: number;
+  teamProjectsOverQuota?: boolean;
+  actualProjectCount?: number;
 }
 
 interface ProjectItem {
@@ -284,7 +286,8 @@ export default function BidAdminDashboardPage() {
   };
 
 
-  const totalProjects = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
+  // Use quota-used total (capped per team) so this matches Team Quota Overview and never exceeds total limit
+  const totalProjects = bidManagers.reduce((s, b) => s + Math.min(b.teamProjectsUsed, b.teamProjectsLimit ?? 10), 0);
   const totalPeople = bidManagers.reduce((s, b) => s + 1 + (b.technicalManagers?.length || 0), 0);
   const adminProjects = currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : [];
   const totalQuotaLeft = bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
@@ -1504,10 +1507,15 @@ export default function BidAdminDashboardPage() {
                                         />
                                       </div>
                                       <span style={{ fontSize: 13, fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>
-                                        {bm.teamProjectsUsed}/{bm.teamProjectsLimit}
+                                        {Math.min(bm.teamProjectsUsed, bm.teamProjectsLimit)}/{bm.teamProjectsLimit}
                                       </span>
                                     </div>
-                                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{bm.teamProjectsLeft} left</div>
+                                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                                      {bm.teamProjectsLeft} left
+                                      {bm.teamProjectsOverQuota && bm.actualProjectCount != null && (
+                                        <span style={{ marginLeft: 6, color: "#b45309", fontWeight: 600 }}>· Over quota ({bm.actualProjectCount} projects)</span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td style={{ padding: "16px 20px 16px 24px", textAlign: "center", paddingRight: 32, minWidth: 140 }}>
                                     <button

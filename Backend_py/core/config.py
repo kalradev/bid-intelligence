@@ -36,6 +36,12 @@ class Settings(BaseSettings):
 
     # Versioning
     PROCESSING_VERSION: int = 32
+
+    # Outlook / Microsoft Graph (send credentials email when Admin/BM creates users)
+    OUTLOOK_CLIENT_ID: Optional[str] = None
+    OUTLOOK_TENANT_ID: Optional[str] = None
+    OUTLOOK_CLIENT_SECRET: Optional[str] = None
+    OUTLOOK_MAILBOX: Optional[str] = None  # e.g. techbank@cachedigitech.com
     
     # Paths
     BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

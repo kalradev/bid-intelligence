@@ -68,8 +68,9 @@ export default function TeamQuotaPage() {
         fetchData();
     }, []);
 
-    const totalUsed = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
-    const totalLimit = bidManagers.reduce((s, b) => s + b.teamProjectsLimit, 0);
+    // Use quota-used (capped per team) so total never exceeds total limit
+    const totalUsed = bidManagers.reduce((s, b) => s + Math.min(b.teamProjectsUsed, b.teamProjectsLimit ?? 10), 0);
+    const totalLimit = bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
     const totalLeft = totalLimit - totalUsed;
     const usagePercentage = totalLimit > 0 ? (totalUsed / totalLimit) * 100 : 0;
 

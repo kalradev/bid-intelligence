@@ -6,12 +6,14 @@ import bcrypt
 import jwt
 import logging
 from datetime import datetime, timedelta
+import asyncio
 import os
 
 from core.sqlalchemy_db import get_db
 from core.config import settings
 from models.sqlalchemy_models import User
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import OperationalError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -298,6 +300,12 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         }
     except HTTPException:
         raise
+    except OperationalError as e:
+        logger.error(f"Login error (DB connection failed): {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Database connection failed. Check POSTGRES_PASSWORD in Backend_py/.env matches your PostgreSQL password and restart the server."
+        )
     except Exception as e:
         logger.error(f"Login error: {str(e)}", exc_info=True)
         raise HTTPException(
@@ -403,6 +411,24 @@ async def create_user(
     db.commit()
     db.refresh(new_user)
     logger.info(f"Created user {email} as {new_role} by {current_user.get('email')}")
+
+    # Send credentials email via Outlook (Bid Manager or Technical Manager)
+    role_label = "Bid Manager" if new_role == ROLE_BID_MANAGER else "Technical Manager"
+    try:
+        from services.outlook_service import send_credentials_email
+        sent = await asyncio.to_thread(
+            send_credentials_email,
+            to_email=email,
+            full_name=request.fullName.strip(),
+            login_email=email,
+            password=request.password,
+            role_label=role_label,
+        )
+        if not sent:
+            logger.warning("User created but credential email could not be sent to %s", email)
+    except Exception as e:
+        logger.warning("User created but credential email failed: %s", e)
+
     return {
         "success": True,
         "message": f"User created as {new_role}",

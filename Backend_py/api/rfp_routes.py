@@ -401,7 +401,7 @@ async def get_team_member_assignments(
     return {"success": True, "teamMembers": out}
 
 
-@router.get("/project-assignments/{project_name}")
+@router.get("/project-assignments/{project_name:path}")
 async def get_project_assignments(
     project_name: str,
     current_user: dict = Depends(get_current_user),
@@ -423,7 +423,7 @@ async def get_project_assignments(
     return {"success": True, "projectName": project_name, "assignedUserIds": assigned_ids, "assignedUsers": assigned_users}
 
 
-@router.post("/project-assignments/{project_name}")
+@router.post("/project-assignments/{project_name:path}")
 async def set_project_assignments(
     project_name: str,
     body: dict = Body(...),
@@ -467,7 +467,7 @@ async def set_project_assignments(
     return {"success": True, "projectName": project_name, "assignedUserIds": verified}
 
 
-@router.get("/project-status/{project_name}")
+@router.get("/project-status/{project_name:path}")
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
     from core.sqlalchemy_db import get_db_session
     from models.sqlalchemy_models import ProjectDocument
@@ -501,7 +501,7 @@ async def get_project_status(project_name: str, current_user: dict = Depends(get
         logger.error(f"Error checking project status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/get-project-analysis/{project_name}")
+@router.get("/get-project-analysis/{project_name:path}")
 async def get_project_analysis(
     project_name: str, 
     document_type: Optional[str] = Query(None),
@@ -570,7 +570,7 @@ async def get_project_analysis(
         logger.error(f"Error getting project analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/get-project-documents/{project_name}")
+@router.get("/get-project-documents/{project_name:path}")
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
     try:
@@ -699,7 +699,7 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
         logger.error(f"Error in get_sources: {str(e)}")
         return JSONResponse(content={"sources": [], "error": str(e)}, status_code=200)
 
-@router.get("/eligibility-checklist/{project_name}")
+@router.get("/eligibility-checklist/{project_name:path}")
 async def get_eligibility_checklist(
     project_name: str,
     document_id: Optional[str] = Query(None),
@@ -730,7 +730,7 @@ async def get_eligibility_checklist(
         logger.error(f"Error getting eligibility checklist: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/eligibility-checklist/{project_name}")
+@router.post("/eligibility-checklist/{project_name:path}")
 async def save_eligibility_checklist(
     project_name: str,
     request_body: Dict[str, Any] = Body(...),
@@ -780,7 +780,7 @@ async def save_eligibility_checklist(
             content={"success": False, "message": "Failed to save eligibility checklist", "error": str(e), "traceback": error_detail}
         )
 
-@router.patch("/eligibility-checklist/{project_name}/item")
+@router.patch("/eligibility-checklist/{project_name:path}/item")
 async def update_eligibility_item(
     project_name: str,
     criteria_text: str = Body(...),

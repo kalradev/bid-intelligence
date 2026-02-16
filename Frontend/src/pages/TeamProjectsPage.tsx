@@ -22,6 +22,8 @@ interface BidManagerCard {
   teamProjectsUsed: number;
   teamProjectsLimit: number;
   teamProjectsLeft: number;
+  teamProjectsOverQuota?: boolean;
+  actualProjectCount?: number;
 }
 
 interface AssignedUser {
@@ -221,7 +223,10 @@ export default function TeamProjectsPage() {
                     {bm.fullName} – Team quota
                   </h1>
                   <p style={{ margin: "6px 0 0", fontSize: 14, color: "#64748b", fontWeight: 500 }}>
-                    Projects: {bm.teamProjectsUsed} / {bm.teamProjectsLimit} — <strong>{bm.teamProjectsLeft} left</strong>
+                    Projects: {Math.min(bm.teamProjectsUsed, bm.teamProjectsLimit)} / {bm.teamProjectsLimit} — <strong>{bm.teamProjectsLeft} left</strong>
+                    {bm.teamProjectsOverQuota && bm.actualProjectCount != null && (
+                      <span style={{ marginLeft: 8, color: "#b45309", fontWeight: 600 }}>(Over quota: {bm.actualProjectCount} projects)</span>
+                    )}
                   </p>
                 </div>
               </div>

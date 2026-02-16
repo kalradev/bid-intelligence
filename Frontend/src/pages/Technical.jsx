@@ -1,19 +1,56 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
+import { API_BASE_URL } from "../config";
 import { exportToPDF } from "../utils/pdfExport";
 import { processDepartmentData, filterEMD } from "../utils/deduplication";
 
 const Technical = () => {
   const [data, setData] = useState(null);
   const contentRef = useRef(null);
+  const [eligibilityChecks, setEligibilityChecks] = useState({});
+  const [projectName, setProjectName] = useState(null);
+  const [documentId, setDocumentId] = useState(null);
+  const [isLoadingChecklist, setIsLoadingChecklist] = useState(false);
+  const [technicalEligibilityCriteria, setTechnicalEligibilityCriteria] = useState([]);
+
+  // Load eligibility checklist from API (same as Bid Management)
+  const loadEligibilityChecklist = useCallback(async (projName, docId) => {
+    if (!projName) return;
+    setIsLoadingChecklist(true);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setIsLoadingChecklist(false);
+        return;
+      }
+      let url = `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projName)}`;
+      if (docId) url += `?document_id=${docId}`;
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.checklist) setEligibilityChecks(result.checklist);
+        else setEligibilityChecks({});
+      }
+    } catch (error) {
+      console.error("Error loading eligibility checklist:", error);
+    } finally {
+      setIsLoadingChecklist(false);
+    }
+  }, []);
 
   useEffect(() => {
     const storedData = localStorage.getItem("analysisData");
     if (storedData) {
       const parsed = JSON.parse(storedData);
       const technicalData = parsed?.data?.departmentalSummaries?.technical;
-      
-      // Process and deduplicate all list-based fields, filter N/A
+      const projName = parsed?.data?.projectName;
+      const docId = parsed?.data?.metadata?.documentId;
+      const criteria = parsed?.data?.departmentalSummaries?.bidManagement?.successFactors?.technicalEvaluationCriteria;
+
+      setProjectName(projName || null);
+      setDocumentId(docId || null);
+      setTechnicalEligibilityCriteria(Array.isArray(criteria) ? criteria : []);
+
       if (technicalData) {
         setData(processDepartmentData(technicalData));
       } else {
@@ -21,6 +58,36 @@ const Technical = () => {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (projectName && data) loadEligibilityChecklist(projectName, documentId);
+  }, [projectName, documentId, data, loadEligibilityChecklist]);
+
+  const handleEligibilityCheck = async (item, checked) => {
+    if (!projectName) return;
+    const previousChecks = { ...eligibilityChecks };
+    const newChecks = { ...eligibilityChecks, [item]: checked };
+    setEligibilityChecks(newChecks);
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setEligibilityChecks(previousChecks);
+        return;
+      }
+      const response = await fetch(
+        `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ checklist: newChecks, document_id: documentId ? String(documentId) : null }),
+        }
+      );
+      if (!response.ok) setEligibilityChecks(previousChecks);
+    } catch (error) {
+      console.error("Error saving eligibility checklist:", error);
+      setEligibilityChecks(previousChecks);
+    }
+  };
 
   const handleDownloadPDF = () => {
     if (contentRef.current) {
@@ -185,6 +252,80 @@ const Technical = () => {
               </ul>
             ) : null}
           </>
+        )}
+
+        {/* Technical Eligibility Criteria only (with Yes/No) */}
+        {technicalEligibilityCriteria && technicalEligibilityCriteria.length > 0 && (
+          <div style={{ marginBottom: "24px", marginTop: "26px", background: "#fef3c7", padding: "16px", borderRadius: "8px", border: "1px solid #fde68a" }}>
+            <h3 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "12px", marginTop: "0" }}>
+              Technical Eligibility Criteria
+            </h3>
+            {isLoadingChecklist && (
+              <p style={{ fontSize: "14px", color: "#92400e", marginBottom: "12px" }}>Loading checklist...</p>
+            )}
+            <ul style={{ paddingLeft: "0", margin: "0", listStyle: "none" }}>
+              {technicalEligibilityCriteria.map((item, idx) => {
+                const checkStatus = eligibilityChecks[item];
+                const isYes = checkStatus === true || checkStatus === "true";
+                const isNo = checkStatus === false || checkStatus === "false";
+                return (
+                  <li
+                    key={idx}
+                    style={{
+                      marginBottom: "16px",
+                      padding: "12px",
+                      background: isYes ? "#dcfce7" : isNo ? "#fee2e2" : "#f9fafb",
+                      borderRadius: "8px",
+                      border: `2px solid ${isYes ? "#15803d" : isNo ? "#b91c1c" : "#d1d5db"}`,
+                      transition: "all 0.3s ease",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                      <span style={{ flex: 1, fontSize: "16px", color: "#78350f", fontWeight: "500", minWidth: "300px" }}>
+                        {item}
+                      </span>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                        <button
+                          onClick={() => handleEligibilityCheck(item, true)}
+                          disabled={isLoadingChecklist}
+                          style={{
+                            padding: "10px 24px",
+                            fontSize: "15px",
+                            fontWeight: "700",
+                            borderRadius: "8px",
+                            border: isYes ? "3px solid #15803d" : "2px solid #d1d5db",
+                            cursor: isLoadingChecklist ? "not-allowed" : "pointer",
+                            background: isYes ? "#15803d" : isNo ? "#f3f4f6" : "#ffffff",
+                            color: isYes ? "white" : isNo ? "#9ca3af" : "#4b5563",
+                            opacity: isLoadingChecklist ? 0.6 : 1,
+                          }}
+                        >
+                          ✓ Yes
+                        </button>
+                        <button
+                          onClick={() => handleEligibilityCheck(item, false)}
+                          disabled={isLoadingChecklist}
+                          style={{
+                            padding: "10px 24px",
+                            fontSize: "15px",
+                            fontWeight: "700",
+                            borderRadius: "8px",
+                            border: isNo ? "3px solid #b91c1c" : "2px solid #d1d5db",
+                            cursor: isLoadingChecklist ? "not-allowed" : "pointer",
+                            background: isNo ? "#b91c1c" : isYes ? "#f3f4f6" : "#ffffff",
+                            color: isNo ? "white" : isYes ? "#9ca3af" : "#4b5563",
+                            opacity: isLoadingChecklist ? 0.6 : 1,
+                          }}
+                        >
+                          ✗ No
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
 
         {/* Risk Areas */}

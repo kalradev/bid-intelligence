@@ -22,6 +22,8 @@ interface BidManagerDashboard {
   teamProjectsUsed: number;
   teamProjectsLimit: number;
   teamProjectsLeft: number;
+  teamProjectsOverQuota?: boolean;
+  actualProjectCount?: number;
 }
 
 export default function TeamPage() {
@@ -245,7 +247,10 @@ export default function TeamPage() {
                             </button>
                           </div>
                           <div style={{ padding: "10px 14px", borderRadius: 8, background: bm.teamProjectsLeft === 0 ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${bm.teamProjectsLeft === 0 ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`, marginBottom: 12, fontSize: 14 }}>
-                            <strong>Team quota:</strong> {bm.teamProjectsUsed} / {bm.teamProjectsLimit} used — <strong>{bm.teamProjectsLeft} left</strong>
+                            <strong>Team quota:</strong> {Math.min(bm.teamProjectsUsed, bm.teamProjectsLimit)} / {bm.teamProjectsLimit} used — <strong>{bm.teamProjectsLeft} left</strong>
+                            {bm.teamProjectsOverQuota && bm.actualProjectCount != null && (
+                              <span style={{ marginLeft: 8, color: "#b45309", fontWeight: 600 }}>· Over quota ({bm.actualProjectCount} projects)</span>
+                            )}
                           </div>
                           {bm.technicalManagers.length > 0 ? (
                             <div>
