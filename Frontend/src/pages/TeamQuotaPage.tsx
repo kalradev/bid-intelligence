@@ -2,8 +2,7 @@ import { ArrowLeft, PieChart as PieChartIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import cacheLogo from "../assets/Cache-Logo.png";
-import womenOwnedLogo from "../assets/women-owned-logo.png";
+import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from "../config";
 
 interface BidManagerQuota {
@@ -151,13 +150,7 @@ export default function TeamQuotaPage() {
 
     return (
         <div className="universal-page-wrapper" style={{ minHeight: "100vh" }}>
-            {/* Logos */}
-            <div style={{ position: "fixed", top: 8, left: 32, zIndex: 100 }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
-            </div>
-            <div style={{ position: "fixed", top: 8, right: 32, zIndex: 100 }}>
-                <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
-            </div>
+            <DashboardNavbar />
 
             {/* Back Button */}
             <button
@@ -202,7 +195,7 @@ export default function TeamQuotaPage() {
             </div>
 
             {/* Main Content */}
-            <div style={{ maxWidth: 1200, margin: "100px auto 40px", padding: 24, position: "relative", zIndex: 1 }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto 40px", padding: 24, paddingTop: NAVBAR_HEIGHT + 32, position: "relative", zIndex: 1 }}>
                 {/* Header */}
                 <div
                     style={{
@@ -302,27 +295,61 @@ export default function TeamQuotaPage() {
                 {loading ? (
                     <div
                         style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: 16,
-                            padding: 80,
-                            background: "rgba(255,255,255,0.95)",
-                            borderRadius: 20,
-                            boxShadow: "0 20px 50px rgba(99,102,241,0.12)",
+                            display: "grid",
+                            gridTemplateColumns: "1fr 1fr",
+                            gap: 32,
                         }}
                     >
                         <div
                             style={{
-                                width: 48,
-                                height: 48,
-                                borderRadius: "50%",
-                                border: "3px solid #e2e8f0",
-                                borderTopColor: "#8b5cf6",
-                                animation: "spin 0.8s linear infinite",
+                                background: "rgba(255,255,255,0.95)",
+                                borderRadius: 20,
+                                padding: 40,
+                                boxShadow: "0 20px 50px rgba(99,102,241,0.12)",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 400,
                             }}
-                        />
-                        <span style={{ color: "#64748b", fontSize: 15 }}>Loading quota data…</span>
+                        >
+                            <div
+                                style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: "50%",
+                                    border: "3px solid #e2e8f0",
+                                    borderTopColor: "#8b5cf6",
+                                    animation: "spin 0.8s linear infinite",
+                                }}
+                            />
+                            <span style={{ color: "#64748b", fontSize: 15, marginTop: 16 }}>Loading chart…</span>
+                        </div>
+                        <div
+                            style={{
+                                background: "rgba(255,255,255,0.95)",
+                                borderRadius: 20,
+                                padding: 32,
+                                boxShadow: "0 20px 50px rgba(99,102,241,0.12)",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 400,
+                            }}
+                        >
+                            <div
+                                style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: "50%",
+                                    border: "3px solid #e2e8f0",
+                                    borderTopColor: "#8b5cf6",
+                                    animation: "spin 0.8s linear infinite",
+                                }}
+                            />
+                            <span style={{ color: "#64748b", fontSize: 15, marginTop: 16 }}>Loading teams…</span>
+                        </div>
                     </div>
                 ) : (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>

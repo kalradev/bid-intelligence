@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { API_BASE_URL } from "../config";
 import { UserCircle, Shield, KeyRound, ArrowLeft } from "lucide-react";
+import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 
 export default function AccountPage() {
   const navigate = useNavigate();
@@ -99,14 +100,24 @@ export default function AccountPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(160deg, #f0f9ff 0%, #f8fafc 50%, #faf5ff 100%)" }}>
-        <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#0d9488", animation: "spin 0.8s linear infinite" }} />
+      <div className="universal-page-wrapper">
+        <DashboardNavbar />
+        <div className="universal-background">
+          <div className="universal-bg-gradient-1" />
+          <div className="universal-bg-gradient-2" />
+          <div className="universal-bg-gradient-3" />
+        </div>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: NAVBAR_HEIGHT }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#0d9488", animation: "spin 0.8s linear infinite" }} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #f0f9ff 0%, #f8fafc 50%, #faf5ff 100%)", padding: "24px" }}>
+    <div className="universal-page-wrapper">
+      <DashboardNavbar />
+
       <button
         type="button"
         onClick={() => navigate("/home")}
@@ -141,15 +152,23 @@ export default function AccountPage() {
         <ArrowLeft size={18} /> Back to Dashboard
       </button>
 
-      <div style={{ maxWidth: 640, margin: "0 auto" }}>
-        <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, color: "#1e293b" }}>Account & security</h1>
-        <p style={{ margin: 0, color: "#64748b", fontSize: 14, marginBottom: 32 }}>Manage your profile, security, and password.</p>
+      <div className="universal-background">
+        <div className="universal-bg-gradient-1" />
+        <div className="universal-bg-gradient-2" />
+        <div className="universal-bg-gradient-3" />
+      </div>
+
+      <div style={{ position: "relative", zIndex: 1, maxWidth: 640, margin: "0 auto", padding: 24, paddingTop: NAVBAR_HEIGHT + 24 }}>
+        <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 20, padding: 28, marginBottom: 24, boxShadow: "0 20px 50px rgba(0,0,0,0.06)", border: "1px solid rgba(226,232,240,0.8)" }}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, color: "#1e293b" }}>Account & security</h1>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>Manage your profile, security, and password.</p>
+        </div>
 
         {/* Profile */}
-        <section id="profile" style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
+        <section id="profile" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <UserCircle size={24} color="#fff" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <UserCircle size={24} color="#FF8F8F" />
             </div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Profile</h2>
           </div>
@@ -170,7 +189,7 @@ export default function AccountPage() {
         </section>
 
         {/* Two-step verification */}
-        <section id="two-step" style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
+        <section id="two-step" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.2) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Shield size={24} color="#6366f1" />
@@ -183,7 +202,7 @@ export default function AccountPage() {
         </section>
 
         {/* Change password */}
-        <section id="password" style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24 }}>
+        <section id="password" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(249,115,22,0.2) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <KeyRound size={24} color="#f59e0b" />

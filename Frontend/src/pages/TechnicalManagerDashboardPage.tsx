@@ -88,7 +88,7 @@ export default function TechnicalManagerDashboardPage() {
     fontWeight: 600,
     fontSize: 14,
     background: "transparent",
-    color: "#5b21b6",
+    color: "#2d3319",
     transition: "all 0.2s",
   } as const;
 
@@ -102,26 +102,23 @@ export default function TechnicalManagerDashboardPage() {
           right: 0,
           height: NAVBAR_HEIGHT,
           zIndex: 120,
-          background: "rgba(255,255,255,0.75)",
-          backdropFilter: "blur(20px)",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.4) inset",
+          background: "rgba(255,255,255,0.45)",
+          backdropFilter: "blur(24px) saturate(180%)",
+          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.5)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           padding: "0 24px 0 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.2)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         </div>
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 20px rgba(139,92,246,0.4), 0 0 0 4px rgba(139,92,246,0.1)" }}>
-            <Sparkles size={24} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
-          </div>
-          <span style={{ fontSize: 26, fontWeight: 900, background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 50%, #a78bfa 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: "-0.02em", filter: "drop-shadow(0 2px 4px rgba(139,92,246,0.1))" }}>
-            Bid Intelligence
-          </span>
+          <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center" }}>
           <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
@@ -145,7 +142,7 @@ export default function TechnicalManagerDashboardPage() {
         }}
       >
         <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, background: "#FF8F8F", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
@@ -154,11 +151,11 @@ export default function TechnicalManagerDashboardPage() {
             onClick={() => setShowByBidManager(false)}
             style={{
               ...navButtonBase,
-              background: !showByBidManager ? "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)" : "linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(99,102,241,0.08) 100%)",
-              color: !showByBidManager ? "#fff" : "#5b21b6",
+              background: !showByBidManager ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: !showByBidManager ? "#fff" : "#2d3319",
               fontWeight: !showByBidManager ? 700 : 600,
-              boxShadow: !showByBidManager ? "0 4px 12px rgba(139,92,246,0.3)" : "none",
-              border: !showByBidManager ? "none" : "1px solid rgba(139,92,246,0.2)",
+              boxShadow: !showByBidManager ? "0 4px 12px rgba(255,143,143,0.3)" : "none",
+              border: !showByBidManager ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="Assigned projects"
           >
@@ -171,11 +168,11 @@ export default function TechnicalManagerDashboardPage() {
             onClick={() => setShowByBidManager(true)}
             style={{
               ...navButtonBase,
-              background: showByBidManager ? "linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)" : "linear-gradient(135deg, rgba(167,139,250,0.1) 0%, rgba(139,92,246,0.08) 100%)",
-              color: showByBidManager ? "#fff" : "#5b21b6",
+              background: showByBidManager ? "#FFB3B3" : "rgba(255,179,179,0.3)",
+              color: showByBidManager ? "#fff" : "#2d3319",
               fontWeight: showByBidManager ? 700 : 600,
-              boxShadow: showByBidManager ? "0 4px 12px rgba(139,92,246,0.3)" : "none",
-              border: showByBidManager ? "none" : "1px solid rgba(139,92,246,0.2)",
+              boxShadow: showByBidManager ? "0 4px 12px rgba(255,143,143,0.3)" : "none",
+              border: showByBidManager ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="See how many projects you're on and which Bid Manager assigned each"
           >
@@ -185,22 +182,22 @@ export default function TechnicalManagerDashboardPage() {
               <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.9 }}>{projects.length} projects</span>
             )}
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, background: "#FF8F8F", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
           <button
             type="button"
             className="sidebar-nav-toggle"
             onClick={() => navigate("/upload")}
-            style={{ ...navButtonBase, background: "linear-gradient(135deg, rgba(139,92,246,0.1) 0%, rgba(99,102,241,0.08) 100%)", color: "#6d28d9", border: "1px solid rgba(139,92,246,0.2)" }}
+            style={{ ...navButtonBase, background: "rgba(255,179,179,0.4)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.3)" }}
             title="Upload corrigendum or reference"
           >
             <FileUp size={20} style={{ flexShrink: 0 }} />
             <span>Upload Corrigendum / Reference</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "12px 10px", borderTop: "1px solid #EAEFEF", display: "flex", flexDirection: "column", gap: 4 }}>
           <button
             type="button"
             onClick={() => navigate("/account")}
@@ -211,7 +208,7 @@ export default function TechnicalManagerDashboardPage() {
               alignItems: "center",
               gap: 12,
               padding: "12px 14px",
-              background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
+              background: "#FF8F8F",
               border: "1px solid rgba(255,255,255,0.2)",
               borderRadius: 14,
               cursor: "pointer",
@@ -240,7 +237,7 @@ export default function TechnicalManagerDashboardPage() {
       </aside>
 
       <div style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.1) 25%, rgba(167,139,250,0.12) 50%, rgba(79,172,254,0.08) 75%, rgba(0,242,254,0.08) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(250,243,225,0.5) 0%, rgba(234,239,239,0.4) 50%, rgba(255,179,179,0.3) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
         <div style={{ position: "absolute", inset: 0, background: "rgba(255, 255, 255, 0.35)", backdropFilter: "blur(2px)" }} />
       </div>
 
@@ -266,13 +263,13 @@ export default function TechnicalManagerDashboardPage() {
                 alignItems: "center",
                 gap: 8,
                 padding: "10px 18px",
-                background: "linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(99,102,241,0.1) 100%)",
-                border: "1px solid rgba(139,92,246,0.3)",
+                background: "linear-gradient(135deg, rgba(255,143,143,0.15) 0%, rgba(255,179,179,0.1) 100%)",
+                border: "1px solid rgba(255,143,143,0.3)",
                 borderRadius: 12,
                 cursor: loading ? "wait" : "pointer",
                 fontWeight: 600,
                 fontSize: 14,
-                color: "#6d28d9",
+                color: "#2d3319",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
               }}
             >
@@ -283,7 +280,7 @@ export default function TechnicalManagerDashboardPage() {
 
           {loading ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: 80 }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#8b5cf6", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
               <span style={{ color: "#64748b", fontSize: 15, fontWeight: 500 }}>Loading your assigned projects…</span>
             </div>
           ) : projects.length === 0 ? (
@@ -297,8 +294,8 @@ export default function TechnicalManagerDashboardPage() {
                 boxShadow: "0 8px 32px rgba(139,92,246,0.08), 0 2px 8px rgba(0,0,0,0.04)",
               }}
             >
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(99,102,241,0.12) 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
-                <FolderOpen size={36} color="#8b5cf6" />
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20, borderLeft: "4px solid #5a6340" }}>
+                <FolderOpen size={36} color="#5a6340" />
               </div>
               <p style={{ margin: 0, color: "#1e293b", fontSize: 18, fontWeight: 700 }}>No projects assigned yet</p>
               <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 15, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
@@ -334,9 +331,9 @@ export default function TechnicalManagerDashboardPage() {
                           overflow: "hidden",
                         }}
                       >
-                        <div style={{ padding: "18px 24px", background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(99,102,241,0.06) 100%)", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <Users size={22} />
+                        <div style={{ padding: "18px 24px", background: "linear-gradient(135deg, rgba(234,239,239,0.8) 0%, rgba(255,143,143,0.1) 100%)", borderBottom: "1px solid #EAEFEF", display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(145deg, #FF8F8F 0%, #E87878 100%)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,120,120,0.3)" }}>
+                            <Users size={22} color="#fff" />
                           </div>
                           <div>
                             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>{bmName}</h2>
@@ -355,7 +352,7 @@ export default function TechnicalManagerDashboardPage() {
                                 marginTop: 8,
                                 background: "#f8fafc",
                                 borderRadius: 12,
-                                border: "1px solid #e2e8f0",
+                                border: "1px solid #EAEFEF",
                               }}
                             >
                               <div>
@@ -368,7 +365,7 @@ export default function TechnicalManagerDashboardPage() {
                                 onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                                 style={{
                                   padding: "8px 16px",
-                                  background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
+                                  background: "#FF8F8F",
                                   color: "#fff",
                                   border: "none",
                                   borderRadius: 10,
@@ -378,7 +375,7 @@ export default function TechnicalManagerDashboardPage() {
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: 6,
-                                  boxShadow: "0 4px 12px rgba(139,92,246,0.35)",
+                                  boxShadow: "0 4px 12px rgba(255,143,143,0.35)",
                                 }}
                               >
                                 View result <ArrowRight size={14} />
@@ -403,9 +400,9 @@ export default function TechnicalManagerDashboardPage() {
                   overflow: "hidden",
                 }}
               >
-                <div style={{ padding: "20px 24px", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "linear-gradient(135deg, rgba(139,92,246,0.15) 0%, rgba(99,102,241,0.12) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <FolderOpen size={20} color="#8b5cf6" />
+                <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAEFEF", display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "#EAEFEF", borderLeft: "4px solid #5a6340", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <FolderOpen size={20} color="#5a6340" />
                   </div>
                   <div>
                     <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Your projects ({projects.length})</h2>
@@ -414,7 +411,7 @@ export default function TechnicalManagerDashboardPage() {
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                    <tr style={{ background: "#f8fafc", borderBottom: "2px solid #EAEFEF" }}>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
@@ -426,7 +423,7 @@ export default function TechnicalManagerDashboardPage() {
                       <tr
                         key={p.id}
                         style={{
-                          borderBottom: "1px solid #e2e8f0",
+                          borderBottom: "1px solid #EAEFEF",
                           transition: "background 0.15s ease",
                         }}
                         onMouseEnter={(e) => {
@@ -446,7 +443,7 @@ export default function TechnicalManagerDashboardPage() {
                               onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                               style={{
                                 padding: "10px 18px",
-                                background: "linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)",
+                                background: "#FF8F8F",
                                 color: "#fff",
                                 border: "none",
                                 borderRadius: 10,

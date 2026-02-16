@@ -276,6 +276,8 @@ CREATE TABLE IF NOT EXISTS public.product_oems (
 
 -- Indexes for app lookups
 CREATE INDEX IF NOT EXISTS ix_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS ix_users_role ON public.users(role);
+CREATE INDEX IF NOT EXISTS ix_users_parent_id ON public.users(parent_id);
 CREATE INDEX IF NOT EXISTS ix_projects_project_name ON public.projects(project_name);
 CREATE INDEX IF NOT EXISTS ix_projects_user_id ON public.projects(user_id);
 CREATE INDEX IF NOT EXISTS ix_project_documents_project_id ON public.project_documents(project_id);
