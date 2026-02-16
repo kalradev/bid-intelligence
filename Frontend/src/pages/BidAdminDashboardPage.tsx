@@ -62,8 +62,35 @@ export default function BidAdminDashboardPage() {
   const [activeToggle, setActiveToggle] = useState<"projects" | "people" | "personal" | null>(null);
   const [expandedBmIdForProjects, setExpandedBmIdForProjects] = useState<number | null>(null);
   const [expandedBmIdForPeople, setExpandedBmIdForPeople] = useState<number | null>(null);
+  const [isViewTransitioning, setIsViewTransitioning] = useState(false);
+  const [pendingViewMode, setPendingViewMode] = useState<ViewMode | null>(null);
   const TEAMS_PER_PAGE = 8;
   const SIDEBAR_WIDTH = 240;
+
+  const handleViewChange = (nextMode: ViewMode) => {
+    if (nextMode === viewMode) return;
+    setPendingViewMode(nextMode);
+    setIsViewTransitioning(true);
+    setTimeout(() => {
+      setViewMode(nextMode);
+    }, 350);
+  };
+
+  // Hide blur overlay only when the switched-to view's data has finished loading
+  useEffect(() => {
+    if (!isViewTransitioning || pendingViewMode === null) return;
+    if (viewMode !== pendingViewMode) return;
+    const dataReady =
+      pendingViewMode === "teams"
+        ? !loading
+        : pendingViewMode === "personal"
+          ? !personalProjectsLoading
+          : !membersLoading;
+    if (dataReady) {
+      setIsViewTransitioning(false);
+      setPendingViewMode(null);
+    }
+  }, [isViewTransitioning, pendingViewMode, viewMode, loading, personalProjectsLoading, membersLoading]);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
@@ -292,7 +319,7 @@ export default function BidAdminDashboardPage() {
     fontWeight: 600,
     fontSize: 14,
     background: "transparent",
-    color: "#3730a3",
+    color: "#2d3319",
     transition: "all 0.2s",
   } as const;
 
@@ -309,24 +336,23 @@ export default function BidAdminDashboardPage() {
           right: 0,
           height: NAVBAR_HEIGHT,
           zIndex: 120,
-          background: "rgba(255,255,255,0.75)",
-          backdropFilter: "blur(20px)",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.4) inset",
+          background: "rgba(255,255,255,0.45)",
+          backdropFilter: "blur(24px) saturate(180%)",
+          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.5)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0 24px 0 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.2)"
+          padding: "0 24px 0 20px"
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         </div>
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 6px 20px rgba(102,126,234,0.4), 0 0 0 4px rgba(102,126,234,0.1)", animation: "pulse 3s ease-in-out infinite" }}>
-            <Sparkles size={24} color="#fff" style={{ filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }} />
-          </div>
-          <span style={{ fontSize: 26, fontWeight: 900, background: "linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: "-0.02em", filter: "drop-shadow(0 2px 4px rgba(102,126,234,0.1))" }}>Bid Intelligence</span>
+          <Sparkles size={24} color="#5a6340" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
@@ -338,29 +364,29 @@ export default function BidAdminDashboardPage() {
               alignItems: "center",
               gap: 10,
               padding: "8px 16px 8px 8px",
-              background: "linear-gradient(135deg, rgba(79,172,254,0.1) 0%, rgba(0,242,254,0.08) 100%)",
-              border: "1px solid rgba(79,172,254,0.2)",
+              background: "rgba(255,179,179,0.5)",
+              border: "1px solid rgba(255,143,143,0.4)",
               borderRadius: 14,
               cursor: "pointer",
               outline: "none",
               transition: "all 0.3s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)";
+              e.currentTarget.style.background = "#FFB3B3";
               e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(79,172,254,0.3)";
+              e.currentTarget.style.boxShadow = "0 6px 20px rgba(255,143,143,0.25)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "linear-gradient(135deg, rgba(79,172,254,0.1) 0%, rgba(0,242,254,0.08) 100%)";
+              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "none";
             }}
             title="Account & security – Profile, two-step verification, change password"
           >
-            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(79,172,254,0.3)" }}>
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(255,143,143,0.3)" }}>
               {(userDisplayName || "A").charAt(0).toUpperCase()}
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#0369a1" }}>{userDisplayName}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
           </button>
           <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
         </div>
@@ -375,30 +401,30 @@ export default function BidAdminDashboardPage() {
           bottom: 0,
           width: SIDEBAR_WIDTH,
           zIndex: 110,
-          background: "rgba(248,250,252,0.7)",
+          background: "rgba(234,239,239,0.95)",
           backdropFilter: "blur(20px)",
-          borderRight: "1px solid rgba(226,232,240,0.6)",
-          boxShadow: "4px 0 24px rgba(0,0,0,0.06)",
+          borderRight: "1px solid rgba(255,143,143,0.2)",
+          boxShadow: "4px 0 24px rgba(0,0,0,0.04)",
           display: "flex",
           flexDirection: "column",
           transition: "width 0.25s ease",
         }}
       >
         <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
             type="button"
             className={`sidebar-nav-toggle${viewMode === "teams" ? " active" : ""}`}
-            onClick={() => setViewMode("teams")}
+            onClick={() => handleViewChange("teams")}
             style={{
               ...navButtonBase,
-              background: viewMode === "teams" ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" : "linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.08) 100%)",
-              color: viewMode === "teams" ? "#fff" : "#5b21b6",
+              background: viewMode === "teams" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: viewMode === "teams" ? "#fff" : "#2d3319",
               fontWeight: viewMode === "teams" ? 700 : 600,
-              boxShadow: viewMode === "teams" ? "0 4px 12px rgba(102,126,234,0.3)" : "none",
-              border: viewMode === "teams" ? "none" : "1px solid rgba(102,126,234,0.2)",
+              boxShadow: viewMode === "teams" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
+              border: viewMode === "teams" ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="Dashboard"
           >
@@ -408,14 +434,14 @@ export default function BidAdminDashboardPage() {
           <button
             type="button"
             className={`sidebar-nav-toggle${viewMode === "personal" ? " active" : ""}`}
-            onClick={() => setViewMode("personal")}
+            onClick={() => handleViewChange("personal")}
             style={{
               ...navButtonBase,
-              background: viewMode === "personal" ? "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" : "linear-gradient(135deg, rgba(240,147,251,0.1) 0%, rgba(245,87,108,0.08) 100%)",
-              color: viewMode === "personal" ? "#fff" : "#be185d",
+              background: viewMode === "personal" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: viewMode === "personal" ? "#fff" : "#2d3319",
               fontWeight: viewMode === "personal" ? 700 : 600,
-              boxShadow: viewMode === "personal" ? "0 4px 12px rgba(240,147,251,0.3)" : "none",
-              border: viewMode === "personal" ? "none" : "1px solid rgba(240,147,251,0.2)",
+              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
+              border: viewMode === "personal" ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="Admin projects"
           >
@@ -425,22 +451,22 @@ export default function BidAdminDashboardPage() {
           <button
             type="button"
             className={`sidebar-nav-toggle${viewMode === "members" ? " active" : ""}`}
-            onClick={() => setViewMode("members")}
+            onClick={() => handleViewChange("members")}
             style={{
               ...navButtonBase,
-              background: viewMode === "members" ? "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" : "linear-gradient(135deg, rgba(79,172,254,0.1) 0%, rgba(0,242,254,0.08) 100%)",
-              color: viewMode === "members" ? "#fff" : "#0369a1",
+              background: viewMode === "members" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
+              color: viewMode === "members" ? "#fff" : "#2d3319",
               fontWeight: viewMode === "members" ? 700 : 600,
-              boxShadow: viewMode === "members" ? "0 4px 12px rgba(79,172,254,0.3)" : "none",
-              border: viewMode === "members" ? "none" : "1px solid rgba(79,172,254,0.2)",
+              boxShadow: viewMode === "members" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
+              border: viewMode === "members" ? "none" : "1px solid rgba(255,143,143,0.3)",
             }}
             title="All members and their projects"
           >
             <UserCircle size={20} style={{ flexShrink: 0 }} />
             <span>All members</span>
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(102,126,234,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.4) 50%, transparent 100%)", margin: "12px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
           <button
@@ -449,9 +475,9 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/upload")}
             style={{
               ...navButtonBase,
-              background: "linear-gradient(135deg, rgba(251,191,36,0.1) 0%, rgba(245,158,11,0.08) 100%)",
-              color: "#b45309",
-              border: "1px solid rgba(251,191,36,0.2)",
+              background: "rgba(255,179,179,0.4)",
+              color: "#2d3319",
+              border: "1px solid rgba(255,143,143,0.3)",
             }}
             title="Upload & Analyze"
           >
@@ -464,9 +490,9 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/team")}
             style={{
               ...navButtonBase,
-              background: "linear-gradient(135deg, rgba(34,197,94,0.1) 0%, rgba(22,163,74,0.08) 100%)",
-              color: "#15803d",
-              border: "1px solid rgba(34,197,94,0.2)",
+              background: "rgba(255,179,179,0.4)",
+              color: "#2d3319",
+              border: "1px solid rgba(255,143,143,0.3)",
             }}
             title="Manage Teams"
           >
@@ -479,9 +505,9 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/team-quota")}
             style={{
               ...navButtonBase,
-              background: "linear-gradient(135deg, rgba(139,92,246,0.12) 0%, rgba(168,85,247,0.1) 100%)",
-              color: "#7c3aed",
-              border: "1px solid rgba(139,92,246,0.25)",
+              background: "rgba(255,179,179,0.4)",
+              color: "#2d3319",
+              border: "1px solid rgba(255,143,143,0.3)",
             }}
             title="View total quota usage"
           >
@@ -489,13 +515,13 @@ export default function BidAdminDashboardPage() {
             <span>Team Quota</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid #e2e8f0", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
           <button
             type="button"
             onClick={handleLogout}
             style={{
               ...navButtonBase,
-              color: "#b91c1c",
+              color: "#6b5344",
             }}
             title="Logout"
           >
@@ -506,86 +532,64 @@ export default function BidAdminDashboardPage() {
       </aside>
 
       <div style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        {/* Animated gradient overlay */}
         <div style={{
           position: "absolute",
           inset: 0,
-          background: "linear-gradient(160deg, rgba(102,126,234,0.15) 0%, rgba(118,75,162,0.12) 25%, rgba(240,147,251,0.15) 50%, rgba(79,172,254,0.12) 75%, rgba(0,242,254,0.15) 100%)",
+          background: "linear-gradient(160deg, rgba(250,243,225,0.6) 0%, rgba(234,239,239,0.5) 50%, rgba(255,179,179,0.2) 100%)",
           animation: "pulse 8s ease-in-out infinite"
         }} />
-
-        {/* Floating geometric shapes */}
         <div className="background-shape" style={{
-          top: "10%",
-          left: "15%",
-          width: 300,
-          height: 300,
-          background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.1) 100%)",
-          borderRadius: "50%",
-          filter: "blur(40px)",
+          top: "10%", left: "15%", width: 300, height: 300,
+          background: "rgba(255,179,179,0.35)", borderRadius: "50%", filter: "blur(40px)",
           animation: "float 20s ease-in-out infinite"
         }} />
-
         <div className="background-shape" style={{
-          top: "60%",
-          right: "10%",
-          width: 250,
-          height: 250,
-          background: "linear-gradient(135deg, rgba(236,72,153,0.2) 0%, rgba(219,39,119,0.1) 100%)",
-          borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%",
-          filter: "blur(35px)",
+          top: "60%", right: "10%", width: 250, height: 250,
+          background: "rgba(255,143,143,0.2)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(35px)",
           animation: "floatSlow 25s ease-in-out infinite reverse"
         }} />
-
         <div className="background-shape" style={{
-          bottom: "15%",
-          left: "25%",
-          width: 200,
-          height: 200,
-          background: "linear-gradient(135deg, rgba(14,165,233,0.25) 0%, rgba(6,182,212,0.15) 100%)",
-          borderRadius: "50%",
-          filter: "blur(30px)",
+          bottom: "15%", left: "25%", width: 200, height: 200,
+          background: "rgba(234,239,239,0.5)", borderRadius: "50%", filter: "blur(30px)",
           animation: "float 18s ease-in-out infinite 5s"
         }} />
-
-        <div className="background-shape" style={{
-          top: "30%",
-          right: "30%",
-          width: 180,
-          height: 180,
-          background: "linear-gradient(135deg, rgba(251,191,36,0.2) 0%, rgba(245,158,11,0.1) 100%)",
-          transform: "rotate(45deg)",
-          filter: "blur(25px)",
-          animation: "rotate 40s linear infinite"
-        }} />
-
-        {/* Particle effects */}
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={i}
-            className="background-particle"
-            style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-              width: `${Math.random() * 8 + 4}px`,
-              height: `${Math.random() * 8 + 4}px`,
-              background: `rgba(255, 255, 255, ${Math.random() * 0.4 + 0.3})`,
-              animation: `float ${Math.random() * 10 + 15}s ease-in-out infinite ${Math.random() * 5}s`,
-              filter: "blur(1px)"
-            }}
-          />
-        ))}
-
-        {/* Glassmorphic overlay for better content readability */}
         <div style={{
-          position: "absolute",
-          inset: 0,
-          background: "rgba(255, 255, 255, 0.3)",
+          position: "absolute", inset: 0,
+          background: "rgba(255, 255, 255, 0.25)",
           backdropFilter: "blur(2px)"
         }} />
       </div>
 
-      <main style={{ position: "relative", zIndex: 1, marginLeft: SIDEBAR_WIDTH, padding: `${NAVBAR_HEIGHT + 28}px 28px 48px`, transition: "margin-left 0.25s ease" }}>
+      {(isViewTransitioning ||
+          (viewMode === "teams" && loading) ||
+          (viewMode === "personal" && personalProjectsLoading) ||
+          (viewMode === "members" && membersLoading)) && (
+        <div
+          style={{
+            position: "fixed",
+            top: NAVBAR_HEIGHT,
+            left: SIDEBAR_WIDTH,
+            right: 0,
+            bottom: 0,
+            zIndex: 50,
+            background: "rgba(250, 243, 225, 0.6)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 16,
+          }}
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: "#5a6340" }}>Loading…</span>
+        </div>
+      )}
+
+      <main style={{ position: "relative", zIndex: 1, marginLeft: SIDEBAR_WIDTH, padding: `${NAVBAR_HEIGHT + 28}px 28px 48px` }}>
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           {/* Page title - CoachPro style; Dashboard view: title left, Quota left right */}
           <div style={{
@@ -616,13 +620,13 @@ export default function BidAdminDashboardPage() {
                   alignItems: "center",
                   gap: 10,
                   padding: "12px 20px",
-                  background: isQuotaLow ? "linear-gradient(135deg, rgba(239,68,68,0.12) 0%, rgba(220,38,38,0.1) 100%)" : "linear-gradient(135deg, rgba(34,197,94,0.12) 0%, rgba(22,163,74,0.1) 100%)",
-                  border: isQuotaLow ? "1px solid rgba(239,68,68,0.35)" : "1px solid rgba(34,197,94,0.35)",
+                  background: isQuotaLow ? "rgba(180,120,100,0.2)" : "rgba(255,143,143,0.35)",
+                  border: isQuotaLow ? "1px solid rgba(150,90,70,0.3)" : "1px solid rgba(255,143,143,0.5)",
                   borderRadius: 12,
                   cursor: "pointer",
                   fontWeight: 700,
                   fontSize: 15,
-                  color: isQuotaLow ? "#b91c1c" : "#15803d",
+                  color: isQuotaLow ? "#6b5344" : "#2d3319",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                   transition: "all 0.2s",
                   outline: "none",
@@ -644,35 +648,23 @@ export default function BidAdminDashboardPage() {
             )}
           </div>
 
-          {viewMode === "teams" && loading ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60 }}>
-              <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#4f46e5", animation: "spin 0.8s linear infinite" }} />
-              <span style={{ color: "#64748b", fontSize: 15 }}>Loading dashboard…</span>
-            </div>
-          ) : viewMode === "personal" ? (
-            <>
-              {personalProjectsLoading ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#4f46e5", animation: "spin 0.8s linear infinite" }} />
-                  <span style={{ color: "#64748b", fontSize: 15 }}>Loading your projects…</span>
-                </div>
-              ) : (
-                <section>
-                  <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(20,184,166,0.12) 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(13,148,136,0.25)" }}>
-                      <FolderOpen size={18} color="#0d9488" />
-                    </span>
-                    Admin projects ({adminProjects.length})
-                  </h2>
-                  <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                    {adminProjects.length === 0 ? (
+          {viewMode === "teams" && loading ? null : viewMode === "personal" ? (
+            <section>
+              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #5a6340" }}>
+                  <FolderOpen size={18} color="#5a6340" />
+                </span>
+                Admin projects ({adminProjects.length})
+              </h2>
+              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+                {personalProjectsLoading ? null : adminProjects.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.
                       </div>
                     ) : (
                       <table style={{ width: "100%", borderCollapse: "collapse" }}>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #e2e8f0" }}>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
@@ -681,7 +673,7 @@ export default function BidAdminDashboardPage() {
                         </thead>
                         <tbody>
                           {adminProjects.map((p) => (
-                            <tr key={p.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                            <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
                               <td style={{ padding: "14px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
                               <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
                               <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
@@ -690,14 +682,14 @@ export default function BidAdminDashboardPage() {
                                   onClick={() => handleViewResult(p.project_name)}
                                   style={{
                                     padding: "8px 16px",
-                                    background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                                    background: "#FF8F8F",
                                     color: "#fff",
                                     border: "none",
                                     borderRadius: 8,
                                     fontWeight: 600,
                                     cursor: "pointer",
                                     fontSize: 13,
-                                    boxShadow: "0 4px 12px rgba(79,70,229,0.3)",
+                                    boxShadow: "0 2px 8px rgba(255,143,143,0.3)",
                                   }}
                                 >
                                   View result
@@ -710,32 +702,23 @@ export default function BidAdminDashboardPage() {
                     )}
                   </div>
                 </section>
-              )}
-            </>
           ) : viewMode === "members" ? (
-            <>
-              {membersLoading ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#4f46e5", animation: "spin 0.8s linear infinite" }} />
-                  <span style={{ color: "#64748b", fontSize: 15 }}>Loading members and projects…</span>
-                </div>
-              ) : (
-                <section>
-                  <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(20,184,166,0.12) 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(13,148,136,0.25)" }}>
-                      <UserCircle size={18} color="#0d9488" />
-                    </span>
-                    All members ({flattenedMembers.length})
-                  </h2>
-                  <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                    {flattenedMembers.length === 0 ? (
+            <section>
+              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,143,143,0.4)" }}>
+                  <UserCircle size={18} color="#FF8F8F" />
+                </span>
+                All members ({flattenedMembers.length})
+              </h2>
+              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+                {membersLoading ? null : flattenedMembers.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No Bid Managers or Technical Managers yet. Create them from this dashboard (Add Bid Manager).
                       </div>
                     ) : (
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #e2e8f0" }}>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Member</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: 140 }}>Role</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: 160 }}>Team</th>
@@ -746,7 +729,7 @@ export default function BidAdminDashboardPage() {
                           {flattenedMembers.map((m) => {
                             const memberProjects = allProjects.filter((p) => p.user_id === m.id);
                             return (
-                              <tr key={m.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                              <tr key={m.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
                                 <td style={{ padding: "14px 16px" }}>
                                   <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{m.fullName}</div>
                                   <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
@@ -761,9 +744,9 @@ export default function BidAdminDashboardPage() {
                                       borderRadius: 8,
                                       fontSize: 12,
                                       fontWeight: 600,
-                                      background: m.role === "Bid Manager" ? "linear-gradient(135deg, rgba(79,70,229,0.12) 0%, rgba(99,102,241,0.1) 100%)" : "linear-gradient(135deg, rgba(5,150,105,0.12) 0%, rgba(16,185,129,0.1) 100%)",
-                                      color: m.role === "Bid Manager" ? "#4338ca" : "#047857",
-                                      border: m.role === "Bid Manager" ? "1px solid rgba(79,70,229,0.25)" : "1px solid rgba(5,150,105,0.25)",
+                                      background: m.role === "Bid Manager" ? "rgba(255,143,143,0.2)" : "rgba(255,179,179,0.3)",
+                                      color: "#2d3319",
+                                      border: m.role === "Bid Manager" ? "1px solid rgba(255,143,143,0.4)" : "1px solid rgba(255,179,179,0.5)",
                                     }}
                                   >
                                     {m.role}
@@ -782,23 +765,23 @@ export default function BidAdminDashboardPage() {
                                           onClick={() => handleViewResult(p.project_name)}
                                           style={{
                                             padding: "6px 12px",
-                                            background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                                            background: "#FF8F8F",
                                             color: "#fff",
                                             border: "none",
                                             borderRadius: 6,
                                             fontWeight: 600,
                                             fontSize: 12,
                                             cursor: "pointer",
-                                            boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
+                                            boxShadow: "0 2px 8px rgba(255,143,143,0.25)",
                                             transition: "transform 0.2s, box-shadow 0.2s",
                                           }}
                                           onMouseEnter={(e) => {
                                             e.currentTarget.style.transform = "translateY(-1px)";
-                                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(79,70,229,0.35)";
+                                            e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.35)";
                                           }}
                                           onMouseLeave={(e) => {
                                             e.currentTarget.style.transform = "translateY(0)";
-                                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(79,70,229,0.25)";
+                                            e.currentTarget.style.boxShadow = "0 2px 8px rgba(255,143,143,0.25)";
                                           }}
                                         >
                                           {p.project_name}
@@ -815,31 +798,59 @@ export default function BidAdminDashboardPage() {
                     )}
                   </div>
                 </section>
-              )}
-            </>
           ) : (
             <>
               {/* Metric cards - CoachPro style */}
               {(bidManagers.length > 0 || currentUserId != null) && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20, marginBottom: 28 }}>
-                  <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16 }}>
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(13,148,136,0.3)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveToggle(null)}
+                    style={{
+                      padding: "22px 20px",
+                      background: activeToggle === null ? "rgba(255,143,143,0.15)" : "#fff",
+                      borderRadius: 16,
+                      border: activeToggle === null ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                      boxShadow: activeToggle === null ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 16,
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                      outline: "none",
+                      width: "100%",
+                      textAlign: "left",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeToggle !== null) {
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeToggle !== null) {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)";
+                      }
+                    }}
+                  >
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(145deg, #FF8F8F 0%, #E87878 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(232,120,120,0.4)" }}>
                       <Users size={26} color="#fff" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{bidManagers.length}</div>
                       <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginTop: 2 }}>Teams</div>
                     </div>
-                  </div>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setActiveToggle(activeToggle === "projects" ? null : "projects")}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "projects" ? "linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.08) 100%)" : "#fff",
+                      background: activeToggle === "projects" ? "rgba(255,143,143,0.15)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "projects" ? "2px solid #6366f1" : "1px solid #e2e8f0",
-                      boxShadow: activeToggle === "projects" ? "0 4px 16px rgba(99,102,241,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "projects" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                      boxShadow: activeToggle === "projects" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -852,7 +863,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "projects") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(99,102,241,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -862,8 +873,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}>
-                      <FolderKanban size={26} color="#fff" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "2px solid #E87878", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,120,120,0.15)" }}>
+                      <FolderKanban size={26} color="#E87878" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalProjects}</div>
@@ -875,10 +886,10 @@ export default function BidAdminDashboardPage() {
                     onClick={() => setActiveToggle(activeToggle === "people" ? null : "people")}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "people" ? "linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(249,115,22,0.08) 100%)" : "#fff",
+                      background: activeToggle === "people" ? "rgba(255,179,179,0.2)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "people" ? "2px solid #f59e0b" : "1px solid #e2e8f0",
-                      boxShadow: activeToggle === "people" ? "0 4px 16px rgba(245,158,11,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "people" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                      boxShadow: activeToggle === "people" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -891,7 +902,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "people") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(245,158,11,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -901,8 +912,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(245,158,11,0.3)" }}>
-                      <UserCircle size={26} color="#fff" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(250,243,225,0.8)" }}>
+                      <UserCircle size={26} color="#FF8F8F" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalPeople}</div>
@@ -914,10 +925,10 @@ export default function BidAdminDashboardPage() {
                     onClick={() => setActiveToggle(activeToggle === "personal" ? null : "personal")}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "personal" ? "linear-gradient(135deg, rgba(236,72,153,0.1) 0%, rgba(219,39,119,0.08) 100%)" : "#fff",
+                      background: activeToggle === "personal" ? "rgba(255,179,179,0.2)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "personal" ? "2px solid #ec4899" : "1px solid #e2e8f0",
-                      boxShadow: activeToggle === "personal" ? "0 4px 16px rgba(236,72,153,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "personal" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                      boxShadow: activeToggle === "personal" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -930,7 +941,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "personal") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(236,72,153,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -940,8 +951,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(236,72,153,0.3)" }}>
-                      <FolderOpen size={26} color="#fff" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#EAEFEF", borderLeft: "4px solid #5a6340", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(90,99,64,0.12)" }}>
+                      <FolderOpen size={26} color="#5a6340" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{adminProjects.length}</div>
@@ -953,11 +964,11 @@ export default function BidAdminDashboardPage() {
 
               {/* Toggle Details Section */}
               {activeToggle && (
-                <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "20px 24px", marginBottom: 24, position: "relative" }}>
+                <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "20px 24px", marginBottom: 24, position: "relative" }}>
                   {activeToggle === "projects" && (
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#4338ca", display: "flex", alignItems: "center", gap: 10 }}>
+                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#2d3319", display: "flex", alignItems: "center", gap: 10 }}>
                           <FolderKanban size={20} />
                           Total Projects Breakdown
                         </h3>
@@ -1002,13 +1013,13 @@ export default function BidAdminDashboardPage() {
                                 style={{
                                   width: "100%",
                                   padding: "14px 16px",
-                                  background: isExpanded ? "linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.08) 100%)" : "#f8fafc",
+                                  background: isExpanded ? "rgba(255,143,143,0.12)" : "#f8fafc",
                                   borderRadius: 12,
-                                  border: isExpanded ? "2px solid #6366f1" : "1px solid #e2e8f0",
+                                  border: isExpanded ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
                                   cursor: "pointer",
                                   textAlign: "left",
                                   outline: "none",
-                                  boxShadow: isExpanded ? "0 4px 12px rgba(99,102,241,0.15)" : "none",
+                                  boxShadow: isExpanded ? "0 4px 12px rgba(255,143,143,0.15)" : "none",
                                 }}
                               >
                                 <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{bm.fullName}</div>
@@ -1016,14 +1027,14 @@ export default function BidAdminDashboardPage() {
                                 <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>projects {isExpanded ? "▼" : "▶"}</div>
                               </button>
                               {isExpanded && (
-                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 12 }}>{bm.fullName} – projects</div>
                                   {bmProjects.length === 0 ? (
                                     <div style={{ padding: "16px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
                                   ) : (
                                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                                       <thead>
-                                        <tr style={{ borderBottom: "2px solid #e2e8f0" }}>
+                                        <tr style={{ borderBottom: "2px solid #EAEFEF" }}>
                                           <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
                                           <th style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
                                           <th style={{ padding: "8px 12px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
@@ -1031,11 +1042,11 @@ export default function BidAdminDashboardPage() {
                                       </thead>
                                       <tbody>
                                         {bmProjects.map((p) => (
-                                          <tr key={p.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                                          <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
                                             <td style={{ padding: "10px 12px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
                                             <td style={{ padding: "10px 12px", color: "#64748b" }}>{p.tender_id || "—"}</td>
                                             <td style={{ padding: "10px 12px", textAlign: "right" }}>
-                                              <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ padding: "6px 12px", background: "#6366f1", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>View result</button>
+                                              <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ padding: "6px 12px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12 }}>View result</button>
                                             </td>
                                           </tr>
                                         ))}
@@ -1048,8 +1059,8 @@ export default function BidAdminDashboardPage() {
                           );
                         })}
                       </div>
-                      <div style={{ marginTop: 16, padding: "12px 16px", background: "linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.08) 100%)", borderRadius: 12, border: "1px solid rgba(99,102,241,0.2)" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#4338ca" }}>Grand Total: {totalProjects} projects</div>
+                      <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(255,143,143,0.15)", borderRadius: 12, border: "1px solid rgba(255,143,143,0.3)" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>Grand Total: {totalProjects} projects</div>
                       </div>
                     </div>
                   )}
@@ -1100,13 +1111,13 @@ export default function BidAdminDashboardPage() {
                                 style={{
                                   width: "100%",
                                   padding: "14px 16px",
-                                  background: isExpanded ? "linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(249,115,22,0.08) 100%)" : "#f8fafc",
+                                  background: isExpanded ? "rgba(255,179,179,0.15)" : "#f8fafc",
                                   borderRadius: 12,
-                                  border: isExpanded ? "2px solid #f59e0b" : "1px solid #e2e8f0",
+                                  border: isExpanded ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
                                   cursor: "pointer",
                                   textAlign: "left",
                                   outline: "none",
-                                  boxShadow: isExpanded ? "0 4px 12px rgba(245,158,11,0.15)" : "none",
+                                  boxShadow: isExpanded ? "0 4px 12px rgba(255,143,143,0.15)" : "none",
                                 }}
                               >
                                 <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{bm.fullName}</div>
@@ -1119,7 +1130,7 @@ export default function BidAdminDashboardPage() {
                                 </div>
                               </button>
                               {isExpanded && (
-                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 12 }}>{bm.fullName} – people</div>
                                   <ul style={{ margin: 0, paddingLeft: 20, color: "#0f172a", fontSize: 13 }}>
                                     <li style={{ marginBottom: 6 }}><strong>{bm.fullName}</strong> (Bid Manager)</li>
@@ -1133,8 +1144,8 @@ export default function BidAdminDashboardPage() {
                           );
                         })}
                       </div>
-                      <div style={{ marginTop: 16, padding: "12px 16px", background: "linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(249,115,22,0.08) 100%)", borderRadius: 12, border: "1px solid rgba(245,158,11,0.2)" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#b45309" }}>Grand Total: {totalPeople} people</div>
+                      <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(255,179,179,0.2)", borderRadius: 12, border: "1px solid rgba(255,143,143,0.3)" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>Grand Total: {totalPeople} people</div>
                       </div>
                     </div>
                   )}
@@ -1173,15 +1184,13 @@ export default function BidAdminDashboardPage() {
                           <X size={20} />
                         </button>
                       </div>
-                      {personalProjectsLoading ? (
-                        <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>Loading your projects…</div>
-                      ) : adminProjects.length === 0 ? (
+                      {personalProjectsLoading ? null : adminProjects.length === 0 ? (
                         <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.</div>
                       ) : (
                         <div style={{ overflowX: "auto" }}>
                           <table style={{ width: "100%", borderCollapse: "collapse" }}>
                             <thead>
-                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #e2e8f0" }}>
+                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
                                 <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
                                 <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
                                 <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
@@ -1190,7 +1199,7 @@ export default function BidAdminDashboardPage() {
                             </thead>
                             <tbody>
                               {adminProjects.map((p) => (
-                                <tr key={p.id} style={{ borderBottom: "1px solid #e2e8f0" }}>
+                                <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
                                   <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a", fontSize: 13 }}>{p.project_name}</td>
                                   <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{p.tender_id || "—"}</td>
                                   <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{p.client_name || "—"}</td>
@@ -1200,14 +1209,14 @@ export default function BidAdminDashboardPage() {
                                       onClick={() => handleViewResult(p.project_name)}
                                       style={{
                                         padding: "8px 14px",
-                                        background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                                        background: "#FF8F8F",
                                         color: "#fff",
                                         border: "none",
                                         borderRadius: 8,
                                         fontWeight: 600,
                                         cursor: "pointer",
                                         fontSize: 12,
-                                        boxShadow: "0 2px 8px rgba(79,70,229,0.25)",
+                                        boxShadow: "0 2px 8px rgba(255,143,143,0.25)",
                                       }}
                                     >
                                       View result
@@ -1224,11 +1233,11 @@ export default function BidAdminDashboardPage() {
                 </div>
               )}
 
-              <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: 24 }}>
-                <div style={{ padding: "18px 22px", borderBottom: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between" }}>
+              <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: 24 }}>
+                <div style={{ padding: "18px 22px", borderBottom: "1px solid #EAEFEF", background: "#f8fafc", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between" }}>
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, rgba(13,148,136,0.15) 0%, rgba(20,184,166,0.12) 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(13,148,136,0.25)" }}>
-                      <FolderKanban size={18} color="#0d9488" />
+                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "2px solid #E87878" }}>
+                      <FolderKanban size={18} color="#E87878" />
                     </span>
                     Teams
                   </h2>
@@ -1243,7 +1252,7 @@ export default function BidAdminDashboardPage() {
                         style={{
                           width: "100%",
                           padding: "10px 12px 10px 40px",
-                          border: "1px solid #e2e8f0",
+                          border: "1px solid #EAEFEF",
                           borderRadius: 10,
                           fontSize: 14,
                           color: "#0f172a",
@@ -1266,25 +1275,25 @@ export default function BidAdminDashboardPage() {
                         alignItems: "center",
                         gap: 8,
                         padding: "10px 16px",
-                        background: showCreateBidManagerForm ? "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)" : "linear-gradient(135deg, rgba(79,70,229,0.1) 0%, rgba(99,102,241,0.08) 100%)",
-                        color: showCreateBidManagerForm ? "#fff" : "#4338ca",
-                        border: "1px solid rgba(79,70,229,0.3)",
+                        background: showCreateBidManagerForm ? "#FF8F8F" : "rgba(255,179,179,0.6)",
+                        color: showCreateBidManagerForm ? "#fff" : "#2d3319",
+                        border: "1px solid rgba(255,143,143,0.4)",
                         borderRadius: 10,
                         cursor: "pointer",
                         fontWeight: 600,
                         fontSize: 13,
                         transition: "all 0.2s",
-                        boxShadow: showCreateBidManagerForm ? "0 4px 12px rgba(79,70,229,0.3)" : "none",
+                        boxShadow: showCreateBidManagerForm ? "0 4px 12px rgba(255,143,143,0.3)" : "none",
                       }}
                       onMouseEnter={(e) => {
                         if (!showCreateBidManagerForm) {
-                          e.currentTarget.style.background = "linear-gradient(135deg, rgba(79,70,229,0.15) 0%, rgba(99,102,241,0.12) 100%)";
-                          e.currentTarget.style.boxShadow = "0 2px 8px rgba(79,70,229,0.15)";
+                          e.currentTarget.style.background = "rgba(255,143,143,0.15)";
+                          e.currentTarget.style.boxShadow = "0 2px 8px rgba(255,143,143,0.15)";
                         }
                       }}
                       onMouseLeave={(e) => {
                         if (!showCreateBidManagerForm) {
-                          e.currentTarget.style.background = "linear-gradient(135deg, rgba(79,70,229,0.1) 0%, rgba(99,102,241,0.08) 100%)";
+                          e.currentTarget.style.background = "rgba(255,179,179,0.6)";
                           e.currentTarget.style.boxShadow = "none";
                         }
                       }}
@@ -1296,8 +1305,8 @@ export default function BidAdminDashboardPage() {
                 </div>
 
                 {showCreateBidManagerForm && (
-                  <div style={{ padding: "20px 22px", borderBottom: "1px solid #e2e8f0", background: "linear-gradient(135deg, rgba(79,70,229,0.03) 0%, rgba(99,102,241,0.02) 100%)" }}>
-                    <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#4338ca", display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ padding: "20px 22px", borderBottom: "1px solid #EAEFEF", background: "rgba(234,239,239,0.6)" }}>
+                    <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700, color: "#2d3319", display: "flex", alignItems: "center", gap: 8 }}>
                       <UserPlus size={18} />
                       Create New Bid Manager
                     </h3>
@@ -1313,7 +1322,7 @@ export default function BidAdminDashboardPage() {
                         required
                         style={{
                           padding: "10px 14px",
-                          border: "1px solid #e2e8f0",
+                          border: "1px solid #EAEFEF",
                           borderRadius: 8,
                           fontSize: 14,
                           color: "#0f172a",
@@ -1332,7 +1341,7 @@ export default function BidAdminDashboardPage() {
                         required
                         style={{
                           padding: "10px 14px",
-                          border: "1px solid #e2e8f0",
+                          border: "1px solid #EAEFEF",
                           borderRadius: 8,
                           fontSize: 14,
                           color: "#0f172a",
@@ -1352,7 +1361,7 @@ export default function BidAdminDashboardPage() {
                         minLength={6}
                         style={{
                           padding: "10px 14px",
-                          border: "1px solid #e2e8f0",
+                          border: "1px solid #EAEFEF",
                           borderRadius: 8,
                           fontSize: 14,
                           color: "#0f172a",
@@ -1366,7 +1375,7 @@ export default function BidAdminDashboardPage() {
                           disabled={createBidManagerLoading}
                           style={{
                             padding: "10px 20px",
-                            background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                            background: "#FF8F8F",
                             color: "#fff",
                             border: "none",
                             borderRadius: 8,
@@ -1374,7 +1383,7 @@ export default function BidAdminDashboardPage() {
                             fontSize: 13,
                             cursor: createBidManagerLoading ? "not-allowed" : "pointer",
                             opacity: createBidManagerLoading ? 0.7 : 1,
-                            boxShadow: "0 4px 12px rgba(79,70,229,0.3)",
+                            boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
                             transition: "all 0.2s",
                           }}
                         >
@@ -1390,7 +1399,7 @@ export default function BidAdminDashboardPage() {
                             padding: "10px 20px",
                             background: "#fff",
                             color: "#64748b",
-                            border: "1px solid #e2e8f0",
+                            border: "1px solid #EAEFEF",
                             borderRadius: 8,
                             fontWeight: 600,
                             fontSize: 13,
@@ -1415,7 +1424,7 @@ export default function BidAdminDashboardPage() {
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #e2e8f0" }}>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
                             <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Team</th>
                             <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: "20%" }}>Projects</th>
                             <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, width: 140 }}>People</th>
@@ -1432,7 +1441,7 @@ export default function BidAdminDashboardPage() {
                               <Fragment key={bm.id}>
                                 <tr
                                   style={{
-                                    borderBottom: "1px solid #e2e8f0",
+                                    borderBottom: "1px solid #EAEFEF",
                                     background: isExpanded ? "#f8fafc" : undefined,
                                     transition: "background 0.15s",
                                   }}
@@ -1461,7 +1470,7 @@ export default function BidAdminDashboardPage() {
                                           width: 36,
                                           height: 36,
                                           borderRadius: 10,
-                                          background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                                          background: "#FF8F8F",
                                           color: "#fff",
                                           fontSize: 14,
                                           fontWeight: 700,
@@ -1469,7 +1478,7 @@ export default function BidAdminDashboardPage() {
                                           alignItems: "center",
                                           justifyContent: "center",
                                           flexShrink: 0,
-                                          boxShadow: "0 2px 8px rgba(79,70,229,0.2)",
+                                          boxShadow: "0 2px 8px rgba(255,143,143,0.2)",
                                         }}
                                       >
                                         {initial}
@@ -1484,13 +1493,13 @@ export default function BidAdminDashboardPage() {
                                   </td>
                                   <td style={{ padding: "16px 16px" }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                      <div style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 3, background: "#e2e8f0", overflow: "hidden" }}>
+                                      <div style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 3, background: "#EAEFEF", overflow: "hidden" }}>
                                         <div
                                           style={{
                                             height: "100%",
                                             width: `${pct}%`,
                                             borderRadius: 3,
-                                            background: bm.teamProjectsLeft === 0 ? "linear-gradient(90deg, #ef4444, #dc2626)" : "linear-gradient(90deg, #10b981, #059669)",
+                                            background: bm.teamProjectsLeft === 0 ? "linear-gradient(90deg, #b8956b, #a08050)" : "linear-gradient(90deg, #FF8F8F, #E87878)",
                                           }}
                                         />
                                       </div>
@@ -1510,21 +1519,21 @@ export default function BidAdminDashboardPage() {
                                         alignItems: "center",
                                         gap: 6,
                                         padding: "8px 14px",
-                                        background: isExpanded ? "linear-gradient(135deg, rgba(79,70,229,0.15) 0%, rgba(99,102,241,0.12) 100%)" : "linear-gradient(135deg, rgba(238,242,255,0.9) 0%, rgba(224,231,255,0.8) 100%)",
-                                        border: "1px solid rgba(99,102,241,0.35)",
+                                        background: isExpanded ? "rgba(255,143,143,0.15)" : "rgba(250,243,225,0.9)",
+                                        border: "1px solid rgba(255,143,143,0.4)",
                                         borderRadius: 10,
                                         cursor: "pointer",
                                         fontWeight: 600,
                                         fontSize: 13,
-                                        color: "#4338ca",
+                                        color: "#2d3319",
                                         transition: "all 0.2s",
-                                        boxShadow: isExpanded ? "0 2px 8px rgba(79,70,229,0.15)" : "0 1px 3px rgba(79,70,229,0.08)",
+                                        boxShadow: isExpanded ? "0 2px 8px rgba(255,143,143,0.15)" : "0 1px 3px rgba(255,143,143,0.1)",
                                       }}
                                       title={isExpanded ? "Hide who's working" : "Show who's working on this team"}
                                     >
                                       <span style={{ color: "#3730a3", fontWeight: 700 }}>{peopleCount}</span>
-                                      <span style={{ color: "#4338ca", fontSize: 12 }}>people</span>
-                                      {isExpanded ? <ChevronDown size={14} color="#4f46e5" /> : <ChevronRight size={14} color="#4f46e5" />}
+                                      <span style={{ color: "#2d3319", fontSize: 12 }}>people</span>
+                                      {isExpanded ? <ChevronDown size={14} color="#5a6340" /> : <ChevronRight size={14} color="#5a6340" />}
                                     </button>
                                   </td>
                                   <td style={{ padding: "16px 24px 16px 32px", textAlign: "right", minWidth: 160 }}>
@@ -1535,23 +1544,23 @@ export default function BidAdminDashboardPage() {
                                         alignItems: "center",
                                         gap: 6,
                                         padding: "8px 14px",
-                                        background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)",
+                                        background: "#FF8F8F",
                                         color: "#fff",
                                         border: "none",
                                         borderRadius: 8,
                                         fontWeight: 600,
                                         fontSize: 13,
                                         cursor: "pointer",
-                                        boxShadow: "0 4px 12px rgba(79,70,229,0.3)",
+                                        boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
                                         transition: "transform 0.2s, box-shadow 0.2s",
                                       }}
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.transform = "translateY(-1px)";
-                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(79,70,229,0.4)";
+                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.4)";
                                       }}
                                       onMouseLeave={(e) => {
                                         e.currentTarget.style.transform = "translateY(0)";
-                                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(79,70,229,0.3)";
+                                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.3)";
                                       }}
                                     >
                                       View projects <ArrowRight size={14} />
@@ -1559,17 +1568,17 @@ export default function BidAdminDashboardPage() {
                                   </td>
                                 </tr>
                                 {isExpanded && (
-                                  <tr style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
+                                  <tr style={{ background: "#f8fafc", borderBottom: "1px solid #EAEFEF" }}>
                                     <td colSpan={4} style={{ padding: "12px 16px 16px 56px" }}>
                                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>People on this team</div>
                                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                                          <UserCircle size={16} color="#4f46e5" />
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #EAEFEF", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                                          <UserCircle size={16} color="#5a6340" />
                                           <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{bm.fullName}</span>
                                           <span style={{ fontSize: 11, color: "#64748b" }}>Bid Manager</span>
                                         </div>
                                         {(bm.technicalManagers || []).map((tm) => (
-                                          <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                                          <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #EAEFEF", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                                             <UserCircle size={16} color="#059669" />
                                             <span style={{ fontSize: 13, fontWeight: 500, color: "#475569" }}>{tm.fullName}</span>
                                             <span style={{ fontSize: 11, color: "#64748b" }}>{tm.email}</span>
@@ -1590,7 +1599,7 @@ export default function BidAdminDashboardPage() {
                     </div>
 
                     {totalFilteredPages > 1 && (
-                      <div style={{ padding: "14px 20px", borderTop: "1px solid #e2e8f0", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div style={{ padding: "14px 20px", borderTop: "1px solid #EAEFEF", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                         <span style={{ fontSize: 13, color: "#64748b" }}>
                           Showing {(teamPage - 1) * TEAMS_PER_PAGE + 1}–{Math.min(teamPage * TEAMS_PER_PAGE, filteredTeams.length)} of {filteredTeams.length} teams
                         </span>
@@ -1601,7 +1610,7 @@ export default function BidAdminDashboardPage() {
                             disabled={teamPage <= 1}
                             style={{
                               padding: "8px 14px",
-                              border: "1px solid #e2e8f0",
+                              border: "1px solid #EAEFEF",
                               borderRadius: 8,
                               background: teamPage <= 1 ? "#f1f5f9" : "#fff",
                               color: teamPage <= 1 ? "#94a3b8" : "#475569",
@@ -1621,7 +1630,7 @@ export default function BidAdminDashboardPage() {
                             disabled={teamPage >= totalFilteredPages}
                             style={{
                               padding: "8px 14px",
-                              border: "1px solid #e2e8f0",
+                              border: "1px solid #EAEFEF",
                               borderRadius: 8,
                               background: teamPage >= totalFilteredPages ? "#f1f5f9" : "#fff",
                               color: teamPage >= totalFilteredPages ? "#94a3b8" : "#475569",
@@ -1660,9 +1669,9 @@ export default function BidAdminDashboardPage() {
         .header-profile-btn:focus,
         .header-profile-btn:focus-visible { outline: none !important; box-shadow: none !important; }
         .people-toggle-btn:hover {
-          background: linear-gradient(135deg, rgba(102,126,234,0.25) 0%, rgba(118,75,162,0.2) 100%) !important;
-          border-color: rgba(102,126,234,0.5) !important;
-          box-shadow: 0 4px 12px rgba(102,126,234,0.25) !important;
+          background: rgba(255,179,179,0.4) !important;
+          border-color: rgba(255,143,143,0.5) !important;
+          box-shadow: 0 4px 12px rgba(255,143,143,0.2) !important;
           transform: translateY(-1px);
         }
       `}</style>

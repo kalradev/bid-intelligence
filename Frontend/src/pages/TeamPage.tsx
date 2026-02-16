@@ -2,8 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import cacheLogo from "../assets/Cache-Logo.png";
-import womenOwnedLogo from "../assets/women-owned-logo.png";
+import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from "../config";
 
 interface TeamMember {
@@ -96,6 +95,7 @@ export default function TeamPage() {
 
   const role = (user?.role || "").toLowerCase();
   const isBidAdmin = role === "bid_admin";
+  const isBidManager = role === "bid_manager";
   const canCreateBidManager = false; // Bid Managers are created by Bid Admin from admin dashboard
   const canCreateTechnicalManager = role === "bid_manager";
 
@@ -161,14 +161,9 @@ export default function TeamPage() {
 
   return (
     <div className="universal-page-wrapper">
-      <div style={{ position: "fixed", top: 8, left: 32, zIndex: 100 }}>
-        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
-      </div>
-      <div style={{ position: "fixed", top: 8, right: 32, zIndex: 100 }}>
-        <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
-      </div>
+      <DashboardNavbar />
 
-      {isBidAdmin && (
+      {(isBidAdmin || isBidManager) && (
         <button
           type="button"
           onClick={() => navigate("/home")}
@@ -210,7 +205,7 @@ export default function TeamPage() {
         <div className="universal-bg-gradient-3"></div>
       </div>
 
-      <div style={{ maxWidth: isBidAdmin ? 1000 : 800, margin: "100px auto 40px", padding: 24 }}>
+      <div style={{ position: "relative", zIndex: 1, maxWidth: isBidAdmin ? 1000 : 800, margin: "0 auto 40px", padding: 24, paddingTop: NAVBAR_HEIGHT + 24 }}>
         <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 20, padding: 28, marginBottom: 24, boxShadow: "0 20px 50px rgba(99,102,241,0.12)" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 24, color: "#111827" }}>
             {isBidAdmin ? "Dashboard - Organization Overview" : "Team & Quota"}

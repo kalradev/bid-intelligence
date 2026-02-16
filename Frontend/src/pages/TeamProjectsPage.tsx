@@ -159,10 +159,10 @@ export default function TeamProjectsPage() {
       >
         <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
         <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(79,70,229,0.3)" }}>
-            <FolderKanban size={22} color="#fff" />
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#FAF3E1", border: "2px solid #E87878", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(232,120,120,0.15)" }}>
+            <FolderKanban size={22} color="#E87878" />
           </div>
-          <span style={{ fontSize: 22, fontWeight: 700, color: "#3730a3", letterSpacing: "-0.02em" }}>Team quota</span>
+          <span style={{ fontSize: 22, fontWeight: 700, color: "#2d3319", letterSpacing: "-0.02em" }}>Team quota</span>
         </div>
         <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
       </header>
@@ -182,25 +182,23 @@ export default function TeamProjectsPage() {
             gap: 8,
             marginBottom: 28,
             padding: "12px 20px",
-            background: "rgba(255,255,255,0.95)",
-            border: "1px solid #e2e8f0",
+            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
+            border: "1px solid rgba(13,148,136,0.4)",
             borderRadius: 12,
             cursor: "pointer",
             fontWeight: 600,
             fontSize: 14,
-            color: "#475569",
-            boxShadow: "0 4px 12px rgba(15,23,42,0.06)",
+            color: "#fff",
+            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
             transition: "all 0.2s ease",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#eef2ff";
-            e.currentTarget.style.borderColor = "rgba(99,102,241,0.3)";
-            e.currentTarget.style.boxShadow = "0 4px 16px rgba(79,70,229,0.12)";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.95)";
-            e.currentTarget.style.borderColor = "#e2e8f0";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(15,23,42,0.06)";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
           }}
         >
           <ArrowLeft size={20} /> Back to Dashboard
@@ -215,8 +213,8 @@ export default function TeamProjectsPage() {
           <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 18, padding: 0, boxShadow: "0 8px 24px rgba(15,23,42,0.08)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
             <div style={{ padding: "24px 28px", borderBottom: "1px solid #e2e8f0", background: "linear-gradient(135deg, rgba(238,242,255,0.6) 0%, rgba(224,231,255,0.4) 100%)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 8 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(79,70,229,0.25)" }}>
-                  <UserCircle size={26} color="#fff" />
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(250,243,225,0.8)" }}>
+                  <UserCircle size={26} color="#FF8F8F" />
                 </div>
                 <div>
                   <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.02em" }}>

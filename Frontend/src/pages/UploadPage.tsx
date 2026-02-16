@@ -1,10 +1,8 @@
-import { LayoutDashboard, RefreshCw } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
-// Logo imports
-import cacheLogo from '../assets/Cache-Logo.png';
-import womenOwnedLogo from '../assets/women-owned-logo.png';
+import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from '../config';
 
 export default function UploadPage() {
@@ -540,15 +538,7 @@ export default function UploadPage() {
 
     return (
         <div className="universal-page-wrapper">
-            {/* Women Owned Logo - Top Left */}
-            <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
-            </div>
-
-            {/* Cache Logo - Top Right */}
-            <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>
-                <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
-            </div>
+            <DashboardNavbar />
 
             <div className="universal-background">
                 <div className="universal-bg-gradient-1"></div>
@@ -556,7 +546,7 @@ export default function UploadPage() {
                 <div className="universal-bg-gradient-3"></div>
             </div>
 
-            <div className="min-h-screen py-12" style={{ position: "relative", zIndex: 1 }}>
+            <div className="min-h-screen py-12" style={{ position: "relative", zIndex: 1, paddingTop: NAVBAR_HEIGHT + 24 }}>
                 <Toaster />
 
                 <div className="upload-container">
@@ -565,11 +555,11 @@ export default function UploadPage() {
                             marginBottom: "24px",
                             padding: "24px",
                             borderRadius: "20px",
-                            background: "linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(249,250,251,0.98) 100%)",
-                            border: "2px solid rgba(99, 102, 241, 0.3)",
-                            boxShadow: "0 20px 50px rgba(99, 102, 241, 0.15)"
+                            background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(250,243,225,0.5) 100%)",
+                            border: "1px solid rgba(255,143,143,0.4)",
+                            boxShadow: "0 4px 0 rgba(255,143,143,0.2), 0 1px 0 rgba(255,255,255,0.8) inset, 0 20px 40px rgba(0,0,0,0.06)"
                         }}>
-                            <h3 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#4f46e5" }}>
+                            <h3 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#3d4a2c" }}>
                                 Assign Technical Managers to “{lastAnalyzedProjectName}”
                             </h3>
                             <p style={{ margin: "0 0 8px", fontSize: "14px", color: "#64748b" }}>
@@ -616,14 +606,14 @@ export default function UploadPage() {
                                                 setAssignSaving(false);
                                             }
                                         }}
-                                        style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}
+                                        style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "linear-gradient(180deg, #FF8F8F 0%, #E87878 100%)", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer", boxShadow: "0 4px 0 rgba(232,120,120,0.35)" }}
                                     >
                                         {assignSaving ? "Saving…" : "Save assignments"}
                                     </button>
                                 )}
                                 <button
                                     onClick={() => { setShowAssignTMs(false); setLastAnalyzedProjectName(""); navigate("/insights"); }}
-                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "rgba(99, 102, 241, 0.15)", color: "#4f46e5", border: "2px solid rgba(99, 102, 241, 0.4)", cursor: "pointer" }}
+                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "rgba(255,179,179,0.4)", color: "#5a6344", border: "2px solid rgba(255,143,143,0.5)", cursor: "pointer" }}
                                 >
                                     View results
                                 </button>
@@ -639,16 +629,16 @@ export default function UploadPage() {
 
                     <h1 className="upload-title">Bid Preparation & Analysis</h1>
 
-                    {/* Enhanced Toggle */}
+                    {/* Enhanced Toggle — palette + 3D */}
                     <div style={{
                         display: "flex",
-                        background: "linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(168, 85, 247, 0.12) 100%)",
+                        background: "linear-gradient(135deg, rgba(234,239,239,0.9) 0%, rgba(250,243,225,0.8) 100%)",
                         backdropFilter: "blur(12px)",
                         padding: "6px",
                         borderRadius: "16px",
                         marginBottom: "24px",
-                        boxShadow: "0 8px 24px rgba(99, 102, 241, 0.2), inset 0 1px 0 rgba(255,255,255,0.5)",
-                        border: "1px solid rgba(139, 92, 246, 0.25)"
+                        boxShadow: "0 4px 0 rgba(255,143,143,0.2), inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 20px rgba(0,0,0,0.06)",
+                        border: "1px solid rgba(255,143,143,0.35)"
                     }}>
                         {(userRole || "").toLowerCase() !== "technical_manager" && (
                             <button
@@ -656,25 +646,25 @@ export default function UploadPage() {
                                 onMouseEnter={(e) => {
                                     if (!isExistingMode) {
                                         e.currentTarget.style.transform = "translateY(-2px)";
-                                        e.currentTarget.style.boxShadow = "0 8px 20px rgba(59, 130, 246, 0.5)";
+                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.45)";
                                     }
                                 }}
                                 onMouseLeave={(e) => {
                                     e.currentTarget.style.transform = "translateY(0)";
-                                    e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none";
+                                    e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 0 rgba(255,143,143,0.3), 0 4px 12px rgba(255,143,143,0.2)" : "none";
                                 }}
                                 style={{
                                     flex: 1,
                                     padding: "13px",
                                     borderRadius: "12px",
                                     border: "none",
-                                    background: !isExistingMode ? "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)" : "transparent",
-                                    color: !isExistingMode ? "#fff" : "#6b7280",
+                                    background: !isExistingMode ? "linear-gradient(180deg, #FF8F8F 0%, #E87878 100%)" : "transparent",
+                                    color: !isExistingMode ? "#fff" : "#5a6344",
                                     fontWeight: "700",
                                     cursor: "pointer",
                                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                                     fontSize: "14px",
-                                    boxShadow: !isExistingMode ? "0 4px 12px rgba(59, 130, 246, 0.35)" : "none",
+                                    boxShadow: !isExistingMode ? "0 4px 0 rgba(232,120,120,0.4), 0 4px 12px rgba(255,143,143,0.2)" : "none",
                                     letterSpacing: "0.3px"
                                 }}
                             >
@@ -686,25 +676,25 @@ export default function UploadPage() {
                             onMouseEnter={(e) => {
                                 if (isExistingMode) {
                                     e.currentTarget.style.transform = "translateY(-2px)";
-                                    e.currentTarget.style.boxShadow = "0 8px 20px rgba(168, 85, 247, 0.5)";
+                                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,179,179,0.5)";
                                 }
                             }}
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = "translateY(0)";
-                                e.currentTarget.style.boxShadow = isExistingMode ? "0 4px 12px rgba(168, 85, 247, 0.35)" : "none";
+                                e.currentTarget.style.boxShadow = isExistingMode ? "0 4px 0 rgba(255,143,143,0.35), 0 4px 12px rgba(255,179,179,0.25)" : "none";
                             }}
                             style={{
                                 flex: 1,
                                 padding: "13px",
                                 borderRadius: "12px",
                                 border: "none",
-                                background: isExistingMode ? "linear-gradient(135deg, #a855f7 0%, #9333ea 100%)" : "transparent",
-                                color: isExistingMode ? "#fff" : "#6b7280",
+                                background: isExistingMode ? "linear-gradient(180deg, #FFB3B3 0%, #FF8F8F 100%)" : "transparent",
+                                color: isExistingMode ? "#fff" : "#5a6344",
                                 fontWeight: "700",
                                 cursor: "pointer",
                                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                                 fontSize: "14px",
-                                boxShadow: isExistingMode ? "0 4px 12px rgba(168, 85, 247, 0.35)" : "none",
+                                boxShadow: isExistingMode ? "0 4px 0 rgba(232,120,120,0.35), 0 4px 12px rgba(255,179,179,0.2)" : "none",
                                 letterSpacing: "0.3px"
                             }}
                         >
@@ -712,21 +702,21 @@ export default function UploadPage() {
                         </button>
                     </div>
 
-                    {/* Enhanced Form Container */}
+                    {/* Enhanced Form Container — visible border + 3D */}
                     <div style={{
                         width: "100%",
-                        background: "linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(249, 250, 251, 0.95) 100%)",
+                        background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(250,243,225,0.6) 50%, rgba(234,239,239,0.6) 100%)",
                         backdropFilter: "blur(20px)",
                         padding: "28px",
-                        borderRadius: "24px",
-                        border: "1px solid rgba(139, 92, 246, 0.2)",
+                        borderRadius: "20px",
+                        border: "2px solid rgba(255,143,143,0.65)",
                         marginBottom: "24px",
-                        boxShadow: "0 20px 50px rgba(99, 102, 241, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.5) inset",
+                        boxShadow: "inset 0 2px 8px rgba(0,0,0,0.04), 0 4px 0 rgba(255,143,143,0.25), 0 12px 28px rgba(0,0,0,0.06)",
                         display: "flex",
                         flexDirection: "column",
                         gap: "22px"
                     }}>
-                        <h3 style={{ margin: 0, fontSize: "18px", color: "#111827", fontWeight: "700", background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                        <h3 style={{ margin: 0, fontSize: "18px", color: "#3d4a2c", fontWeight: "700" }}>
                             {isExistingMode ? "Existing Project Selection" : "Define New Project"}
                         </h3>
 
@@ -739,7 +729,7 @@ export default function UploadPage() {
                         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                                    <label style={{ fontSize: "13px", fontWeight: "700", color: "#4f46e5", letterSpacing: "0.3px" }}>
+                                    <label style={{ fontSize: "13px", fontWeight: "700", color: "#5a6344", letterSpacing: "0.3px" }}>
                                         {isExistingMode ? "Search and Select Project *" : "Project Name *"}
                                     </label>
                                     {isExistingMode && projectName && (
@@ -1241,11 +1231,11 @@ export default function UploadPage() {
                         opacity: projectExists === null ? 0.6 : 1,
                         pointerEvents: projectExists === null ? "none" : "auto",
                         transition: "all 0.4s ease",
-                        background: projectExists === null ? "rgba(0,0,0,0.02)" : "linear-gradient(135deg, rgba(255,255,255,0.6) 0%, rgba(249,250,251,0.6) 100%)",
-                        border: projectExists === null ? "2px dashed rgba(0,0,0,0.1)" : "2px dashed #6366f1",
+                        background: projectExists === null ? "rgba(0,0,0,0.02)" : "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(250,243,225,0.5) 100%)",
+                        border: projectExists === null ? "2px dashed rgba(0,0,0,0.1)" : "2px dashed rgba(255,143,143,0.6)",
                         padding: "40px 20px",
                         borderRadius: "20px",
-                        boxShadow: projectExists ? "0 8px 24px rgba(99, 102, 241, 0.15)" : "none"
+                        boxShadow: projectExists ? "0 4px 0 rgba(255,143,143,0.2), inset 0 2px 8px rgba(0,0,0,0.03)" : "none"
                     }}>
                         <p style={{ fontSize: "18px", marginBottom: "16px", color: projectExists === null ? "#9ba3af" : "#1f2937", fontWeight: "600" }}>
                             {uploadedFiles.length > 0
@@ -1432,23 +1422,19 @@ export default function UploadPage() {
                         </div>
                     )}
 
-                    <div className="description-list" style={{ marginTop: "30px", background: "linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(249,250,251,0.4) 100%)", padding: "18px", borderRadius: "14px", border: "1px solid rgba(99, 102, 241, 0.15)", boxShadow: "0 4px 12px rgba(99, 102, 241, 0.08)" }}>
+                    <div className="description-list" style={{ marginTop: "30px", padding: "18px", borderRadius: "14px" }}>
                         <p style={{ margin: "6px 0", fontSize: "13px", color: "#4b5563", fontWeight: "500" }}>🔹 Supports Comprehensive AI Analysis of PDF, Word, and Images</p>
                         <p style={{ margin: "6px 0", fontSize: "13px", color: "#4b5563", fontWeight: "500" }}>🔹 Automated OEM Mapping & Local Content (MII) Identification</p>
                         <p style={{ margin: "6px 0", fontSize: "13px", color: "#4b5563", fontWeight: "500" }}>🔹 Historical Traceability & Corrigendum Merging Included</p>
                     </div>
-
-                    <button className="btn-secondary" onClick={() => navigate("/")} style={{ marginTop: "24px", width: "100%", background: "transparent", border: "2px solid rgba(99, 102, 241, 0.2)", color: "#6366f1", fontWeight: "600", transition: "all 0.3s ease" }} onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)", e.currentTarget.style.borderColor = "#6366f1")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent", e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.2)")}>
-                        ← Return to Dashboard
-                    </button>
                 </div>
             </div>
 
-            {userRole === "bid_admin" && (
+            {(userRole === "bid_admin" || userRole === "bid_manager") && (
                 <button
                     type="button"
                     onClick={() => navigate("/home")}
-                    title="Back to Bid Admin Dashboard"
+                    title={userRole === "bid_admin" ? "Back to Bid Admin Dashboard" : "Back to Dashboard"}
                     style={{
                         position: 'fixed',
                         bottom: '20px',
@@ -1458,27 +1444,27 @@ export default function UploadPage() {
                         alignItems: 'center',
                         gap: 8,
                         padding: '12px 20px',
-                        background: 'linear-gradient(135deg, #4f46e5 0%, #6366f1 100%)',
-                        border: '1px solid rgba(99,102,241,0.4)',
+                        background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
+                        border: '1px solid rgba(13,148,136,0.4)',
                         borderRadius: 12,
                         cursor: 'pointer',
                         fontWeight: 600,
                         fontSize: 14,
                         color: '#fff',
-                        boxShadow: '0 4px 12px rgba(79,70,229,0.3)',
+                        boxShadow: '0 4px 12px rgba(13,148,136,0.3)',
                         transition: 'all 0.2s ease',
                     }}
                     onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(79,70,229,0.4)';
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(13,148,136,0.4)';
                     }}
                     onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(79,70,229,0.3)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(13,148,136,0.3)';
                     }}
                 >
-                    <LayoutDashboard size={20} />
-                    Go to Dashboard
+                    <ArrowLeft size={18} />
+                    Back to Dashboard
                 </button>
             )}
         </div>

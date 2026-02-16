@@ -4,7 +4,6 @@ SQLAlchemy Database Connection and Session Management
 from sqlalchemy import create_engine, MetaData, Table, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import NullPool
 import logging
 from typing import Generator
 from core.config import settings
@@ -29,9 +28,10 @@ def get_database_url() -> str:
 database_url = get_database_url()
 engine = create_engine(
     database_url,
-    poolclass=NullPool,  # Use NullPool for development, can switch to QueuePool for production
     echo=False,  # Set to True for SQL query logging
     pool_pre_ping=True,  # Verify connections before using
+    pool_size=5,
+    max_overflow=10,
     connect_args={
         "connect_timeout": 10,
         "options": "-c timezone=utc"
@@ -109,9 +109,7 @@ def test_connection() -> bool:
         logger.error(f"❌ Database connection failed: {str(e)}")
         return False
 
-# Test connection on import
-if __name__ != "__main__":
-    try:
-        test_connection()
-    except Exception as e:
-        logger.warning(f"⚠️ Could not test database connection on import: {str(e)}")
+# Connection test only when module is run directly (e.g. python -m core.sqlalchemy_db)
+# Avoids extra round-trip on every import; use /health or startup event for runtime checks.
+if __name__ == "__main__":
+    test_connection()

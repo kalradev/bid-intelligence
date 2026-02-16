@@ -98,7 +98,30 @@ export default function ProjectResultsPage() {
       <div style={{ maxWidth: 800, margin: "0 auto" }}>
         <button
           onClick={() => navigate("/home")}
-          style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 24, padding: "10px 16px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, cursor: "pointer", fontWeight: 600, color: "#374151" }}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 24,
+            padding: "12px 20px",
+            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
+            border: "1px solid rgba(13,148,136,0.4)",
+            borderRadius: 12,
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: 14,
+            color: "#fff",
+            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
+          }}
         >
           <ArrowLeft size={18} /> Back to Dashboard
         </button>

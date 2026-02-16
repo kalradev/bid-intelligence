@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 import os
 
-from core.sqlalchemy_db import get_db, get_db_session
+from core.sqlalchemy_db import get_db
 from core.config import settings
 from models.sqlalchemy_models import User
 from sqlalchemy.orm import Session
@@ -417,21 +417,21 @@ async def create_user(
 
 
 @router.get("/my-team")
-async def get_my_team(current_user: dict = Depends(get_current_user)):
+async def get_my_team(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Bid Admin: list of Bid Managers (with TM count). Bid Manager: list of their Technical Managers."""
     from services.role_quota_service import get_my_team as get_team
-    return {"success": True, "team": get_team(current_user)}
+    return {"success": True, "team": get_team(current_user, db=db)}
 
 
 @router.get("/team-quota")
-async def get_team_quota(current_user: dict = Depends(get_current_user)):
+async def get_team_quota(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """Team project quota: used, limit, left (for Bid Manager team / Technical Manager's team)."""
     from services.role_quota_service import get_team_quota as quota
-    return {"success": True, **quota(current_user)}
+    return {"success": True, **quota(current_user, db=db)}
 
 
 @router.get("/admin-dashboard")
-async def get_admin_dashboard(current_user: dict = Depends(get_current_user)):
+async def get_admin_dashboard(current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Bid Admin dashboard: all Bid Managers with their Technical Managers and team quotas.
     Only accessible by Bid Admin.
@@ -442,7 +442,7 @@ async def get_admin_dashboard(current_user: dict = Depends(get_current_user)):
     if role != ROLE_BID_ADMIN:
         raise HTTPException(status_code=403, detail="Only Bid Admin can access this dashboard")
     
-    return {"success": True, **get_bid_admin_dashboard(current_user)}
+    return {"success": True, **get_bid_admin_dashboard(current_user, db=db)}
 
 
 @router.delete("/delete-user/{user_id}")

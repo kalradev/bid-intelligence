@@ -1,5 +1,5 @@
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
 import cacheLogo from '../assets/Cache-Logo.png';
@@ -16,6 +16,55 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [cardTilt, setCardTilt] = useState({ x: 0, y: 0 });
+    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+    const [fadingIndices, setFadingIndices] = useState<Set<number>>(new Set());
+    const fadeTimeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+    const cardRef = useRef<HTMLDivElement>(null);
+
+    const COLS = 12;
+    const ROWS = 8;
+    const FADE_MS = 1000;
+
+    const addToFading = (index: number) => {
+        fadeTimeoutsRef.current.get(index)?.clear();
+        setFadingIndices((prev) => new Set(prev).add(index));
+        const t = setTimeout(() => {
+            setFadingIndices((prev) => {
+                const next = new Set(prev);
+                next.delete(index);
+                return next;
+            });
+            fadeTimeoutsRef.current.delete(index);
+        }, FADE_MS);
+        fadeTimeoutsRef.current.set(index, t);
+    };
+
+    const handleGridCellEnter = (index: number) => {
+        if (hoveredIndex !== null && hoveredIndex !== index) addToFading(hoveredIndex);
+        setHoveredIndex(index);
+        setFadingIndices((prev) => {
+            const next = new Set(prev);
+            next.delete(index);
+            return next;
+        });
+    };
+
+    const handleGridCellLeave = () => {
+        if (hoveredIndex !== null) addToFading(hoveredIndex);
+        setHoveredIndex(null);
+    };
+
+    useEffect(() => () => fadeTimeoutsRef.current.forEach((t) => clearTimeout(t)), []);
+
+    const handleCardMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (!cardRef.current) return;
+        const rect = cardRef.current.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+        setCardTilt({ x: y * 8, y: -x * 8 });
+    };
+    const handleCardMouseLeave = () => setCardTilt({ x: 0, y: 0 });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -88,29 +137,49 @@ export default function LoginPage() {
                 <img src={cacheLogo} alt="Cache" style={{ height: 105, width: 'auto', display: 'block' }} />
             </div>
 
-            {/* Animated Background */}
-            <div className="auth-background">
-                <div className="auth-bg-gradient-1"></div>
-                <div className="auth-bg-gradient-2"></div>
-                <div className="auth-bg-gradient-3"></div>
+            {/* Dashboard-style background (same as Upload / Team / Team Quota) */}
+            <div className="universal-background">
+                <div className="universal-bg-gradient-1"></div>
+                <div className="universal-bg-gradient-2"></div>
+                <div className="universal-bg-gradient-3"></div>
             </div>
 
-            {/* Floating Shapes */}
-            <div className="floating-shapes">
-                <div className="shape shape-1"></div>
-                <div className="shape shape-2"></div>
-                <div className="shape shape-3"></div>
+            {/* Light reflection overlay - login page only */}
+            <div className="auth-light-reflection" aria-hidden="true" />
+
+            {/* Interactive grid - comet tail: current cell bright, trail fades */}
+            <div className="auth-interactive-grid" aria-hidden="true" onMouseLeave={handleGridCellLeave}>
+                {Array.from({ length: COLS * ROWS }, (_, i) => {
+                    const isHovered = hoveredIndex === i;
+                    const isFading = fadingIndices.has(i);
+                    return (
+                        <div
+                            key={i}
+                            className={`auth-grid-cell auth-grid-variant-${i % 8}${isHovered ? " auth-grid-comet-active" : ""}${isFading ? " auth-grid-comet-fade" : ""}`}
+                            onMouseEnter={() => handleGridCellEnter(i)}
+                            onMouseLeave={handleGridCellLeave}
+                        />
+                    );
+                })}
             </div>
 
             {/* Login Form Container */}
             <div className="auth-container">
-                <div className="auth-card">
+                <div
+                    ref={cardRef}
+                    className="auth-card"
+                    onMouseMove={handleCardMouseMove}
+                    onMouseLeave={handleCardMouseLeave}
+                    style={{
+                        transform: `perspective(1200px) rotateX(${cardTilt.x}deg) rotateY(${cardTilt.y}deg) ${cardTilt.x !== 0 || cardTilt.y !== 0 ? "translateY(-6px)" : ""}`,
+                    }}
+                >
                     {/* Header */}
                     <div className="auth-header">
                         <div className="auth-icon-wrapper">
                             <Sparkles size={32} />
                         </div>
-                        <h1 className="auth-title">
+                        <h1 className="auth-title auth-title-shine">
                             Welcome Back
                         </h1>
                         <p className="auth-subtitle">
@@ -172,7 +241,7 @@ export default function LoginPage() {
                                         padding: '4px',
                                         transition: 'color 0.2s ease'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.color = '#6366f1'}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#E87878'}
                                     onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
                                     aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
@@ -187,15 +256,16 @@ export default function LoginPage() {
 
                         {/* Error Message */}
                         {error && (
-                            <div style={{
+                            <div className="auth-error-box" style={{
                                 padding: '12px 16px',
-                                backgroundColor: '#fee2e2',
-                                color: '#dc2626',
-                                borderRadius: '10px',
+                                backgroundColor: 'rgba(239,68,68,0.1)',
+                                color: '#b91c1c',
+                                borderRadius: '12px',
                                 fontSize: '14px',
                                 textAlign: 'center',
-                                border: '1px solid #fecaca',
-                                fontWeight: '500'
+                                border: '1px solid rgba(239,68,68,0.3)',
+                                fontWeight: '500',
+                                animation: 'authFadeIn 0.4s ease-out'
                             }}>
                                 {error}
                             </div>
