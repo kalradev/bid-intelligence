@@ -67,7 +67,8 @@ export default function BidAdminDashboardPage() {
   const [expandedBmIdForPeople, setExpandedBmIdForPeople] = useState<number | null>(null);
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [pendingViewMode, setPendingViewMode] = useState<ViewMode | null>(null);
-  const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number } | null>(null);
+  const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number; baseLimit?: number; purchasedQuota?: number } | null>(null);
+  const [rechargeTotal, setRechargeTotal] = useState<number>(0);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [paypalClientId, setPaypalClientId] = useState<string>("");
   const [paypalConfigured, setPaypalConfigured] = useState(false);
@@ -130,7 +131,7 @@ export default function BidAdminDashboardPage() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const dashRes = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` } });
+        const dashRes = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
         if (!dashRes.ok) {
           toast.error("Failed to load dashboard data");
           return;
@@ -140,7 +141,19 @@ export default function BidAdminDashboardPage() {
           setBidManagers(dashData.bidManagers);
         }
         if (dashData.success && dashData.orgQuota) {
-          setOrgQuota(dashData.orgQuota);
+          const oq = dashData.orgQuota;
+          setOrgQuota({
+            teamProjectsUsed: oq.teamProjectsUsed ?? 0,
+            teamProjectsLimit: oq.teamProjectsLimit ?? 0,
+            teamProjectsLeft: oq.teamProjectsLeft ?? 0,
+            baseLimit: oq.baseLimit,
+            purchasedQuota: oq.purchasedQuota ?? 0,
+          });
+        }
+        const rtRes = await fetch(`${API_BASE_URL}/api/payment/recharge-total`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+        if (rtRes.ok) {
+          const rtData = await rtRes.json();
+          if (rtData.success && typeof rtData.rechargeTotal === "number") setRechargeTotal(rtData.rechargeTotal);
         }
       } catch (e) {
         console.error(e);
@@ -254,16 +267,31 @@ export default function BidAdminDashboardPage() {
     navigate(`/project-results/${encodeURIComponent(projectName)}`);
   };
 
-  const refreshDashboard = useCallback(() => {
+  const refreshDashboard = useCallback(async () => {
     const token = localStorage.getItem("token");
     if (!token) return;
-    fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && d.bidManagers) setBidManagers(d.bidManagers);
-        if (d.success && d.orgQuota) setOrgQuota(d.orgQuota);
-      })
-      .catch(() => {});
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      const d = await r.json();
+      if (d.success && d.bidManagers) setBidManagers(d.bidManagers);
+      if (d.success && d.orgQuota) {
+        const oq = d.orgQuota;
+        setOrgQuota({
+          teamProjectsUsed: oq.teamProjectsUsed ?? 0,
+          teamProjectsLimit: oq.teamProjectsLimit ?? 0,
+          teamProjectsLeft: oq.teamProjectsLeft ?? 0,
+          baseLimit: oq.baseLimit,
+          purchasedQuota: oq.purchasedQuota ?? 0,
+        });
+      }
+      const rtRes = await fetch(`${API_BASE_URL}/api/payment/recharge-total`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+      if (rtRes.ok) {
+        const rtData = await rtRes.json();
+        if (rtData.success && typeof rtData.rechargeTotal === "number") setRechargeTotal(rtData.rechargeTotal);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   const handleLogout = () => {
@@ -697,6 +725,26 @@ export default function BidAdminDashboardPage() {
                   <CreditCard size={18} />
                   Recharge quota
                 </button>
+              {orgQuota && (
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "10px 16px",
+                    background: "rgba(13,148,136,0.08)",
+                    border: "1px solid rgba(13,148,136,0.25)",
+                    borderRadius: 12,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: "#0d9488",
+                  }}
+                  title="Projects added by recharge"
+                >
+                  <span style={{ opacity: 0.9 }}>Added by recharge</span>
+                  <span style={{ fontWeight: 800 }}>{Math.max(rechargeTotal, orgQuota.purchasedQuota ?? 0)}</span>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => navigate("/team-quota")}
@@ -2002,8 +2050,11 @@ export default function BidAdminDashboardPage() {
                           });
                           const data = await res.json().catch(() => ({}));
                           if (data.success) {
-                            toast.success(`Added ${data.projectsAdded} project(s) to quota`);
-                            refreshDashboard();
+                            const added = data.projectsAdded ?? 1;
+                            toast.success(`Added ${added} project(s) to quota`);
+                            setRechargeTotal((prev) => prev + added);
+                            setOrgQuota((prev) => prev ? { ...prev, purchasedQuota: (prev.purchasedQuota ?? 0) + added, teamProjectsLimit: (prev.teamProjectsLimit ?? 0) + added, teamProjectsLeft: (prev.teamProjectsLeft ?? 0) + added } : prev);
+                            await refreshDashboard();
                             setShowRechargeModal(false);
                           } else {
                             toast.error(data.detail || data.message || "Failed to add quota");
@@ -2043,8 +2094,11 @@ export default function BidAdminDashboardPage() {
                           });
                           const data = await res.json().catch(() => ({}));
                           if (data.success) {
-                            toast.success(`Added ${data.projectsAdded} project(s) to quota`);
-                            refreshDashboard();
+                            const added = data.projectsAdded ?? 10;
+                            toast.success(`Added ${added} project(s) to quota`);
+                            setRechargeTotal((prev) => prev + added);
+                            setOrgQuota((prev) => prev ? { ...prev, purchasedQuota: (prev.purchasedQuota ?? 0) + added, teamProjectsLimit: (prev.teamProjectsLimit ?? 0) + added, teamProjectsLeft: (prev.teamProjectsLeft ?? 0) + added } : prev);
+                            await refreshDashboard();
                             setShowRechargeModal(false);
                           } else {
                             toast.error(data.detail || data.message || "Failed to add quota");

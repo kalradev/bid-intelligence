@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
-from core.sqlalchemy_db import get_db
+from sqlalchemy import text
+from core.sqlalchemy_db import get_db, engine
 from core.config import settings
 from api.auth_routes import get_current_user
 from services.paypal_service import create_order as paypal_create_order, capture_order as paypal_capture_order
@@ -19,7 +20,59 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+def _ensure_quota_tables():
+    """Create org_quota and quota_transactions if they don't exist (e.g. migration not run)."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS org_quota (
+                    id SERIAL PRIMARY KEY,
+                    base_limit INTEGER NOT NULL DEFAULT 10,
+                    purchased_quota INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text("""
+                INSERT INTO org_quota (id, base_limit, purchased_quota)
+                SELECT 1, 10, 0 WHERE NOT EXISTS (SELECT 1 FROM org_quota WHERE id = 1)
+            """))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS quota_transactions (
+                    id SERIAL PRIMARY KEY,
+                    admin_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    amount_usd NUMERIC(10, 2) NOT NULL,
+                    projects_added INTEGER NOT NULL,
+                    recharge_type VARCHAR(20) NOT NULL,
+                    paypal_order_id VARCHAR(255),
+                    paypal_status VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+    except Exception as e:
+        logger.warning("ensure quota tables: %s", e)
+
 PAYPAL_CONFIGURED = bool(settings.PAYPAL_CLIENT_ID and settings.PAYPAL_CLIENT_ID.strip())
+
+
+@router.get("/recharge-total")
+async def get_recharge_total(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return total projects added by recharge (sum of quota_transactions). Bid Admin only."""
+    role = (current_user.get("role") or "").lower()
+    if role != ROLE_BID_ADMIN:
+        raise HTTPException(status_code=403, detail="Only Bid Admin")
+    from sqlalchemy import func
+    total = db.query(func.coalesce(func.sum(QuotaTransaction.projects_added), 0)).select_from(QuotaTransaction).scalar()
+    recharge_total = int(total) if total is not None else 0
+    if recharge_total == 0:
+        row = db.query(OrgQuota).filter(OrgQuota.id == 1).first()
+        if row and (row.purchased_quota or 0) > 0:
+            recharge_total = int(row.purchased_quota or 0)
+    return {"success": True, "rechargeTotal": recharge_total}
 
 
 @router.get("/config")
@@ -69,12 +122,14 @@ async def api_add_quota(
     projects_added = 10 if rtype == "bulk" else 1
     order_id = f"demo-{uuid.uuid4().hex[:12]}"
 
+    _ensure_quota_tables()
+
     row = db.query(OrgQuota).filter(OrgQuota.id == 1).first()
     if not row:
         row = OrgQuota(id=1, base_limit=10, purchased_quota=0)
         db.add(row)
+        db.flush()
     row.purchased_quota = (row.purchased_quota or 0) + projects_added
-    db.add(row)
 
     txn = QuotaTransaction(
         admin_user_id=current_user["id"],
@@ -158,8 +213,8 @@ async def api_capture_order(
     if not row:
         row = OrgQuota(id=1, base_limit=10, purchased_quota=0)
         db.add(row)
+        db.flush()
     row.purchased_quota = (row.purchased_quota or 0) + projects_added
-    db.add(row)
 
     # Record transaction
     txn = QuotaTransaction(

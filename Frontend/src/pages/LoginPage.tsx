@@ -1,5 +1,5 @@
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
 import bidIntelligenceLogo from '../assets/bid-intelligence-logo.svg';
@@ -19,44 +19,13 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [cardTilt, setCardTilt] = useState({ x: 0, y: 0 });
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-    const [fadingIndices, setFadingIndices] = useState<Set<number>>(new Set());
-    const fadeTimeoutsRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
     const cardRef = useRef<HTMLDivElement>(null);
 
     const COLS = 12;
     const ROWS = 8;
-    const FADE_MS = 1000;
 
-    const addToFading = (index: number) => {
-        fadeTimeoutsRef.current.get(index)?.clear();
-        setFadingIndices((prev) => new Set(prev).add(index));
-        const t = setTimeout(() => {
-            setFadingIndices((prev) => {
-                const next = new Set(prev);
-                next.delete(index);
-                return next;
-            });
-            fadeTimeoutsRef.current.delete(index);
-        }, FADE_MS);
-        fadeTimeoutsRef.current.set(index, t);
-    };
-
-    const handleGridCellEnter = (index: number) => {
-        if (hoveredIndex !== null && hoveredIndex !== index) addToFading(hoveredIndex);
-        setHoveredIndex(index);
-        setFadingIndices((prev) => {
-            const next = new Set(prev);
-            next.delete(index);
-            return next;
-        });
-    };
-
-    const handleGridCellLeave = () => {
-        if (hoveredIndex !== null) addToFading(hoveredIndex);
-        setHoveredIndex(null);
-    };
-
-    useEffect(() => () => fadeTimeoutsRef.current.forEach((t) => clearTimeout(t)), []);
+    const handleGridCellEnter = (index: number) => setHoveredIndex(index);
+    const handleGridCellLeave = () => setHoveredIndex(null);
 
     const handleCardMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!cardRef.current) return;
@@ -148,33 +117,39 @@ export default function LoginPage() {
             {/* Light reflection overlay - login page only */}
             <div className="auth-light-reflection" aria-hidden="true" />
 
-            {/* Interactive grid - comet tail: current cell bright, trail fades */}
+            {/* Interactive grid: current cell highlights immediately, no fade */}
             <div className="auth-interactive-grid" aria-hidden="true" onMouseLeave={handleGridCellLeave}>
-                {Array.from({ length: COLS * ROWS }, (_, i) => {
-                    const isHovered = hoveredIndex === i;
-                    const isFading = fadingIndices.has(i);
-                    return (
-                        <div
-                            key={i}
-                            className={`auth-grid-cell auth-grid-variant-${i % 8}${isHovered ? " auth-grid-comet-active" : ""}${isFading ? " auth-grid-comet-fade" : ""}`}
-                            onMouseEnter={() => handleGridCellEnter(i)}
-                            onMouseLeave={handleGridCellLeave}
-                        />
-                    );
-                })}
+                {Array.from({ length: COLS * ROWS }, (_, i) => (
+                    <div
+                        key={i}
+                        className={`auth-grid-cell auth-grid-variant-${i % 8}${hoveredIndex === i ? " auth-grid-comet-active" : ""}`}
+                        onMouseEnter={() => handleGridCellEnter(i)}
+                    />
+                ))}
             </div>
 
             {/* Login Form Container */}
             <div className="auth-container">
                 <div
                     ref={cardRef}
-                    className="auth-card"
+                    className={`auth-card ${isLoading ? "auth-card-loading" : ""}`}
                     onMouseMove={handleCardMouseMove}
                     onMouseLeave={handleCardMouseLeave}
                     style={{
                         transform: `perspective(1200px) rotateX(${cardTilt.x}deg) rotateY(${cardTilt.y}deg) ${cardTilt.x !== 0 || cardTilt.y !== 0 ? "translateY(-6px)" : ""}`,
                     }}
                 >
+                    {/* Loading overlay */}
+                    {isLoading && (
+                        <div className="auth-loading-overlay">
+                            <div className="auth-loading-spinner" aria-hidden="true">
+                                <span />
+                                <span />
+                                <span />
+                            </div>
+                            <p className="auth-loading-text">Signing in...</p>
+                        </div>
+                    )}
                     {/* Header */}
                     <div className="auth-header">
                         <div className="auth-icon-wrapper auth-logo-only">
@@ -278,23 +253,8 @@ export default function LoginPage() {
                             disabled={isLoading}
                             className="auth-submit-btn"
                         >
-                            {isLoading ? (
-                                <>
-                                    <div className="animate-spin" style={{
-                                        width: '20px',
-                                        height: '20px',
-                                        border: '2px solid #fff',
-                                        borderTop: '2px solid transparent',
-                                        borderRadius: '50%'
-                                    }} />
-                                    Signing In...
-                                </>
-                            ) : (
-                                <>
-                                    Sign In
-                                    <ArrowRight size={22} />
-                                </>
-                            )}
+                            Sign In
+                            <ArrowRight size={22} />
                         </button>
                     </form>
                 </div>

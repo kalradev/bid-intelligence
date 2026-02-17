@@ -12,7 +12,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from core.sqlalchemy_db import get_db_session
 from core.config import settings
-from models.sqlalchemy_models import User, Project, ProjectAssignment, OrgQuota
+from models.sqlalchemy_models import User, Project, ProjectAssignment, OrgQuota, QuotaTransaction
 
 logger = logging.getLogger(__name__)
 
@@ -233,12 +233,33 @@ def get_bid_admin_dashboard(current_user: dict, db: Optional[Session] = None) ->
         org_limit = get_org_quota_limit(db=db)
         org_used = get_org_project_count(db=db)
         org_left = max(0, org_limit - org_used)
+        org_row = db.query(OrgQuota).filter(OrgQuota.id == 1).first()
+        base_limit = org_row.base_limit if org_row else ORG_QUOTA_BASE
+        # "Added by recharge" = sum(projects_added) from quota_transactions (source of truth)
+        purchased_quota = 0
+        try:
+            total = db.query(func.coalesce(func.sum(QuotaTransaction.projects_added), 0)).select_from(QuotaTransaction).scalar()
+            if total is not None:
+                purchased_quota = int(total)
+        except Exception as e:
+            logger.warning("QuotaTransaction sum failed: %s", e)
+            if org_row:
+                purchased_quota = int(org_row.purchased_quota or 0)
+        if purchased_quota == 0 and org_row and (org_row.purchased_quota or 0) > 0:
+            purchased_quota = int(org_row.purchased_quota or 0)
+        org_quota_payload = {
+            "teamProjectsUsed": org_used,
+            "teamProjectsLimit": org_limit,
+            "teamProjectsLeft": org_left,
+            "baseLimit": base_limit,
+            "purchasedQuota": purchased_quota,
+        }
 
         bms = db.query(User).filter(User.role == ROLE_BID_MANAGER).order_by(User.full_name).all()
         if not bms:
             return {
                 "bidManagers": [],
-                "orgQuota": {"teamProjectsUsed": org_used, "teamProjectsLimit": org_limit, "teamProjectsLeft": org_left},
+                "orgQuota": org_quota_payload,
             }
 
 
@@ -281,7 +302,7 @@ def get_bid_admin_dashboard(current_user: dict, db: Optional[Session] = None) ->
             })
         return {
             "bidManagers": result,
-            "orgQuota": {"teamProjectsUsed": org_used, "teamProjectsLimit": org_limit, "teamProjectsLeft": org_left},
+            "orgQuota": org_quota_payload,
         }
     finally:
         if own_session:
