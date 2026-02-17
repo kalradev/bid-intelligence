@@ -1,5 +1,6 @@
 import { ArrowLeft, LayoutDashboard, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
@@ -49,6 +50,8 @@ export default function UploadPage() {
     const [projectSearchTerm, setProjectSearchTerm] = useState("");
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const dropdownPanelRef = useRef<HTMLDivElement | null>(null);
+    const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
     const [teamQuota, setTeamQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
 
     const [showAssignTMs, setShowAssignTMs] = useState(false);
@@ -104,13 +107,37 @@ export default function UploadPage() {
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            const inTrigger = dropdownRef.current?.contains(target);
+            const inPanel = dropdownPanelRef.current?.contains(target);
+            if (!inTrigger && !inPanel) {
                 setIsDropdownOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    // Update dropdown position when open (for portal positioning)
+    useEffect(() => {
+        if (!isDropdownOpen || !dropdownRef.current) {
+            setDropdownRect(null);
+            return;
+        }
+        const update = () => {
+            if (dropdownRef.current) {
+                const rect = dropdownRef.current.getBoundingClientRect();
+                setDropdownRect({ top: rect.bottom + 8, left: rect.left, width: rect.width });
+            }
+        };
+        update();
+        window.addEventListener("scroll", update, true);
+        window.addEventListener("resize", update);
+        return () => {
+            window.removeEventListener("scroll", update, true);
+            window.removeEventListener("resize", update);
+        };
+    }, [isDropdownOpen]);
 
     // Prevent page scroll when scrolling inside dropdown
     useEffect(() => {
@@ -825,11 +852,11 @@ export default function UploadPage() {
                                             >
                                                 ▼
                                             </div>
-                                            {isDropdownOpen && (
+                                            {isDropdownOpen && dropdownRect && createPortal(
                                                 <div
+                                                    ref={(el) => { dropdownPanelRef.current = el; }}
                                                     onClick={(e) => e.stopPropagation()}
                                                     onWheel={(e) => {
-                                                        // Prevent page scroll when scrolling inside dropdown
                                                         const target = e.currentTarget;
                                                         const scrollableArea = target.querySelector('[style*="overflowY"]') as HTMLElement;
                                                         if (scrollableArea && scrollableArea.contains(e.target as Node)) {
@@ -840,15 +867,15 @@ export default function UploadPage() {
                                                         e.stopPropagation();
                                                     }}
                                                     style={{
-                                                        position: "absolute",
-                                                        top: "100%",
-                                                        left: 0,
-                                                        right: 0,
-                                                        marginTop: "8px",
+                                                        position: "fixed",
+                                                        top: dropdownRect.top,
+                                                        left: dropdownRect.left,
+                                                        width: dropdownRect.width,
                                                         borderRadius: "12px",
                                                         border: "2px solid rgba(99, 102, 241, 0.3)",
                                                         background: "#ffffff",
-                                                        boxShadow: "0 20px 60px rgba(99, 102, 241, 0.35)",
+                                                        backgroundColor: "#ffffff",
+                                                        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
                                                         zIndex: 99999,
                                                         overflow: "hidden",
                                                         maxHeight: "400px",
@@ -864,6 +891,7 @@ export default function UploadPage() {
                                                         borderBottom: "1px solid rgba(99, 102, 241, 0.1)",
                                                         position: "relative",
                                                         background: "#ffffff",
+                                                        backgroundColor: "#ffffff",
                                                         zIndex: 1
                                                     }}>
                                                         <input
@@ -948,6 +976,7 @@ export default function UploadPage() {
                                                             overflowY: "auto",
                                                             overflowX: "hidden",
                                                             background: "#ffffff",
+                                                            backgroundColor: "#ffffff",
                                                             position: "relative",
                                                             zIndex: 1,
                                                             WebkitOverflowScrolling: "touch",
@@ -1024,6 +1053,7 @@ export default function UploadPage() {
                                                                 fontSize: "12px",
                                                                 color: "#6b7280",
                                                                 background: "#f9fafb",
+                                                                backgroundColor: "#f9fafb",
                                                                 position: "relative",
                                                                 zIndex: 1
                                                             }}
@@ -1031,7 +1061,8 @@ export default function UploadPage() {
                                                             Showing {filteredProjects.length} of {allProjects.length} projects
                                                         </div>
                                                     )}
-                                                </div>
+                                                </div>,
+                                                document.body
                                             )}
                                         </div>
                                     </>

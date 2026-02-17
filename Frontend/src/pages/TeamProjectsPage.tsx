@@ -1,9 +1,8 @@
-import { ArrowLeft, ArrowRight, FolderKanban, UserCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, UserCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
-import cacheLogo from "../assets/Cache-Logo.png";
-import womenOwnedLogo from "../assets/women-owned-logo.png";
+import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from "../config";
 
 interface TeamMember {
@@ -138,34 +137,7 @@ export default function TeamProjectsPage() {
 
   return (
     <div className="universal-page-wrapper" style={{ minHeight: "100vh" }}>
-      {/* Top navbar - same as other pages */}
-      <header
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 88,
-          zIndex: 120,
-          background: "linear-gradient(90deg, #eef2ff 0%, #e0e7ff 35%, #eef2ff 65%, #e0e7ff 100%)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "2px solid rgba(99,102,241,0.25)",
-          boxShadow: "0 2px 12px rgba(79,70,229,0.08)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 32px",
-        }}
-      >
-        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#FAF3E1", border: "2px solid #E87878", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(232,120,120,0.15)" }}>
-            <FolderKanban size={22} color="#E87878" />
-          </div>
-          <span style={{ fontSize: 22, fontWeight: 700, color: "#2d3319", letterSpacing: "-0.02em" }}>Team quota</span>
-        </div>
-        <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block" }} />
-      </header>
+      <DashboardNavbar />
 
       <div className="universal-background">
         <div className="universal-bg-gradient-1" />
@@ -173,37 +145,7 @@ export default function TeamProjectsPage() {
         <div className="universal-bg-gradient-3" />
       </div>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "120px 24px 48px" }}>
-        <button
-          onClick={() => navigate("/home")}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 28,
-            padding: "12px 20px",
-            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
-            border: "1px solid rgba(13,148,136,0.4)",
-            borderRadius: 12,
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 14,
-            color: "#fff",
-            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
-            transition: "all 0.2s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
-          }}
-        >
-          <ArrowLeft size={20} /> Back to Dashboard
-        </button>
-
+      <div style={{ maxWidth: 960, margin: "0 auto", paddingTop: NAVBAR_HEIGHT + 24, paddingBottom: 48, paddingLeft: 24, paddingRight: 24 }}>
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60, background: "rgba(255,255,255,0.95)", borderRadius: 18, border: "1px solid #e2e8f0", boxShadow: "0 8px 24px rgba(15,23,42,0.08)" }}>
             <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#4f46e5", animation: "spin 0.8s linear infinite" }} />
@@ -288,6 +230,36 @@ export default function TeamProjectsPage() {
             </div>
           </div>
         ) : null}
+
+        <button
+          onClick={() => navigate("/home")}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 32,
+            padding: "12px 20px",
+            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
+            border: "1px solid rgba(13,148,136,0.4)",
+            borderRadius: 12,
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: 14,
+            color: "#fff",
+            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+            transition: "all 0.2s ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
+          }}
+        >
+          <ArrowLeft size={20} /> Back to Dashboard
+        </button>
       </div>
 
       <style>{`

@@ -15,9 +15,11 @@ interface DocumentFilterProps {
   projectName: string;
   onDocumentChange: (documentId: number | null, documentType: string | null, displayName: string) => void;
   currentDocumentId?: number | null;
+  /** Called when documents load and initial selection is set (for display only, no fetch) */
+  onDisplayUpdate?: (documentId: number | null, displayName: string) => void;
 }
 
-export default function DocumentFilter({ projectName, onDocumentChange, currentDocumentId }: DocumentFilterProps) {
+export default function DocumentFilter({ projectName, onDocumentChange, currentDocumentId, onDisplayUpdate }: DocumentFilterProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<{ id: number | null; type: string | null; displayName: string }>({
     id: null,
@@ -59,7 +61,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
             
             // If no current document selected, set default based on document count
             if (!currentDocumentId) {
-              // If only one document, select that document (no merge needed)
+              // If only one document (just Base RFP, no corrigendum), select it - no "Merged View"
               if (data.documents.length === 1) {
                 const singleDoc = data.documents[0];
                 setSelectedDocument({
@@ -67,7 +69,8 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   type: singleDoc.updateType,
                   displayName: singleDoc.displayName
                 });
-                // Don't call onDocumentChange here - analysis is already loaded from upload
+                onDisplayUpdate?.(singleDoc.id, singleDoc.displayName);
+                // Don't call onDocumentChange - analysis is already loaded from upload
               } else if (data.documents.length > 1) {
                 // Multiple documents - default to merged view
                 setSelectedDocument({
@@ -75,6 +78,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   type: null,
                   displayName: "Merged View"
                 });
+                onDisplayUpdate?.(null, "Merged View");
               }
             } else {
               // If currentDocumentId is set, find and select that document
@@ -85,6 +89,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   type: currentDoc.updateType,
                   displayName: currentDoc.displayName
                 });
+                onDisplayUpdate?.(currentDoc.id, currentDoc.displayName);
               } else if (data.documents.length > 1) {
                 // If current document not found but multiple exist, default to merged
                 setSelectedDocument({
@@ -92,6 +97,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   type: null,
                   displayName: "Merged View"
                 });
+                onDisplayUpdate?.(null, "Merged View");
               }
             }
           }

@@ -1,9 +1,9 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import DepartmentCard from "../components/DepartmentCard";
 import FeatureCard from "../components/FeatureCard";
-import InteractiveBackground from "../components/InteractiveBackground";
 import DocumentFilter from "../components/DocumentFilter";
 import { departments, features } from "../data/uiData";
 import { generateSummaryPDF } from "../utils/summaryPdfExport";
@@ -14,6 +14,7 @@ export default function InsightsPage() {
   const navigate = useNavigate();
   const [projectName, setProjectName] = useState<string>("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const [viewingDisplayName, setViewingDisplayName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   // Get project name from localStorage
   useEffect(() => {
@@ -64,6 +65,7 @@ export default function InsightsPage() {
       const result = await fetchProjectAnalysis(projectName, documentId, documentType);
       updateAnalysisData(result, projectName);
       setSelectedDocumentId(documentId);
+      setViewingDisplayName(displayName);
       
       // Reload the page to update all department pages
       window.location.reload();
@@ -72,6 +74,11 @@ export default function InsightsPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDisplayUpdate = (documentId: number | null, displayName: string) => {
+    setSelectedDocumentId(documentId);
+    setViewingDisplayName(displayName);
   };
 
   const handleDownloadSummary = () => {
@@ -83,85 +90,120 @@ export default function InsightsPage() {
     }
   };
 
+  const NAVBAR_HEIGHT = 72;
+
   return (
     <div className="universal-page-wrapper insights-page" style={{ position: 'relative', overflow: 'hidden' }}>
-      {/* 🌟 NAVBAR START */}
-      <nav className="insights-navbar insights-navbar-dashboard-theme" style={{ zIndex: 20, position: 'relative' }}>
-        {/* Left spacer to balance right buttons */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', visibility: 'hidden' }}>
-          <button style={{ padding: '10px 16px' }}><span style={{ width: '20px', display: 'inline-block' }}></span></button>
-          <button style={{ padding: '10px 24px' }}>Analysis</button>
-        </div>
-
-        <div className="navbar-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-          <span
-            className="navbar-logo-icon"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: 'linear-gradient(135deg, #FF8F8F 0%, #E87878 100%)',
-              boxShadow: '0 4px 12px rgba(255, 143, 143, 0.4)',
-              flexShrink: 0,
-            }}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 3L13.5 9.5L20 11L13.5 12.5L12 19L10.5 12.5L4 11L10.5 9.5L12 3Z" fill="white" opacity="0.95"/>
-              <circle cx="16" cy="8" r="1.2" fill="white"/>
-              <circle cx="18" cy="10" r="0.8" fill="white"/>
-            </svg>
-          </span>
-          <span style={{ color: '#fff', fontWeight: 700 }}>Bid Intelligence.AI</span>
-        </div>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* Document Filter */}
+      {/* Navbar: Bid Intelligence + 3 toggles only (no Women Owned, CACHE, profile) */}
+      <header
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: NAVBAR_HEIGHT,
+          zIndex: 120,
+          background: "rgba(255,255,255,0.45)",
+          backdropFilter: "blur(24px) saturate(180%)",
+          WebkitBackdropFilter: "blur(24px) saturate(180%)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
+          borderBottom: "1px solid rgba(255,255,255,0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 24px",
+        }}
+      >
+        <div style={{ minWidth: 200, display: "flex", justifyContent: "flex-start" }} />
+        <button
+          type="button"
+          onClick={() => navigate("/home")}
+          style={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            background: "transparent",
+            border: "none",
+            padding: "8px 12px",
+            cursor: "pointer",
+            outline: "none",
+            transition: "opacity 0.2s ease",
+          }}
+          title="Go to Dashboard"
+        >
+          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
+          <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+        </button>
+        <div style={{ minWidth: 200, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
           {projectName && (
             <DocumentFilter
               projectName={projectName}
               onDocumentChange={handleDocumentChange}
               currentDocumentId={selectedDocumentId}
+              onDisplayUpdate={handleDisplayUpdate}
             />
           )}
-          
-          {/* Download Summary Button */}
           <button
-            className="navbar-btn-icon insights-nav-download"
             onClick={handleDownloadSummary}
             title="Download Summary PDF"
             style={{
-              background: 'rgba(255,255,255,0.95)',
-              color: '#2d3319',
-              border: '1px solid rgba(255,143,143,0.5)',
-              borderRadius: '10px',
-              padding: '10px 16px',
-              fontSize: '16px',
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 18px",
+              background: "rgba(255,179,179,0.5)",
+              color: "#2d3319",
+              border: "1px solid rgba(255,143,143,0.4)",
+              borderRadius: 12,
+              fontSize: 14,
               fontWeight: 600,
-              cursor: 'pointer',
-              transition: '0.3s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
+              cursor: "pointer",
+              transition: "all 0.2s ease",
             }}
-            onMouseOver={(e) => { e.currentTarget.style.background = '#FFB3B3'; e.currentTarget.style.color = '#2d3319'; }}
-            onMouseOut={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.95)'; e.currentTarget.style.color = '#2d3319'; }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#FFB3B3";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(255,143,143,0.25)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           >
-            <Download size={20} />
+            <Download size={20} /> Download
           </button>
-
-          {/* Analysis Button */}
-          <button className="navbar-btn insights-nav-analysis" onClick={() => {
-            window.scrollTo({ top: 0, behavior: "instant" });
-            navigate("/upload");
-          }}>
+          <button
+            onClick={() => { window.scrollTo({ top: 0, behavior: "instant" }); navigate("/upload"); }}
+            style={{
+              padding: "10px 22px",
+              background: "#FF8F8F",
+              color: "#fff",
+              border: "none",
+              borderRadius: 12,
+              fontWeight: 600,
+              fontSize: 15,
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
+              transition: "all 0.2s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "#E87878";
+              e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.4)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "#FF8F8F";
+              e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.3)";
+            }}
+          >
             Analysis
           </button>
         </div>
-      </nav>
-      {/* 🌟 NAVBAR END */}
+      </header>
+
+      {/* Spacer for fixed navbar */}
+      <div style={{ height: NAVBAR_HEIGHT }} />
 
       {/* 🌈 Animated Background */}
       <div className="universal-background" style={{ zIndex: 0 }}>
@@ -170,13 +212,10 @@ export default function InsightsPage() {
         <div className="universal-bg-gradient-3"></div>
       </div>
 
-      {/* 🕸️ Interactive Particle Background */}
-      <InteractiveBackground />
-
-      {/* 🌟 MAIN CONTENT */}
+      {/* 🌟 MAIN CONTENT - same light pinkish-white as dashboard */}
       <div
         className="min-h-screen"
-        style={{ position: "relative", zIndex: 10, background: "#FAF3E1" }}
+        style={{ position: "relative", zIndex: 10, background: "rgba(255, 255, 255, 0.12)", overflow: "hidden" }}
       >
         <div className="w-full max-w-screen-xl mx-auto px-4 lg:px-8 py-16">
           {/* ===== HEADER ===== */}
@@ -214,9 +253,18 @@ export default function InsightsPage() {
               }}>
                 <span>📄</span>
                 <span>
-                  {selectedDocumentId 
-                    ? `Viewing: ${localStorage.getItem("currentDocument") ? JSON.parse(localStorage.getItem("currentDocument") || "{}").displayName || "Document" : "Document"}`
-                    : "Viewing: Merged View"}
+                  {viewingDisplayName != null
+                    ? `Viewing: ${viewingDisplayName}`
+                    : selectedDocumentId
+                      ? `Viewing: ${(() => {
+                          try {
+                            const raw = localStorage.getItem("currentDocument");
+                            if (!raw) return "Document";
+                            const doc = JSON.parse(raw);
+                            return doc.displayName || doc.projectName || "Document";
+                          } catch { return "Document"; }
+                        })()}`
+                      : "Viewing: Merged View"}
                 </span>
               </div>
             )}
