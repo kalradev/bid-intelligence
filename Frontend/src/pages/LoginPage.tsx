@@ -156,7 +156,7 @@ export default function LoginPage() {
                             <img src={bidIntelligenceLogo} alt="Bid Intelligence" style={{ width: 72, height: 72 }} />
                         </div>
                         <h1 className="auth-title auth-title-shine">
-                            Welcome Back
+                            Welcome
                         </h1>
                         <p className="auth-subtitle">
                             Sign in to access your bid intelligence dashboard

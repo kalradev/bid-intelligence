@@ -141,26 +141,6 @@ const NavbarBidManagement = ({ pageTitle = "Bid Management", onDownloadPDF }) =>
         >
           Home
         </button>
-
-        {/* LOGOUT BUTTON */}
-        <button
-          onClick={() => navigate("/")}
-          style={{
-            background: "#dc2626",
-            color: "white",
-            border: "none",
-            borderRadius: "10px",
-            padding: "10px 22px",
-            fontSize: "18px",
-            fontWeight: 500,
-            cursor: "pointer",
-            transition: "0.3s",
-          }}
-          onMouseOver={(e) => (e.target.style.background = "#b91c1c")}
-          onMouseOut={(e) => (e.target.style.background = "#dc2626")}
-        >
-          Logout
-        </button>
       </div>
     </header>
   );

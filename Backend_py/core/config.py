@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Database Config (PostgreSQL) - Kept for migration period
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "12345"  # Match your PostgreSQL password
-    POSTGRES_HOST: str = "localhost"
+    POSTGRES_HOST: str = "127.0.0.1"  # Set in .env to DB server IP (or 127.0.0.1 if DB on same machine)
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "Bid2"  # Main database for Bid Intelligence project
     DATABASE_URL: Optional[str] = None
@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # MongoDB Config
     MONGODB_STRING: Optional[str] = None  # Connection string from .env
     MONGODB_DB: str = "bid_intelligence"  # Database name in MongoDB
+
+    # Optional external services (set in .env for production / network IP)
+    CHATBOT_API_URL: Optional[str] = None  # e.g. http://192.168.1.10:8080
     
     # JWT
     JWT_SECRET: str = "change-me-in-production"

@@ -57,6 +57,7 @@ class Project(Base):
     client_name = Column(Text, nullable=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=False), server_default=func.now())
+    archived = Column(Boolean, default=False)
 
     user = relationship("User", back_populates="projects")
     assigned_users_link = relationship("ProjectAssignment", back_populates="project", cascade="all, delete-orphan")

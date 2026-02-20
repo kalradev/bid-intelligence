@@ -349,7 +349,7 @@ async def create_user(
     db: Session = Depends(get_db),
 ):
     """
-    Bid Admin can create Bid Managers. Bid Manager can create Technical Managers.
+    Only Bid Admin can create Bid Managers and Technical Managers.
     New user's parent_id is set to current user's id.
     """
     from services.role_quota_service import ROLE_BID_ADMIN, ROLE_BID_MANAGER, ROLE_TECHNICAL_MANAGER
@@ -357,27 +357,18 @@ async def create_user(
     role = (current_user.get("role") or "").lower()
     requested_role = (request.role or "").strip().lower()
 
-    if role == ROLE_BID_ADMIN:
-        if requested_role != ROLE_BID_MANAGER:
-            raise HTTPException(
-                status_code=400,
-                detail="Bid Admin can only create users with role bid_manager",
-            )
-        parent_id = current_user["id"]
-        new_role = ROLE_BID_MANAGER
-    elif role == ROLE_BID_MANAGER:
-        if requested_role != ROLE_TECHNICAL_MANAGER:
-            raise HTTPException(
-                status_code=400,
-                detail="Bid Manager can only create users with role technical_manager",
-            )
-        parent_id = current_user["id"]
-        new_role = ROLE_TECHNICAL_MANAGER
-    else:
+    if role != ROLE_BID_ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="Only Bid Admin or Bid Manager can create users",
+            detail="Only Bid Admin can create users (Bid Managers and Technical Managers)",
         )
+    if requested_role not in (ROLE_BID_MANAGER, ROLE_TECHNICAL_MANAGER):
+        raise HTTPException(
+            status_code=400,
+            detail="Bid Admin can only create users with role bid_manager or technical_manager",
+        )
+    parent_id = current_user["id"]
+    new_role = requested_role
 
     email = request.email.strip().lower()
     if not request.fullName or not request.fullName.strip():
@@ -403,6 +394,21 @@ async def create_user(
     db.commit()
     db.refresh(new_user)
     logger.info(f"Created user {email} as {new_role} by {current_user.get('email')}")
+
+    # Send credentials email via Outlook (client credentials); failure does not affect response
+    role_label = "Bid Manager" if new_role == ROLE_BID_MANAGER else "Technical Manager"
+    try:
+        from services.outlook_service import send_credentials_email
+        send_credentials_email(
+            to_email=email,
+            full_name=new_user.full_name,
+            login_email=email,
+            password=request.password,
+            role_label=role_label,
+        )
+    except Exception as e:
+        logger.warning("Failed to send credentials email to %s: %s", email, e)
+
     return {
         "success": True,
         "message": f"User created as {new_role}",
@@ -453,38 +459,26 @@ async def delete_user(
 ):
     """
     Delete a user account.
-    - Bid Admin can delete anyone (Bid Managers, Technical Managers)
-    - Bid Manager can only delete their own Technical Managers (users with parent_id = self)
+    Only Bid Admin can delete users (Bid Managers and Technical Managers).
     """
-    from services.role_quota_service import ROLE_BID_ADMIN, ROLE_BID_MANAGER
-    
+    from services.role_quota_service import ROLE_BID_ADMIN
+
     role = (current_user.get("role") or "").lower()
     current_user_id = current_user["id"]
-    
+
     # Get the user to delete
     user_to_delete = db.query(User).filter(User.id == user_id).first()
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     # Prevent self-deletion
     if user_id == current_user_id:
         raise HTTPException(status_code=400, detail="You cannot delete your own account")
-    
-    # Check permissions
-    if role == ROLE_BID_ADMIN:
-        # Bid Admin can delete anyone except themselves
-        pass
-    elif role == ROLE_BID_MANAGER:
-        # Bid Manager can only delete their Technical Managers
-        if user_to_delete.parent_id != current_user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="You can only delete your own Technical Managers"
-            )
-    else:
+
+    if role != ROLE_BID_ADMIN:
         raise HTTPException(
             status_code=403,
-            detail="You do not have permission to delete users"
+            detail="Only Bid Admin can delete users",
         )
     
     # Delete the user

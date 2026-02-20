@@ -504,23 +504,23 @@ export default function UploadPage() {
             toast.success(`Analysis complete! (${formatTime(totalTime)})`, { duration: 3000 });
             const userStr = localStorage.getItem("user");
             const role = (userStr ? (JSON.parse(userStr).role || "") : "").toString().toLowerCase();
-            if (projectName && role === "bid_manager") {
+            if (projectName && (role === "bid_manager" || role === "bid_admin")) {
                 setLastAnalyzedProjectName(projectName);
                 setShowAssignTMs(true);
                 const token = localStorage.getItem("token");
                 if (token) {
                     try {
-                        const [assignRes, teamRes] = await Promise.all([
+                        const [assignRes, assignableRes] = await Promise.all([
                             fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(projectName)}`, { headers: { Authorization: `Bearer ${token}` } }),
-                            fetch(`${API_BASE_URL}/api/auth/my-team`, { headers: { Authorization: `Bearer ${token}` } })
+                            fetch(`${API_BASE_URL}/api/rfp/assignable-users`, { headers: { Authorization: `Bearer ${token}` } })
                         ]);
                         if (assignRes.ok) {
                             const assignData = await assignRes.json();
                             setAssignedUserIds(assignData.assignedUserIds || []);
                         }
-                        if (teamRes.ok) {
-                            const teamData = await teamRes.json();
-                            const list = teamData.team || teamData.technicalManagers || teamData.members || [];
+                        if (assignableRes.ok) {
+                            const assignableData = await assignableRes.json();
+                            const list = assignableData.users || [];
                             setMyTeam((Array.isArray(list) ? list : []).map((m: any) => ({ id: m.id, fullName: m.fullName || m.full_name, email: m.email, role: m.role })));
                         }
                     } catch (e) {
@@ -587,10 +587,10 @@ export default function UploadPage() {
                             boxShadow: "0 4px 0 rgba(255,143,143,0.2), 0 1px 0 rgba(255,255,255,0.8) inset, 0 20px 40px rgba(0,0,0,0.06)"
                         }}>
                             <h3 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#3d4a2c" }}>
-                                Assign Technical Managers to “{lastAnalyzedProjectName}”
+                                Assign users to “{lastAnalyzedProjectName}”
                             </h3>
                             <p style={{ margin: "0 0 8px", fontSize: "14px", color: "#64748b" }}>
-                                Optional: assign Technical Managers who can upload corrigendum and reference documents. You can also add TMs to your team and assign them to this project later from your dashboard.
+                                Optional: assign Bid Managers or Technical Managers to this project. You can also assign from your dashboard later.
                             </p>
                             {myTeam.length > 0 ? (
                                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "16px" }}>
@@ -608,7 +608,7 @@ export default function UploadPage() {
                                 </div>
                             ) : (
                                 <p style={{ margin: "0 0 16px", fontSize: "14px", color: "#64748b" }}>
-                                    Add Technical Managers from <strong>Manage Teams</strong>, then assign them to this or any analysed project from your dashboard.
+                                    No assignable users yet. Bid Admin can create Bid Managers and Technical Managers from the dashboard.
                                 </p>
                             )}
                             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>

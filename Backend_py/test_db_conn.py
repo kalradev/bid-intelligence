@@ -1,14 +1,19 @@
+import os
 import psycopg2
 import sys
 
 def test_connection():
+    host = os.getenv("POSTGRES_HOST", "127.0.0.1")
+    port = int(os.getenv("POSTGRES_PORT", "5432"))
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "password")
     try:
         conn = psycopg2.connect(
             dbname="postgres",
-            user="postgres",
-            password="password",
-            host="localhost",
-            port=5432
+            user=user,
+            password=password,
+            host=host,
+            port=port
         )
         print("✅ Connection to 'postgres' database successful!")
         
@@ -29,10 +34,10 @@ def test_connection():
         # Test connection to bid_intelligence
         conn = psycopg2.connect(
             dbname="bid_intelligence",
-            user="postgres",
-            password="password",
-            host="localhost",
-            port=5432
+            user=user,
+            password=password,
+            host=host,
+            port=port
         )
         print("✅ Connection to 'bid_intelligence' successful!")
         conn.close()

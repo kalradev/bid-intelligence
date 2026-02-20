@@ -31,8 +31,6 @@ export default function TeamPage() {
   const [bidManagerDashboard, setBidManagerDashboard] = useState<BidManagerDashboard[]>([]);
   const [quota, setQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createForm, setCreateForm] = useState({ fullName: "", email: "", password: "", role: "" });
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -65,14 +63,14 @@ export default function TeamPage() {
           if (d.success) setBidManagerDashboard(d.bidManagers || []);
         }
       } else {
-        // Fetch regular team and quota for Bid Manager / Technical Manager
-        const [teamRes, quotaRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/auth/my-team`, { headers: { Authorization: `Bearer ${token}` } }),
+        // Bid Manager: fetch all TMs (team-member-assignments). Technical Manager: just quota.
+        const [assignRes, quotaRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/rfp/team-member-assignments`, { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`${API_BASE_URL}/api/auth/team-quota`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
-        if (teamRes.ok) {
-          const d = await teamRes.json();
-          if (d.success) setTeam(d.team || []);
+        if (assignRes.ok && userRole === "bid_manager") {
+          const d = await assignRes.json();
+          if (d.success && Array.isArray(d.teamMembers)) setTeam(d.teamMembers || []);
         }
         if (quotaRes.ok) {
           const d = await quotaRes.json();
@@ -96,41 +94,6 @@ export default function TeamPage() {
   const role = (user?.role || "").toLowerCase();
   const isBidAdmin = role === "bid_admin";
   const isBidManager = role === "bid_manager";
-  const canCreateBidManager = false; // Bid Managers are created by Bid Admin from admin dashboard
-  const canCreateTechnicalManager = role === "bid_manager";
-
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    if (!createForm.fullName.trim() || !createForm.email.trim() || !createForm.password.trim()) {
-      toast.error("Fill all fields");
-      return;
-    }
-    const targetRole = canCreateBidManager ? "bid_manager" : canCreateTechnicalManager ? "technical_manager" : "";
-    if (!targetRole) return;
-    setCreateLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/create-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ fullName: createForm.fullName.trim(), email: createForm.email.trim(), password: createForm.password, role: targetRole }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success(data.message || "User created");
-        setCreateForm({ fullName: "", email: "", password: "", role: "" });
-        await fetchTeamAndQuota();
-      } else {
-        toast.error(data.detail || data.message || "Failed to create user");
-      }
-    } catch (e) {
-      toast.error("Request failed");
-    } finally {
-      setCreateLoading(false);
-    }
-  };
-
   const handleDeleteUser = async (userId: number, userName: string) => {
     if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
       return;
@@ -274,68 +237,19 @@ export default function TeamPage() {
                   )}
                 </section>
               )}
-              {canCreateTechnicalManager && (
+              {isBidManager && (
                 <section style={{ marginTop: 24 }}>
-                  <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#4f46e5" }}>Your Technical Managers</h2>
-                  {team.length === 0 ? <p style={{ color: "#6b7280", margin: 0 }}>No Technical Managers yet.</p> : (
+                  <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#4f46e5" }}>All Technical Managers</h2>
+                  <p style={{ margin: "0 0 12px", fontSize: 14, color: "#6b7280" }}>Choose which Technical Manager to assign to your projects from your dashboard or when uploading.</p>
+                  {team.length === 0 ? <p style={{ color: "#6b7280", margin: 0 }}>No Technical Managers yet. Bid Admin can create them.</p> : (
                     <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                       {team.map((t) => (
                         <li key={t.id} style={{ padding: "10px 0", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span>{t.fullName} · {t.email}</span>
-                          <button
-                            onClick={() => handleDeleteUser(t.id, t.fullName)}
-                            disabled={deletingUserId === t.id}
-                            style={{ padding: "6px 12px", background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: deletingUserId === t.id ? "not-allowed" : "pointer", opacity: deletingUserId === t.id ? 0.6 : 1 }}
-                          >
-                            {deletingUserId === t.id ? "Deleting..." : "Remove"}
-                          </button>
                         </li>
                       ))}
                     </ul>
                   )}
-                </section>
-              )}
-
-              {canCreateTechnicalManager && (
-                <section style={{ marginTop: 28 }}>
-                  <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#4f46e5" }}>Create Technical Manager</h2>
-                  <form
-                    onSubmit={handleCreateUser}
-                    autoComplete="off"
-                    style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 400 }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Full name"
-                      value={createForm.fullName}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, fullName: e.target.value }))}
-                      required
-                      autoComplete="chrome-off"
-                      style={{ padding: 10, borderRadius: 8, border: "1px solid #d1d5db" }}
-                    />
-                    <input
-                      type="email"
-                      placeholder="Email"
-                      value={createForm.email}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                      required
-                      autoComplete="chrome-off"
-                      style={{ padding: 10, borderRadius: 8, border: "1px solid #d1d5db" }}
-                    />
-                    <input
-                      type="password"
-                      placeholder="Password (min 6)"
-                      value={createForm.password}
-                      onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      style={{ padding: 10, borderRadius: 8, border: "1px solid #d1d5db" }}
-                    />
-                    <button type="submit" disabled={createLoading} style={{ padding: "12px 20px", background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)", color: "#fff", border: "none", borderRadius: 10, fontWeight: 600, cursor: createLoading ? "not-allowed" : "pointer" }}>
-                      {createLoading ? "Creating…" : "Create Technical Manager"}
-                    </button>
-                  </form>
                 </section>
               )}
 

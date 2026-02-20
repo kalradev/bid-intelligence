@@ -8,7 +8,7 @@ Org quota: 10 base + purchased (shared by Bid Admin + all Bid Managers). Recharg
 import logging
 from typing import List, Dict, Any, Tuple, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from core.sqlalchemy_db import get_db_session
 from core.config import settings
@@ -41,12 +41,18 @@ def get_org_quota_limit(db: Optional[Session] = None) -> int:
 
 
 def get_org_project_count(db: Optional[Session] = None) -> int:
-    """Count all projects in the org (Bid Admin + all Bid Managers + TMs)."""
+    """Count all non-archived projects in the org (for quota used). Treats NULL archived as active."""
+    from sqlalchemy import text
     own_session = db is None
     if own_session:
         db = get_db_session()
     try:
-        return db.query(Project).count()
+        result = db.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false"))
+        row = result.fetchone()
+        return int(row[0]) if row else 0
+    except Exception as e:
+        logger.warning(f"get_org_project_count: {e}, using ORM")
+        return db.query(Project).filter(Project.archived.is_(False)).count()
     finally:
         if own_session:
             db.close()
@@ -92,14 +98,17 @@ def get_visible_project_ids(current_user: dict, db: Optional[Session] = None) ->
     if own_session:
         db = get_db_session()
     try:
+        not_archived = Project.archived.is_(False)
         if role == ROLE_BID_ADMIN:
-            rows = db.query(Project.id).all()
+            rows = db.query(Project.id).filter(not_archived).all()
             return [r[0] for r in rows]
         if role == ROLE_BID_MANAGER:
             visible_ids = get_visible_user_ids(current_user, db=db)
-            rows = db.query(Project.id).filter(Project.user_id.in_(visible_ids)).all()
+            rows = db.query(Project.id).filter(Project.user_id.in_(visible_ids), not_archived).all()
             return [r[0] for r in rows]
-        rows = db.query(ProjectAssignment.project_id).filter(ProjectAssignment.user_id == user_id).all()
+        rows = db.query(ProjectAssignment.project_id).filter(
+            ProjectAssignment.user_id == user_id
+        ).join(Project, ProjectAssignment.project_id == Project.id).filter(not_archived).all()
         return [r[0] for r in rows]
     finally:
         if own_session:
@@ -275,7 +284,7 @@ def get_bid_admin_dashboard(current_user: dict, db: Optional[Session] = None) ->
             team_user_ids.update(tm.id for tm in tms)
         project_counts = (
             db.query(Project.user_id, func.count(Project.id).label("cnt"))
-            .filter(Project.user_id.in_(list(team_user_ids)))
+            .filter(Project.user_id.in_(list(team_user_ids)), or_(Project.archived.is_(False), Project.archived.is_(None)))
             .group_by(Project.user_id)
             .all()
         )

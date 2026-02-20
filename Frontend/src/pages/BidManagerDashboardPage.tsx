@@ -36,6 +36,7 @@ export default function BidManagerDashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("dashboard");
   const [assignModalProject, setAssignModalProject] = useState<string | null>(null);
   const [assignModalAssignedIds, setAssignModalAssignedIds] = useState<number[]>([]);
+  const [assignableUsers, setAssignableUsers] = useState<{ id: number; fullName: string; email: string; role?: string }[]>([]);
   const [assignSaving, setAssignSaving] = useState(false);
   const [addTMForm, setAddTMForm] = useState({ fullName: "", email: "", password: "" });
   const [addTMLoading, setAddTMLoading] = useState(false);
@@ -139,12 +140,18 @@ export default function BidManagerDashboardPage() {
     setAssignModalAssignedIds([]);
     const token = localStorage.getItem("token");
     if (!token) return;
-    await fetchTeam();
     try {
-      const res = await fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(projectName)}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (res.ok) {
-        const d = await res.json();
+      const [assignRes, usersRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(projectName)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE_URL}/api/rfp/assignable-users`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (assignRes.ok) {
+        const d = await assignRes.json();
         setAssignModalAssignedIds(d.assignedUserIds || []);
+      }
+      if (usersRes.ok) {
+        const d = await usersRes.json();
+        setAssignableUsers(Array.isArray(d.users) ? d.users : []);
       }
     } catch (e) {
       console.error(e);
@@ -207,7 +214,11 @@ export default function BidManagerDashboardPage() {
         toast.success("Technical Manager added. You can assign them to this project below.");
         setAddTMForm({ fullName: "", email: "", password: "" });
         setShowAddTMInModal(false);
-        await fetchTeam();
+        const usersRes = await fetch(`${API_BASE_URL}/api/rfp/assignable-users`, { headers: { Authorization: `Bearer ${token}` } });
+        if (usersRes.ok) {
+          const d = await usersRes.json();
+          setAssignableUsers(Array.isArray(d.users) ? d.users : []);
+        }
       } else {
         toast.error(data.detail || data.message || "Failed to add");
       }
@@ -660,10 +671,10 @@ export default function BidManagerDashboardPage() {
             </div>
             <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>Project: “{assignModalProject}”</p>
 
-            {team.length > 0 && (
+            {assignableUsers.length > 0 ? (
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-                  {team.map((m) => (
+                  {assignableUsers.map((m) => (
                     <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.15)" : "transparent", border: `1px solid ${assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.4)" : "#EAEFEF"}` }}>
                       <input
                         type="checkbox"
@@ -675,52 +686,16 @@ export default function BidManagerDashboardPage() {
                     </label>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button onClick={() => { setAssignModalProject(null); setShowAddTMInModal(false); setAddTMForm({ fullName: "", email: "", password: "" }); }} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
                   <button disabled={assignSaving} onClick={saveAssignments} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}>{assignSaving ? "Saving…" : "Save"}</button>
                 </div>
               </>
+            ) : (
+              <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>No Technical Managers yet. Bid Admin can create them from the dashboard.</p>
             )}
 
-            <div style={{ borderTop: "1px solid #EAEFEF", paddingTop: 16 }}>
-              <p style={{ margin: "0 0 12px", fontSize: 13, fontWeight: 600, color: "#475569" }}>{team.length > 0 ? "Add another Technical Manager" : "Add a Technical Manager to your team"}</p>
-              {(team.length === 0 || showAddTMInModal) ? (
-                <form onSubmit={handleAddTMInModal} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <input
-                    type="text"
-                    placeholder="Full name"
-                    value={addTMForm.fullName}
-                    onChange={(e) => setAddTMForm((prev) => ({ ...prev, fullName: e.target.value }))}
-                    autoComplete="off"
-                    style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #EAEFEF", fontSize: 14 }}
-                  />
-                  <input
-                    type="email"
-                    placeholder="Email"
-                    value={addTMForm.email}
-                    onChange={(e) => setAddTMForm((prev) => ({ ...prev, email: e.target.value }))}
-                    autoComplete="off"
-                    style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #EAEFEF", fontSize: 14 }}
-                  />
-                  <input
-                    type="password"
-                    placeholder="Password (min 6 characters)"
-                    value={addTMForm.password}
-                    onChange={(e) => setAddTMForm((prev) => ({ ...prev, password: e.target.value }))}
-                    autoComplete="new-password"
-                    style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #EAEFEF", fontSize: 14 }}
-                  />
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="submit" disabled={addTMLoading} style={{ padding: "10px 16px", borderRadius: 10, fontWeight: 600, background: "linear-gradient(135deg, #059669 0%, #047857 100%)", color: "#fff", border: "none", cursor: addTMLoading ? "wait" : "pointer" }}>{addTMLoading ? "Adding…" : "Add to team"}</button>
-                    {team.length > 0 && <button type="button" onClick={() => { setShowAddTMInModal(false); setAddTMForm({ fullName: "", email: "", password: "" }); }} style={{ padding: "10px 16px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>}
-                  </div>
-                </form>
-              ) : (
-                <button type="button" onClick={() => setShowAddTMInModal(true)} style={{ padding: "10px 16px", borderRadius: 10, fontWeight: 600, background: "rgba(5, 150, 105, 0.1)", color: "#047857", border: "1px solid rgba(5, 150, 105, 0.3)", cursor: "pointer" }}>+ Add Technical Manager</button>
-              )}
-            </div>
-
-            {team.length === 0 && (
+            {assignableUsers.length === 0 && (
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
                 <button onClick={() => { setAssignModalProject(null); setShowAddTMInModal(false); setAddTMForm({ fullName: "", email: "", password: "" }); }} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Close</button>
               </div>

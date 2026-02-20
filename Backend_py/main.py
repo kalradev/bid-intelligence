@@ -96,16 +96,18 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Could not init DB tables (ensure PostgreSQL is running): {e}")
 
-# Register Routes (team-member-assignments first so it is always reachable)
-from api.rfp_routes import get_team_member_assignments
-from api.auth_routes import get_current_user_optional
+# Ensure projects.archived column exists (Bid Admin archive feature)
+try:
+    from core.sqlalchemy_db import engine
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"))
+        conn.commit()
+    logger.info("✅ projects.archived column ready")
+except Exception as e:
+    logger.warning(f"⚠️ Could not add projects.archived column: {e}")
 
-_team_router = APIRouter()
-@_team_router.get("/team-member-assignments")
-async def _team_assignments(current_user = Depends(get_current_user_optional)):
-    return await get_team_member_assignments(current_user)
-
-app.include_router(_team_router, prefix="/api/rfp", tags=["RFP"])
+# Register Routes
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(payment_router, prefix="/api/payment", tags=["Payment"])

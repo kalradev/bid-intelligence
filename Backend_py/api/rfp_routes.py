@@ -13,6 +13,7 @@ import httpx
 from core.config import settings
 from core.sqlalchemy_db import get_db
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from services.document_extractor import extract_text
 from services.ai_service import generate_departmental_summaries
 from services.oem_enrichment_service import enrich_products, get_enrichment_stats
@@ -343,6 +344,125 @@ async def list_projects(current_user: dict = Depends(get_current_user), db: Sess
         raise HTTPException(status_code=500, detail=f"Failed to retrieve projects: {str(e)}")
 
 
+@router.get("/projects/archived")
+async def list_archived_projects(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List archived projects. Bid Admin only."""
+    from services.role_quota_service import ROLE_BID_ADMIN
+    from models.sqlalchemy_models import Project, User
+    role = (current_user.get("role") or "").lower()
+    if role != ROLE_BID_ADMIN:
+        raise HTTPException(status_code=403, detail="Only Bid Admin can view archived projects")
+    projects = db.query(Project).filter(Project.archived.is_(True)).order_by(Project.project_name).all()
+    user_ids = list({p.user_id for p in projects if p.user_id})
+    users_by_id = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        users_by_id = {u.id: {"id": u.id, "full_name": u.full_name, "email": u.email} for u in users}
+    out = []
+    for p in projects:
+        out.append({
+            "id": p.id,
+            "project_name": p.project_name,
+            "tender_id": p.tender_id,
+            "client_name": p.client_name,
+            "user_id": p.user_id,
+            "created_at": p.created_at,
+            "archived": True,
+            "owner": users_by_id.get(p.user_id) if p.user_id else None,
+        })
+    return {"success": True, "projects": out}
+
+
+@router.post("/projects/{project_id}/archive")
+async def archive_project(
+    project_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set project as archived. Bid Admin only. No quota change."""
+    from services.role_quota_service import ROLE_BID_ADMIN
+    from models.sqlalchemy_models import Project
+    role = (current_user.get("role") or "").lower()
+    if role != ROLE_BID_ADMIN:
+        raise HTTPException(status_code=403, detail="Only Bid Admin can archive projects")
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.archived:
+        return {"success": True, "message": "Project already archived"}
+    project.archived = True
+    db.commit()
+    logger.info(f"Project {project_id} ({project.project_name}) archived by {current_user.get('email')}")
+    return {"success": True, "message": "Project archived"}
+
+
+@router.post("/projects/{project_id}/unarchive")
+async def unarchive_project(
+    project_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Restore project from archive. Do NOT touch org_quota or quota_transactions.
+    Quota left = limit - used; unarchiving increases 'used' by 1 so quota left decreases by 1.
+    Added by recharge stays unchanged. Bid Admin only."""
+    from services.role_quota_service import ROLE_BID_ADMIN
+    from models.sqlalchemy_models import Project
+    from core.sqlalchemy_db import engine
+    from sqlalchemy import text
+    role = (current_user.get("role") or "").lower()
+    if role != ROLE_BID_ADMIN:
+        raise HTTPException(status_code=403, detail="Only Bid Admin can unarchive projects")
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.archived:
+        u, lim, lef = _get_org_quota_after_unarchive()
+        return {"success": True, "message": "Project is not archived", "orgQuota": {"teamProjectsUsed": u, "teamProjectsLimit": lim, "teamProjectsLeft": lef}}
+    project_name = project.project_name
+    # 1) Persist unarchive and read quota in the same connection so we see the updated row
+    with engine.connect() as conn:
+        stmt = text("UPDATE projects SET archived = false WHERE id = :id").bindparams(id=project_id)
+        r = conn.execute(stmt)
+        conn.commit()
+        if r.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+        # 2) Read quota in same connection so "used" includes the unarchived project
+        used_row = conn.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false")).fetchone()
+        used = int(used_row[0]) if used_row else 0
+        limit_row = conn.execute(text("SELECT COALESCE(base_limit, 10) + COALESCE(purchased_quota, 0) FROM org_quota WHERE id = 1")).fetchone()
+        limit = int(limit_row[0]) if limit_row else 10
+        left = max(0, limit - used)
+    # 3) Sync ORM session
+    project.archived = False
+    db.commit()
+    logger.info(f"Project {project_id} ({project_name}) unarchived by {current_user.get('email')}; quota left={left} (used={used}, limit={limit})")
+    return {
+        "success": True,
+        "message": "Project unarchived; quota left decreased by 1",
+        "orgQuota": {"teamProjectsUsed": used, "teamProjectsLimit": limit, "teamProjectsLeft": left},
+    }
+
+
+def _get_org_quota_after_unarchive():
+    """Return (used, limit, left) with a fresh connection so unarchived project is counted. Used by unarchive response."""
+    from core.sqlalchemy_db import engine
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        # Count non-archived (COALESCE so NULL counts as active)
+        used_row = conn.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false")).fetchone()
+        used = int(used_row[0]) if used_row else 0
+        # Limit = base + purchased from org_quota
+        limit_row = conn.execute(text(
+            "SELECT COALESCE(base_limit, 10) + COALESCE(purchased_quota, 0) FROM org_quota WHERE id = 1"
+        )).fetchone()
+        limit = int(limit_row[0]) if limit_row else 10
+    left = max(0, limit - used)
+    return used, limit, left
+
+
 def _can_manage_assignments(current_user: dict) -> bool:
     """Only Bid Manager and Bid Admin can assign TMs to projects."""
     role = (current_user.get("role") or "").lower()
@@ -354,30 +474,21 @@ async def get_team_member_assignments(
     current_user: Optional[dict] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """For Bid Manager or Bid Admin: list Technical Managers (BM's team or all TMs for Admin) with their assigned projects."""
+    """For Bid Manager or Bid Admin: list all Technical Managers with their assigned projects (BMs see all TMs to choose for projects)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     role_raw = (current_user.get("role") or "").strip().lower()
     role = role_raw.replace(" ", "_")  # e.g. "bid manager" -> "bid_manager"
     if role not in ("bid_manager", "bid_admin"):
         raise HTTPException(status_code=403, detail="Only Bid Manager or Bid Admin can view team member assignments")
-    from services.role_quota_service import get_my_team, ROLE_TECHNICAL_MANAGER, ROLE_BID_ADMIN
+    from services.role_quota_service import ROLE_TECHNICAL_MANAGER, ROLE_BID_ADMIN
     from models.project_assignment import ProjectAssignmentModel
     from models.sqlalchemy_models import User
-    team = []
-    if role == ROLE_BID_ADMIN:
-        team = [
-            {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER}
-            for u in db.query(User).filter(User.role == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
-        ]
-    else:
-        bm_id = current_user.get("id")
-        if bm_id is None:
-            return {"success": True, "teamMembers": []}
-        team = get_my_team(current_user, db=db)
-        if not team:
-            children = db.query(User).filter(User.parent_id == bm_id, User.role == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
-            team = [{"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER} for u in children]
+    # Both Bid Manager and Bid Admin see all Technical Managers (BM chooses which TM to assign to projects)
+    team = [
+        {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER}
+        for u in db.query(User).filter(User.role == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
+    ]
     if not team:
         return {"success": True, "teamMembers": []}
     out = []
@@ -399,6 +510,36 @@ async def get_team_member_assignments(
         })
     logger.info(f"team-member-assignments: current_user_id={current_user.get('id')} role={role} team_count={len(team)} out_count={len(out)}")
     return {"success": True, "teamMembers": out}
+
+
+@router.get("/assignable-users")
+async def get_assignable_users(
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Users that can be assigned to projects: Bid Manager sees all TMs; Bid Admin sees all BMs + all TMs."""
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    role = (current_user.get("role") or "").strip().lower().replace(" ", "_")
+    if role not in ("bid_manager", "bid_admin"):
+        raise HTTPException(status_code=403, detail="Only Bid Manager or Bid Admin can view assignable users")
+    from services.role_quota_service import ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER
+    from models.sqlalchemy_models import User
+    # Case-insensitive role match (DB may store "Bid Manager" or "bid_manager")
+    if role == "bid_admin":
+        bms = db.query(User).filter(func.lower(User.role) == ROLE_BID_MANAGER).order_by(User.full_name).all()
+        tms = db.query(User).filter(func.lower(User.role) == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
+        users = [
+            {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_BID_MANAGER}
+            for u in bms
+        ] + [
+            {"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER}
+            for u in tms
+        ]
+    else:
+        tms = db.query(User).filter(func.lower(User.role) == ROLE_TECHNICAL_MANAGER).order_by(User.full_name).all()
+        users = [{"id": u.id, "fullName": u.full_name, "email": u.email, "role": u.role or ROLE_TECHNICAL_MANAGER} for u in tms]
+    return {"success": True, "users": users}
 
 
 @router.get("/project-assignments/{project_name}")
@@ -430,9 +571,9 @@ async def set_project_assignments(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Set which Technical Managers are assigned to this project. Only BM/Admin."""
+    """Set which users (Bid Managers or Technical Managers) are assigned to this project. Only BM/Admin."""
     if not _can_manage_assignments(current_user):
-        raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can assign TMs to projects")
+        raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can assign users to projects")
     project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -442,21 +583,25 @@ async def set_project_assignments(
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="userIds must be a list of user ids")
     from models.project_assignment import ProjectAssignmentModel
-    from services.role_quota_service import get_visible_user_ids, ROLE_TECHNICAL_MANAGER
+    from services.role_quota_service import ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER
     from models.sqlalchemy_models import User
     role = (current_user.get("role") or "").lower()
     if role == "bid_manager":
-        my_team_ids = get_visible_user_ids(current_user, db=db)
-        allowed_ids = set(my_team_ids)
-        tms = db.query(User.id).filter(User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER, User.parent_id == current_user["id"]).all()
-        allowed_tm_ids = [r[0] for r in tms]
-        invalid = [u for u in userIds if u not in allowed_tm_ids]
-        if invalid:
-            raise HTTPException(status_code=400, detail=f"Cannot assign users that are not your Technical Managers: {invalid}")
-        userIds = [u for u in userIds if u in allowed_tm_ids]
+        # Bid Manager can assign any Technical Manager to their project (not restricted to "their" TMs)
+        allowed = set(
+            r[0] for r in db.query(User.id).filter(
+                User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER
+            ).all()
+        )
+        userIds = [u for u in userIds if u in allowed]
     else:
-        tms = db.query(User.id).filter(User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER).all()
-        userIds = [r[0] for r in tms]
+        # Bid Admin can assign any Bid Manager or Technical Manager to the project
+        allowed = set(
+            r[0] for r in db.query(User.id).filter(
+                User.id.in_(userIds), User.role.in_([ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER])
+            ).all()
+        )
+        userIds = [u for u in userIds if u in allowed]
     project_id = project["id"]
     ok = ProjectAssignmentModel.set_assignments(project_id, userIds)
     if not ok:
@@ -656,7 +801,7 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
     try:
         logger.info(f"🔍 Searching for sources: \"{query[:50]}...\" in {documentId}")
         
-        chatbot_url = settings.CHATBOT_API_URL or 'http://localhost:8080'
+        chatbot_url = settings.CHATBOT_API_URL or 'http://127.0.0.1:8080'
         
         async with httpx.AsyncClient() as client:
             try:
