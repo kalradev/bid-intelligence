@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download, RotateCw } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from "lucide-react";
 import { API_BASE_URL } from '../config';
 
 export default function DocumentViewer() {
@@ -13,7 +13,7 @@ export default function DocumentViewer() {
   const [currentPage, setCurrentPage] = useState(pageNumber);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
-  const [totalPages, setTotalPages] = useState<number | null>(null);
+  const [totalPages] = useState<number | null>(null);
 
   // Update currentPage when page parameter changes in URL
   useEffect(() => {

@@ -38,9 +38,8 @@ export default function BidManagerDashboardPage() {
   const [assignModalAssignedIds, setAssignModalAssignedIds] = useState<number[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<{ id: number; fullName: string; email: string; role?: string }[]>([]);
   const [assignSaving, setAssignSaving] = useState(false);
-  const [addTMForm, setAddTMForm] = useState({ fullName: "", email: "", password: "" });
-  const [addTMLoading, setAddTMLoading] = useState(false);
-  const [showAddTMInModal, setShowAddTMInModal] = useState(false);
+  const [, setAddTMForm] = useState({ fullName: "", email: "", password: "" });
+  const [, setShowAddTMInModal] = useState(false);
   const SIDEBAR_WIDTH = 240;
   const NAVBAR_HEIGHT = 88;
 
@@ -65,16 +64,6 @@ export default function BidManagerDashboardPage() {
     if (typeof parsed.id === "number") setCurrentUserId(parsed.id);
     if (parsed.fullName && typeof parsed.fullName === "string") setUserDisplayName(parsed.fullName);
   }, [navigate]);
-
-  const fetchTeam = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    const teamRes = await fetch(`${API_BASE_URL}/api/auth/my-team`, { headers: { Authorization: `Bearer ${token}` } });
-    if (teamRes.ok) {
-      const d = await teamRes.json();
-      if (d.success && Array.isArray(d.team)) setTeam(d.team);
-    }
-  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -182,50 +171,6 @@ export default function BidManagerDashboardPage() {
       toast.error(e.message || "Failed to save assignments");
     } finally {
       setAssignSaving(false);
-    }
-  };
-
-  const handleAddTMInModal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    if (!addTMForm.fullName.trim() || !addTMForm.email.trim() || !addTMForm.password.trim()) {
-      toast.error("Fill name, email and password");
-      return;
-    }
-    if (addTMForm.password.length < 6) {
-      toast.error("Password must be at least 6 characters");
-      return;
-    }
-    setAddTMLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/auth/create-user`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          fullName: addTMForm.fullName.trim(),
-          email: addTMForm.email.trim().toLowerCase(),
-          password: addTMForm.password,
-          role: "technical_manager",
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast.success("Technical Manager added. You can assign them to this project below.");
-        setAddTMForm({ fullName: "", email: "", password: "" });
-        setShowAddTMInModal(false);
-        const usersRes = await fetch(`${API_BASE_URL}/api/rfp/assignable-users`, { headers: { Authorization: `Bearer ${token}` } });
-        if (usersRes.ok) {
-          const d = await usersRes.json();
-          setAssignableUsers(Array.isArray(d.users) ? d.users : []);
-        }
-      } else {
-        toast.error(data.detail || data.message || "Failed to add");
-      }
-    } catch (e: any) {
-      toast.error(e.message || "Request failed");
-    } finally {
-      setAddTMLoading(false);
     }
   };
 
@@ -639,7 +584,7 @@ export default function BidManagerDashboardPage() {
             padding: 24,
           }}
           onClick={() => {
-            if (assignSaving || addTMLoading) return;
+            if (assignSaving) return;
             setAssignModalProject(null);
             setShowAddTMInModal(false);
             setAddTMForm({ fullName: "", email: "", password: "" });

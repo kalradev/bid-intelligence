@@ -530,7 +530,6 @@ export default function BidAdminDashboardPage() {
   const adminProjects = currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : [];
   const totalQuotaLeft = orgQuota?.teamProjectsLeft ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
   const totalQuotaLimit = orgQuota?.teamProjectsLimit ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
-  const totalQuotaUsed = orgQuota?.teamProjectsUsed ?? totalProjects;
   const quotaLeftPercent = totalQuotaLimit > 0 ? (totalQuotaLeft / totalQuotaLimit) * 100 : 100;
   const isQuotaLow = totalQuotaLeft === 0 || quotaLeftPercent < 50;
 

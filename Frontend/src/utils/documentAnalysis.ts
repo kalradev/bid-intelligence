@@ -79,7 +79,7 @@ export function updateAnalysisData(result: DocumentAnalysisResult, projectName: 
 /**
  * Get display name for document type
  */
-function getDocumentDisplayName(updateType: string, documentId?: number): string {
+function getDocumentDisplayName(updateType: string, _documentId?: number): string {
   if (!updateType) return "Merged View (Latest)";
   
   switch (updateType) {

@@ -12,10 +12,11 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    host: true,
     proxy: {
-      // Proxy /api to the Python backend (default port 3000; use 3001 if you run backend with PORT=3001)
+      // Proxy /api to the Python backend. Set VITE_PROXY_TARGET in .env for network IP (e.g. http://192.168.1.5:3000)
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:3000',
         changeOrigin: true,
       },
     },

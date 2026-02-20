@@ -84,7 +84,8 @@ export default function PDFViewerWithHighlight({
           } catch (error) {
             console.error('Error loading PDF:', error);
             if (containerRef.current) {
-              containerRef.current.innerHTML = `<p>Error loading PDF: ${error.message}</p>`;
+              const message = error instanceof Error ? error.message : String(error);
+              containerRef.current.innerHTML = `<p>Error loading PDF: ${message}</p>`;
             }
           }
         };

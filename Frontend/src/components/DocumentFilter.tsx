@@ -82,7 +82,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
               }
             } else {
               // If currentDocumentId is set, find and select that document
-              const currentDoc = data.documents.find(d => d.id === currentDocumentId);
+              const currentDoc = data.documents.find((d: Document) => d.id === currentDocumentId);
               if (currentDoc) {
                 setSelectedDocument({
                   id: currentDoc.id,

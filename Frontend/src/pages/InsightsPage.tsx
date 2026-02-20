@@ -15,7 +15,7 @@ export default function InsightsPage() {
   const [projectName, setProjectName] = useState<string>("");
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [viewingDisplayName, setViewingDisplayName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   // Get project name from localStorage
   useEffect(() => {
     const currentDoc = localStorage.getItem("currentDocument");
