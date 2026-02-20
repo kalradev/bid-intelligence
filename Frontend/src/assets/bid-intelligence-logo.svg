@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="teal" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0d9488"/>
+      <stop offset="100%" style="stop-color:#14b8a6"/>
+    </linearGradient>
+    <linearGradient id="coral" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF8F8F"/>
+      <stop offset="100%" style="stop-color:#FFB3B3"/>
+    </linearGradient>
+    <clipPath id="outer-rhombus">
+      <path d="M32 4 L60 32 L32 60 L4 32 Z"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#outer-rhombus)">
+    <!-- Grid of small rhombuses: upper half teal, lower half coral -->
+    <!-- Teal small rhombuses (upper half) -->
+    <g fill="url(#teal)">
+        <!-- Row pattern: diamond-shaped grid so they tessellate inside big rhombus -->
+        <path d="M32 8 L34.4 10.4 L32 12.8 L29.6 10.4 Z"/>
+        <path d="M28 12 L30.4 14.4 L28 16.8 L25.6 14.4 Z"/>
+        <path d="M32 12 L34.4 14.4 L32 16.8 L29.6 14.4 Z"/>
+        <path d="M36 12 L38.4 14.4 L36 16.8 L33.6 14.4 Z"/>
+        <path d="M24 16 L26.4 18.4 L24 20.8 L21.6 18.4 Z"/>
+        <path d="M28 16 L30.4 18.4 L28 20.8 L25.6 18.4 Z"/>
+        <path d="M32 16 L34.4 18.4 L32 20.8 L29.6 18.4 Z"/>
+        <path d="M36 16 L38.4 18.4 L36 20.8 L33.6 18.4 Z"/>
+        <path d="M40 16 L42.4 18.4 L40 20.8 L37.6 18.4 Z"/>
+        <path d="M20 20 L22.4 22.4 L20 24.8 L17.6 22.4 Z"/>
+        <path d="M24 20 L26.4 22.4 L24 24.8 L21.6 22.4 Z"/>
+        <path d="M28 20 L30.4 22.4 L28 24.8 L25.6 22.4 Z"/>
+        <path d="M32 20 L34.4 22.4 L32 24.8 L29.6 22.4 Z"/>
+        <path d="M36 20 L38.4 22.4 L36 24.8 L33.6 22.4 Z"/>
+        <path d="M40 20 L42.4 22.4 L40 24.8 L37.6 22.4 Z"/>
+        <path d="M44 20 L46.4 22.4 L44 24.8 L41.6 22.4 Z"/>
+        <path d="M16 24 L18.4 26.4 L16 28.8 L13.6 26.4 Z"/>
+        <path d="M20 24 L22.4 26.4 L20 28.8 L17.6 26.4 Z"/>
+        <path d="M24 24 L26.4 26.4 L24 28.8 L21.6 26.4 Z"/>
+        <path d="M28 24 L30.4 26.4 L28 28.8 L25.6 26.4 Z"/>
+        <path d="M32 24 L34.4 26.4 L32 28.8 L29.6 26.4 Z"/>
+        <path d="M36 24 L38.4 26.4 L36 28.8 L33.6 26.4 Z"/>
+        <path d="M40 24 L42.4 26.4 L40 28.8 L37.6 26.4 Z"/>
+        <path d="M44 24 L46.4 26.4 L44 28.8 L41.6 26.4 Z"/>
+        <path d="M48 24 L50.4 26.4 L48 28.8 L45.6 26.4 Z"/>
+        <path d="M18 28 L20.4 30.4 L18 32.8 L15.6 30.4 Z"/>
+        <path d="M22 28 L24.4 30.4 L22 32.8 L19.6 30.4 Z"/>
+        <path d="M26 28 L28.4 30.4 L26 32.8 L23.6 30.4 Z"/>
+        <path d="M30 28 L32.4 30.4 L30 32.8 L27.6 30.4 Z"/>
+        <path d="M34 28 L36.4 30.4 L34 32.8 L31.6 30.4 Z"/>
+        <path d="M38 28 L40.4 30.4 L38 32.8 L35.6 30.4 Z"/>
+        <path d="M42 28 L44.4 30.4 L42 32.8 L39.6 30.4 Z"/>
+        <path d="M46 28 L48.4 30.4 L46 32.8 L43.6 30.4 Z"/>
+    </g>
+    <!-- Coral small rhombuses (lower half) -->
+    <g fill="url(#coral)">
+        <path d="M18 32 L20.4 34.4 L18 36.8 L15.6 34.4 Z"/>
+        <path d="M22 32 L24.4 34.4 L22 36.8 L19.6 34.4 Z"/>
+        <path d="M26 32 L28.4 34.4 L26 36.8 L23.6 34.4 Z"/>
+        <path d="M30 32 L32.4 34.4 L30 36.8 L27.6 34.4 Z"/>
+        <path d="M34 32 L36.4 34.4 L34 36.8 L31.6 34.4 Z"/>
+        <path d="M38 32 L40.4 34.4 L38 36.8 L35.6 34.4 Z"/>
+        <path d="M42 32 L44.4 34.4 L42 36.8 L39.6 34.4 Z"/>
+        <path d="M46 32 L48.4 34.4 L46 36.8 L43.6 34.4 Z"/>
+        <path d="M16 36 L18.4 38.4 L16 40.8 L13.6 38.4 Z"/>
+        <path d="M20 36 L22.4 38.4 L20 40.8 L17.6 38.4 Z"/>
+        <path d="M24 36 L26.4 38.4 L24 40.8 L21.6 38.4 Z"/>
+        <path d="M28 36 L30.4 38.4 L28 40.8 L25.6 38.4 Z"/>
+        <path d="M32 36 L34.4 38.4 L32 40.8 L29.6 38.4 Z"/>
+        <path d="M36 36 L38.4 38.4 L36 40.8 L33.6 38.4 Z"/>
+        <path d="M40 36 L42.4 38.4 L40 40.8 L37.6 38.4 Z"/>
+        <path d="M44 36 L46.4 38.4 L44 40.8 L41.6 38.4 Z"/>
+        <path d="M48 36 L50.4 38.4 L48 40.8 L45.6 38.4 Z"/>
+        <path d="M20 40 L22.4 42.4 L20 44.8 L17.6 42.4 Z"/>
+        <path d="M24 40 L26.4 42.4 L24 44.8 L21.6 42.4 Z"/>
+        <path d="M28 40 L30.4 42.4 L28 44.8 L25.6 42.4 Z"/>
+        <path d="M32 40 L34.4 42.4 L32 44.8 L29.6 42.4 Z"/>
+        <path d="M36 40 L38.4 42.4 L36 44.8 L33.6 42.4 Z"/>
+        <path d="M40 40 L42.4 42.4 L40 44.8 L37.6 42.4 Z"/>
+        <path d="M44 40 L46.4 42.4 L44 44.8 L41.6 42.4 Z"/>
+        <path d="M24 44 L26.4 46.4 L24 48.8 L21.6 46.4 Z"/>
+        <path d="M28 44 L30.4 46.4 L28 48.8 L25.6 46.4 Z"/>
+        <path d="M32 44 L34.4 46.4 L32 48.8 L29.6 46.4 Z"/>
+        <path d="M36 44 L38.4 46.4 L36 48.8 L33.6 46.4 Z"/>
+        <path d="M40 44 L42.4 46.4 L40 48.8 L37.6 46.4 Z"/>
+        <path d="M28 48 L30.4 50.4 L28 52.8 L25.6 50.4 Z"/>
+        <path d="M32 48 L34.4 50.4 L32 52.8 L29.6 50.4 Z"/>
+        <path d="M36 48 L38.4 50.4 L36 52.8 L33.6 50.4 Z"/>
+        <path d="M32 52 L34.4 54.4 L32 56.8 L29.6 54.4 Z"/>
+    </g>
+  </g>
+</svg>
