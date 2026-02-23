@@ -125,8 +125,14 @@ def _credentials_email_html(full_name: str, login_email: str, password: str, rol
     login_url = f"{login_base}/login" if "/login" not in login_base else login_base
 
     logo_url = (os.getenv("LOGO_URL") or "").strip()
+    if not logo_url and login_base and login_base != "https://yourdomain.com":
+        logo_url = f"{login_base}/assets/bid-intelligence-logo.svg"
     if logo_url:
-        logo_block = f'<img src="{html.escape(logo_url)}" alt="Bid Intelligence" width="160" style="display:block;">'
+        logo_block = (
+            f'<img src="{html.escape(logo_url)}" alt="Bid Intelligence" width="160" style="display:block; margin-bottom:8px;">'
+            '<span style="font-size:22px; font-weight:800; color:#2d3319; letter-spacing:-0.02em;">'
+            'Bid <span style="color:#E87878;">Intelligence</span></span>'
+        )
     else:
         logo_block = (
             '<span style="font-size:22px; font-weight:800; color:#2d3319; letter-spacing:-0.02em;">'

@@ -8,6 +8,8 @@ interface ProductData {
   model: string;
   country: string;
   mii: boolean;
+  /** true when OEM was typed manually in Product Mapping (not selected from list) */
+  oemWasTyped?: boolean;
 }
 
 export default function GlobalIntelligencePage() {
@@ -20,6 +22,27 @@ export default function GlobalIntelligencePage() {
 
   const [search, setSearch] = useState("");
   const [data, setData] = useState<ProductData[]>([]);
+  const STACK_MODEL_OVERRIDES_KEY = "buildYourStack_modelOverrides";
+  const [modelOverrides, setModelOverrides] = useState<Record<string, string>>(() => {
+    try {
+      const s = localStorage.getItem(STACK_MODEL_OVERRIDES_KEY);
+      return s ? JSON.parse(s) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const setModelOverride = (product: string, oem: string, value: string) => {
+    const key = `${product}|${oem}`;
+    setModelOverrides((prev) => {
+      const next = { ...prev, [key]: value };
+      try {
+        localStorage.setItem(STACK_MODEL_OVERRIDES_KEY, JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    });
+  };
+  const [focusedModelKey, setFocusedModelKey] = useState<string | null>(null);
 
   function buildStackFromAnalysis(parsed: any): ProductData[] {
     const productMapping = parsed?.data?.departmentalSummaries?.productMapping;
@@ -33,20 +56,23 @@ export default function GlobalIntelligencePage() {
       const selectedOem = (oemSelections[String(index)] ?? "").trim();
       if (!selectedOem) return;
 
-      const modelDisplay = item.model || item.oemRecommendations?.[0]?.model || "Standard Model";
+      const recommendations = item.oemRecommendations || [];
+      const match = recommendations.find((r: any) => (r.oem || "").trim() === selectedOem);
+      const oemWasTyped = !match;
+      const modelDisplay = match
+        ? (match.model || item.model || "—")
+        : (item.model || "");
+
       let country = "Unknown";
       let isMII = false;
-      if (item.oemRecommendations?.length) {
-        const match = item.oemRecommendations.find((r: any) => (r.oem || "").trim() === selectedOem);
-        if (match) {
-          const status = (match.miiStatus || "").toLowerCase();
-          if (status.includes("indian") || status.includes("mii-compliant") || status.includes("mii compliant")) {
-            country = "India";
-            isMII = true;
-          } else {
-            country = "Global";
-            isMII = false;
-          }
+      if (match) {
+        const status = (match.miiStatus || "").toLowerCase();
+        if (status.includes("indian") || status.includes("mii-compliant") || status.includes("mii compliant")) {
+          country = "India";
+          isMII = true;
+        } else {
+          country = "Global";
+          isMII = false;
         }
       }
       if (country === "Unknown" && item.miiStatus) {
@@ -65,6 +91,7 @@ export default function GlobalIntelligencePage() {
         model: modelDisplay,
         country,
         mii: isMII,
+        oemWasTyped,
       });
     });
     return stackOnly;
@@ -197,8 +224,8 @@ export default function GlobalIntelligencePage() {
           style={{
             minHeight: "100vh",
             background: "#DBE9FA",
-            padding: "32px",
-            paddingTop: "80px",
+            padding: "20px 24px",
+            paddingTop: "88px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -208,7 +235,7 @@ export default function GlobalIntelligencePage() {
           }}
         >
           {/* Search within stack */}
-          <div style={{ width: "100%", maxWidth: 520, marginBottom: 24 }}>
+          <div style={{ width: "100%", maxWidth: 900, marginBottom: 12 }}>
             <input
               type="text"
               value={search}
@@ -226,67 +253,93 @@ export default function GlobalIntelligencePage() {
             />
           </div>
 
-          {/* Stack: only items where user selected or typed OEM */}
+          {/* Stack in tabular form */}
           <div
             style={{
               width: "100%",
-              maxWidth: "640px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12,
+              maxWidth: 1200,
+              background: "#fff",
+              borderRadius: 14,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+              border: "1px solid #e5e7eb",
+              overflow: "hidden",
             }}
           >
             {stackFiltered.length > 0 ? (
-              stackFiltered.map((item, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: "#fff",
-                    borderRadius: 12,
-                    padding: "16px 20px",
-                    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-                    border: "1px solid #e5e7eb",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}>{item.product}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <span
-                      style={{
-                        padding: "4px 10px",
-                        borderRadius: 8,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        background: "rgba(255,143,143,0.2)",
-                        color: "#b91c1c",
-                        border: "1px solid rgba(255,143,143,0.4)",
-                      }}
-                    >
-                      {item.oem}
-                    </span>
-                    <span style={{ fontSize: 12, color: "#64748b" }}>{item.country}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: item.mii ? "#059669" : "#dc2626" }}>
-                      {item.mii ? "MII" : "Not MII"}
-                    </span>
-                  </div>
-                  {item.model && item.model !== "Standard Model" && (
-                    <div style={{ fontSize: 12, color: "#64748b" }}>{item.model}</div>
-                  )}
-                </div>
-              ))
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                <thead style={{ background: "#f8fafc", borderBottom: "2px solid #e5e7eb" }}>
+                  <tr>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Product Name</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>OEM</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Model</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stackFiltered.map((item, i) => {
+                    const overrideKey = `${item.product}|${item.oem}`;
+                    const displayModel = item.oemWasTyped
+                      ? (modelOverrides[overrideKey] ?? "")
+                      : (item.model ?? "—");
+                    const isFocused = focusedModelKey === overrideKey;
+                    return (
+                      <tr key={i} style={{ borderBottom: "1px solid #e5e7eb" }}>
+                        <td style={{ padding: "10px 14px", fontWeight: 500, color: "#0f172a", fontSize: 14 }}>{item.product}</td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <span
+                            style={{
+                              padding: "4px 8px",
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              background: "rgba(255,143,143,0.2)",
+                              color: "#b91c1c",
+                              border: "1px solid rgba(255,143,143,0.4)",
+                            }}
+                          >
+                            {item.oem}
+                          </span>
+                        </td>
+                        <td style={{ padding: "10px 14px", fontSize: 13, color: "#374151", width: "1%", minWidth: 200 }}>
+                          {item.oemWasTyped ? (
+                            <input
+                              type="text"
+                              value={displayModel}
+                              onChange={(e) => setModelOverride(item.product, item.oem, e.target.value)}
+                              onFocus={() => setFocusedModelKey(overrideKey)}
+                              onBlur={() => setFocusedModelKey(null)}
+                              placeholder="Enter model name"
+                              style={{
+                                width: "100%",
+                                maxWidth: "100%",
+                                minWidth: 0,
+                                boxSizing: "border-box",
+                                padding: "8px 12px",
+                                border: `1px solid ${isFocused ? "#06b6d4" : "#cbd5e1"}`,
+                                borderRadius: 8,
+                                fontSize: 14,
+                                color: "#0f172a",
+                                background: "#fff",
+                                outline: "none",
+                                boxShadow: isFocused ? "0 0 0 3px rgba(6, 182, 212, 0.2)" : "0 1px 2px rgba(0,0,0,0.04)",
+                                transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+                              }}
+                            />
+                          ) : (
+                            displayModel
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             ) : (
               <div
                 style={{
-                  background: "#fff",
-                  borderRadius: 14,
                   padding: 48,
                   textAlign: "center",
                   color: "#64748b",
                   fontSize: 15,
-                  border: "1px solid #e5e7eb",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
                 }}
               >
                 {data.length === 0

@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, UserCircle, Users, UserPlus, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, UserCircle, Users, UserPlus, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
@@ -86,6 +86,7 @@ export default function BidAdminDashboardPage() {
   const [archiveConfirmStep, setArchiveConfirmStep] = useState<0 | 1>(0);
   const [createUserSuccessPopup, setCreateUserSuccessPopup] = useState<{ fullName: string; roleLabel: string } | null>(null);
   const [createUserErrorPopup, setCreateUserErrorPopup] = useState<string | null>(null);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const TEAMS_PER_PAGE = 8;
   const SIDEBAR_WIDTH = 240;
 
@@ -1037,16 +1038,39 @@ export default function BidAdminDashboardPage() {
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#475569", marginBottom: 6 }}>Password (min 6 characters)</label>
-                    <input
-                      type="password"
-                      placeholder="Password"
-                      value={createUserForm.password}
-                      onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #EAEFEF", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                    />
+                    <div style={{ position: "relative", width: "100%" }}>
+                      <input
+                        type={showCreatePassword ? "text" : "password"}
+                        placeholder="Password"
+                        value={createUserForm.password}
+                        onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
+                        required
+                        minLength={6}
+                        autoComplete="new-password"
+                        style={{ width: "100%", padding: "12px 44px 12px 14px", border: "1px solid #EAEFEF", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCreatePassword((v) => !v)}
+                        aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                        style={{
+                          position: "absolute",
+                          right: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          padding: 4,
+                          border: "none",
+                          background: "transparent",
+                          color: "#64748b",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
+                        {showCreatePassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
                   </div>
                   <button
                     type="submit"
@@ -2370,7 +2394,7 @@ export default function BidAdminDashboardPage() {
               {createUserSuccessPopup.roleLabel} {createUserSuccessPopup.fullName} has been created successfully.
             </p>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => setCreateUserSuccessPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: "pointer" }}>OK</button>
+              <button type="button" onClick={() => setCreateUserSuccessPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: "pointer", marginRight: -6 }}>OK</button>
             </div>
           </div>
         </div>,

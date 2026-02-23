@@ -436,7 +436,7 @@ export default function ProductMappingPage() {
                   <tr style={{ background: "#f8fafc" }}>
                     <th style={{ padding: 10, textAlign: "left" }}>Product Name</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Category</th>
-                    <th style={{ padding: 10, textAlign: "left" }}>OEM</th>
+                    <th style={{ padding: 10, textAlign: "left", minWidth: 200 }}>OEM</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Model</th>
                     <th style={{ padding: 10, textAlign: "left" }}>MII Status</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Selected OEM</th>
@@ -473,7 +473,7 @@ export default function ProductMappingPage() {
                           <td style={{ padding: 10 }}>{item.category || "Other"}</td>
                           
                           {/* OEM Column - Checkbox per OEM, one selection per product */}
-                          <td style={{ padding: 10 }}>
+                          <td style={{ padding: 10, minWidth: 200, verticalAlign: "top" }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                                 {recommendations.map((rec: any, i: number) => {
@@ -488,45 +488,50 @@ export default function ProductMappingPage() {
                                         borderLeft: `3px solid ${rec.miiStatus === "Indian OEM" ? "#10b981" : "#3b82f6"}`,
                                         fontSize: "13px",
                                         display: "flex",
-                                        alignItems: "flex-start",
-                                        gap: "8px"
+                                        flexDirection: "column",
+                                        gap: "6px",
+                                        overflow: "visible",
+                                        minWidth: 0
                                       }}
                                     >
-                                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
-                                        <input
-                                          type="checkbox"
-                                          checked={selected}
-                                          onChange={() => handleSelectOem(index, rec.oem || "")}
-                                          style={{ width: 18, height: 18, cursor: "pointer" }}
-                                        />
-                                        <span style={{ fontWeight: 600, color: "#111827", marginBottom: "2px" }}>
-                                          {i + 1}. {rec.oem}
-                                          {i === 0 && (
-                                            <span style={{
-                                              marginLeft: "6px",
-                                              fontSize: "10px",
-                                              background: "#3b82f6",
-                                              color: "white",
-                                              padding: "2px 6px",
-                                              borderRadius: "4px",
-                                              fontWeight: 700
-                                            }}>
-                                              BEST
-                                            </span>
-                                          )}
-                                        </span>
-                                      </label>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                        <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0 }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={selected}
+                                            onChange={() => handleSelectOem(index, rec.oem || "")}
+                                            style={{ width: 18, height: 18, cursor: "pointer" }}
+                                          />
+                                          <span style={{ fontWeight: 600, color: "#111827" }}>
+                                            {i + 1}. {rec.oem}
+                                            {i === 0 && (
+                                              <span style={{
+                                                marginLeft: "6px",
+                                                fontSize: "10px",
+                                                background: "#3b82f6",
+                                                color: "white",
+                                                padding: "2px 6px",
+                                                borderRadius: "4px",
+                                                fontWeight: 700
+                                              }}>
+                                                BEST
+                                              </span>
+                                            )}
+                                          </span>
+                                        </label>
+                                      </div>
                                       <div style={{ 
                                         fontSize: "11px", 
                                         color: "#6b7280",
                                         display: "flex",
                                         gap: "8px",
                                         alignItems: "center",
-                                        flex: 1
+                                        flexWrap: "nowrap",
+                                        minWidth: 0
                                       }}>
-                                        <span>{rec.priceRange || "Mid-Range"}</span>
-                                        <span>•</span>
-                                        <span>Match: {rec.matchScore || 90}%</span>
+                                        <span style={{ flexShrink: 0 }}>{rec.priceRange || "Mid-Range"}</span>
+                                        <span style={{ flexShrink: 0 }}>•</span>
+                                        <span style={{ flexShrink: 0 }}>Match: {rec.matchScore || 90}%</span>
                                       </div>
                                     </div>
                                   );

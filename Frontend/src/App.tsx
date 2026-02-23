@@ -67,6 +67,12 @@ export default function App() {
 
   return (
     <>
+      {/* Blurred dashboard in background when user must change password */}
+      {currentPath === "/change-password" && token && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99998, filter: "blur(10px)", pointerEvents: "none", overflow: "hidden" }}>
+          <LandingPage />
+        </div>
+      )}
 
       <div className={isFullWidth ? "full-width-page" : "app-wrapper"}>
         <Routes>

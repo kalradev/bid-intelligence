@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
     
-    # Server Config
-    PORT: int = 3000
+    # Server Config (use 8000 to match frontend default; set PORT in .env to override)
+    PORT: int = 8000
     NODE_ENV: str = "development"
     MAX_FILE_SIZE_MB: int = 50
     
