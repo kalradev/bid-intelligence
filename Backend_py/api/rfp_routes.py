@@ -382,8 +382,8 @@ async def archive_project(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Set project as archived. Bid Admin only. No quota change."""
-    from services.role_quota_service import ROLE_BID_ADMIN
+    """Set project as archived. Bid Admin only. Quota does NOT change (used = count of all projects + unarchive_quota_used)."""
+    from services.role_quota_service import ROLE_BID_ADMIN, get_org_project_count, get_org_quota_limit
     from models.sqlalchemy_models import Project
     role = (current_user.get("role") or "").lower()
     if role != ROLE_BID_ADMIN:
@@ -396,7 +396,15 @@ async def archive_project(
     project.archived = True
     db.commit()
     logger.info(f"Project {project_id} ({project.project_name}) archived by {current_user.get('email')}")
-    return {"success": True, "message": "Project archived"}
+    # Return current quota so frontend does not show an increase (used = count all projects + unarchive_quota_used)
+    used = get_org_project_count(db=db)
+    limit = get_org_quota_limit(db=db)
+    left = max(0, limit - used)
+    return {
+        "success": True,
+        "message": "Project archived",
+        "orgQuota": {"teamProjectsUsed": used, "teamProjectsLimit": limit, "teamProjectsLeft": left},
+    }
 
 
 @router.post("/projects/{project_id}/unarchive")
@@ -422,16 +430,21 @@ async def unarchive_project(
         u, lim, lef = _get_org_quota_after_unarchive()
         return {"success": True, "message": "Project is not archived", "orgQuota": {"teamProjectsUsed": u, "teamProjectsLimit": lim, "teamProjectsLeft": lef}}
     project_name = project.project_name
-    # 1) Persist unarchive and read quota in the same connection so we see the updated row
+    # 1) Persist unarchive, increment unarchive_quota_used (1 quota per unarchive), then read quota
     with engine.connect() as conn:
         stmt = text("UPDATE projects SET archived = false WHERE id = :id").bindparams(id=project_id)
         r = conn.execute(stmt)
-        conn.commit()
         if r.rowcount == 0:
             raise HTTPException(status_code=404, detail="Project not found")
-        # 2) Read quota in same connection so "used" includes the unarchived project
-        used_row = conn.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false")).fetchone()
-        used = int(used_row[0]) if used_row else 0
+        conn.execute(text(
+            "UPDATE org_quota SET unarchive_quota_used = COALESCE(unarchive_quota_used, 0) + 1 WHERE id = 1"
+        ))
+        conn.commit()
+        # 2) used = count(all projects) + unarchive_quota_used (archiving does not free quota)
+        count_row = conn.execute(text("SELECT COUNT(*) FROM projects")).fetchone()
+        extra_row = conn.execute(text("SELECT COALESCE(unarchive_quota_used, 0) FROM org_quota WHERE id = 1")).fetchone()
+        used = int(count_row[0]) if count_row else 0
+        used += int(extra_row[0]) if extra_row else 0
         limit_row = conn.execute(text("SELECT COALESCE(base_limit, 10) + COALESCE(purchased_quota, 0) FROM org_quota WHERE id = 1")).fetchone()
         limit = int(limit_row[0]) if limit_row else 10
         left = max(0, limit - used)
@@ -447,14 +460,14 @@ async def unarchive_project(
 
 
 def _get_org_quota_after_unarchive():
-    """Return (used, limit, left) with a fresh connection so unarchived project is counted. Used by unarchive response."""
+    """Return (used, limit, left). used = count(all projects) + unarchive_quota_used."""
     from core.sqlalchemy_db import engine
     from sqlalchemy import text
     with engine.connect() as conn:
-        # Count non-archived (COALESCE so NULL counts as active)
-        used_row = conn.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false")).fetchone()
-        used = int(used_row[0]) if used_row else 0
-        # Limit = base + purchased from org_quota
+        count_row = conn.execute(text("SELECT COUNT(*) FROM projects")).fetchone()
+        extra_row = conn.execute(text("SELECT COALESCE(unarchive_quota_used, 0) FROM org_quota WHERE id = 1")).fetchone()
+        used = int(count_row[0]) if count_row else 0
+        used += int(extra_row[0]) if extra_row else 0
         limit_row = conn.execute(text(
             "SELECT COALESCE(base_limit, 10) + COALESCE(purchased_quota, 0) FROM org_quota WHERE id = 1"
         )).fetchone()
@@ -714,6 +727,63 @@ async def get_project_analysis(
     except Exception as e:
         logger.error(f"Error getting project analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/save-product-oem-selections")
+async def save_product_oem_selections(
+    body: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Save selected OEM per product for a document.
+    body: { "project_name": str, "document_id": int, "oem_selections": { "0": "HCL", "1": "Wipro", "2": "" } }
+    Keys in oem_selections are product indices (as strings); values are selected OEM name or empty string.
+    """
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import ProjectDocument
+    import copy
+
+    project_name = body.get("project_name")
+    document_id = body.get("document_id")
+    oem_selections = body.get("oem_selections")
+    if project_name is None or document_id is None:
+        raise HTTPException(status_code=400, detail="project_name and document_id are required")
+    if oem_selections is None or not isinstance(oem_selections, dict):
+        raise HTTPException(status_code=400, detail="oem_selections must be an object (e.g. { \"0\": \"HCL\" })")
+
+    try:
+        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        db = get_db_session()
+        try:
+            doc = db.query(ProjectDocument).filter(
+                ProjectDocument.id == int(document_id),
+                ProjectDocument.project_id == project["id"],
+            ).first()
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document not found")
+
+            # Deep copy so we don't mutate cached data; ensure productMapping.oemSelections
+            analysis = copy.deepcopy(doc.analysis_data) if doc.analysis_data else {}
+            if "productMapping" not in analysis:
+                analysis["productMapping"] = {}
+            analysis["productMapping"]["oemSelections"] = { str(k): (v if v is not None else "") for k, v in oem_selections.items() }
+            doc.analysis_data = analysis
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(doc, "analysis_data")
+            db.commit()
+            db.refresh(doc)
+            return {"success": True, "message": "OEM selections saved"}
+        finally:
+            db.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error saving product OEM selections: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/get-project-documents/{project_name}")
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):

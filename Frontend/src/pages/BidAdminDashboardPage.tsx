@@ -1,5 +1,6 @@
 import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, UserCircle, Users, UserPlus, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
@@ -39,7 +40,7 @@ interface FlattenedMember {
   id: number;
   fullName: string;
   email: string;
-  role: "Bid Manager" | "Technical Manager";
+  role: "Bid Manager" | "Technical Manager" | "Bid Admin";
   teamName: string;
 }
 
@@ -50,6 +51,7 @@ export default function BidAdminDashboardPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("teams");
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const [userDisplayName, setUserDisplayName] = useState<string>("Bid Admin");
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>("");
   const [personalProjects, setPersonalProjects] = useState<ProjectItem[]>([]);
   const [personalProjectsLoading, setPersonalProjectsLoading] = useState(false);
   const [allProjects, setAllProjects] = useState<ProjectItem[]>([]);
@@ -70,7 +72,7 @@ export default function BidAdminDashboardPage() {
   const [isViewTransitioning, setIsViewTransitioning] = useState(false);
   const [pendingViewMode, setPendingViewMode] = useState<ViewMode | null>(null);
   const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number; baseLimit?: number; purchasedQuota?: number } | null>(null);
-  type TeamsViewFilter = "bid_manager" | "technical_manager" | "project";
+  type TeamsViewFilter = "bid_manager" | "technical_manager" | "project" | "admin";
   const [teamsViewFilter, setTeamsViewFilter] = useState<TeamsViewFilter>("bid_manager");
   const [tmAssignments, setTmAssignments] = useState<Array<{ id: number; fullName: string; email: string; role: string; assignedProjects: Array<{ id: number; project_name: string; tender_id?: string; client_name?: string }> }>>([]);
   const [tmAssignmentsLoading, setTmAssignmentsLoading] = useState(false);
@@ -80,6 +82,10 @@ export default function BidAdminDashboardPage() {
   const [assignModalAssignedIds, setAssignModalAssignedIds] = useState<number[]>([]);
   const [assignableUsersForModal, setAssignableUsersForModal] = useState<Array<{ id: number; fullName: string; email: string; role?: string }>>([]);
   const [assignModalSaving, setAssignModalSaving] = useState(false);
+  const [archiveConfirmProjectId, setArchiveConfirmProjectId] = useState<number | null>(null);
+  const [archiveConfirmStep, setArchiveConfirmStep] = useState<0 | 1>(0);
+  const [createUserSuccessPopup, setCreateUserSuccessPopup] = useState<{ fullName: string; roleLabel: string } | null>(null);
+  const [createUserErrorPopup, setCreateUserErrorPopup] = useState<string | null>(null);
   const TEAMS_PER_PAGE = 8;
   const SIDEBAR_WIDTH = 240;
 
@@ -134,6 +140,7 @@ export default function BidAdminDashboardPage() {
     }
     if (typeof parsed.id === "number") setCurrentUserId(parsed.id);
     if (parsed.fullName && typeof parsed.fullName === "string") setUserDisplayName(parsed.fullName);
+    if (typeof (parsed as { email?: string }).email === "string") setCurrentUserEmail((parsed as { email?: string }).email);
   }, [navigate]);
 
   useEffect(() => {
@@ -306,6 +313,14 @@ export default function BidAdminDashboardPage() {
     return [bmEntry, ...tms];
   });
 
+  const allMembersList: FlattenedMember[] =
+    currentUserId != null
+      ? [
+          { id: currentUserId, fullName: userDisplayName, email: currentUserEmail || "", role: "Bid Admin", teamName: "—" },
+          ...flattenedMembers,
+        ]
+      : flattenedMembers;
+
   const handleViewResult = (projectName: string) => {
     navigate(`/project-results/${encodeURIComponent(projectName)}`);
   };
@@ -374,8 +389,17 @@ export default function BidAdminDashboardPage() {
         return;
       }
       toast.success("Project archived");
+      setArchiveConfirmProjectId(null);
       setPersonalProjects((prev) => prev.filter((p) => p.id !== projectId));
       setAllProjects((prev) => prev.filter((p) => p.id !== projectId));
+      setProjectsForFilter((prev) => prev.filter((p) => p.id !== projectId));
+      if (data.orgQuota) {
+        setOrgQuota({
+          teamProjectsUsed: data.orgQuota.teamProjectsUsed ?? 0,
+          teamProjectsLimit: data.orgQuota.teamProjectsLimit ?? 0,
+          teamProjectsLeft: data.orgQuota.teamProjectsLeft ?? 0,
+        });
+      }
       if (viewMode === "archived") {
         const archRes = await fetch(`${API_BASE_URL}/api/rfp/projects/archived`, { headers: { Authorization: `Bearer ${token}` } });
         if (archRes.ok) {
@@ -507,7 +531,7 @@ export default function BidAdminDashboardPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         const label = createUserType === "bid_manager" ? "Bid Manager" : "Technical Manager";
-        toast.success(data.message || `${label} created successfully`);
+        setCreateUserSuccessPopup({ fullName: (data.user?.fullName ?? createUserForm.fullName.trim()) || "User", roleLabel: label });
         setCreateUserForm({ fullName: "", email: "", password: "" });
         const dashRes = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` } });
         if (dashRes.ok) {
@@ -515,11 +539,11 @@ export default function BidAdminDashboardPage() {
           if (dashData.success && dashData.bidManagers) setBidManagers(dashData.bidManagers);
         }
       } else {
-        toast.error(data.detail || data.message || "Failed to create user");
+        setCreateUserErrorPopup(data.detail || data.message || "Failed to create user");
       }
     } catch (e) {
       console.error(e);
-      toast.error("Request failed");
+      setCreateUserErrorPopup("Request failed. Please try again.");
     } finally {
       setCreateUserLoading(false);
     }
@@ -1079,7 +1103,7 @@ export default function BidAdminDashboardPage() {
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
                                   <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 2px 8px rgba(255,143,143,0.3)", whiteSpace: "nowrap" }}>View result</button>
                                   <button type="button" onClick={() => openAssignModalForAdmin(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "rgba(79,70,229,0.12)", color: "#4f46e5", border: "1px solid rgba(79,70,229,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Assign Bid Managers or Technical Managers">Assign</button>
-                                  <button type="button" onClick={() => handleArchive(p.id)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Archive project"><Archive size={14} /> Archive</button>
+                                  <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Archive project"><Archive size={14} /> Archive</button>
                                 </div>
                               </td>
                             </tr>
@@ -1095,10 +1119,10 @@ export default function BidAdminDashboardPage() {
                 <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,143,143,0.4)" }}>
                   <UserCircle size={18} color="#FF8F8F" />
                 </span>
-                All members ({flattenedMembers.length})
+                All members ({allMembersList.length})
               </h2>
               <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                {membersLoading ? null : flattenedMembers.length === 0 ? (
+                {membersLoading ? null : allMembersList.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No Bid Managers or Technical Managers yet. Create them from this dashboard (Add Bid Manager).
                       </div>
@@ -1113,14 +1137,14 @@ export default function BidAdminDashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {flattenedMembers.map((m) => {
+                          {allMembersList.map((m) => {
                             const memberProjects = allProjects.filter((p) => p.user_id === m.id);
                             return (
-                              <tr key={m.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                              <tr key={m.role === "Bid Admin" ? `admin-${m.id}` : m.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
                                 <td style={{ padding: "14px 16px" }}>
                                   <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{m.fullName}</div>
                                   <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
-                                    <Mail size={11} /> {m.email}
+                                    <Mail size={11} /> {m.email || "—"}
                                   </div>
                                 </td>
                                 <td style={{ padding: "14px 16px" }}>
@@ -1131,9 +1155,9 @@ export default function BidAdminDashboardPage() {
                                       borderRadius: 8,
                                       fontSize: 12,
                                       fontWeight: 600,
-                                      background: m.role === "Bid Manager" ? "rgba(255,143,143,0.2)" : "rgba(255,179,179,0.3)",
-                                      color: "#2d3319",
-                                      border: m.role === "Bid Manager" ? "1px solid rgba(255,143,143,0.4)" : "1px solid rgba(255,179,179,0.5)",
+                                      background: m.role === "Bid Admin" ? "rgba(94, 114, 52, 0.2)" : m.role === "Bid Manager" ? "rgba(255,143,143,0.2)" : "rgba(255,179,179,0.3)",
+                                      color: m.role === "Bid Admin" ? "#2d3319" : "#2d3319",
+                                      border: m.role === "Bid Admin" ? "1px solid rgba(94, 114, 52, 0.5)" : m.role === "Bid Manager" ? "1px solid rgba(255,143,143,0.4)" : "1px solid rgba(255,179,179,0.5)",
                                     }}
                                   >
                                     {m.role}
@@ -1172,24 +1196,6 @@ export default function BidAdminDashboardPage() {
                                             }}
                                           >
                                             {p.project_name}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleArchive(p.id)}
-                                            style={{
-                                              padding: "6px 8px",
-                                              background: "transparent",
-                                              color: "#64748b",
-                                              border: "1px solid #cbd5e1",
-                                              borderRadius: 6,
-                                              cursor: "pointer",
-                                              display: "inline-flex",
-                                              alignItems: "center",
-                                              justifyContent: "center",
-                                            }}
-                                            title="Archive project"
-                                          >
-                                            <Archive size={12} />
                                           </button>
                                         </span>
                                       ))}
@@ -1554,7 +1560,7 @@ export default function BidAdminDashboardPage() {
                                         <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
                                           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
                                             <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>View result</button>
-                                            <button type="button" onClick={() => handleArchive(p.id)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
+                                            <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
                                           </div>
                                         </td>
                                       </tr>
@@ -1595,7 +1601,7 @@ export default function BidAdminDashboardPage() {
                                         <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
                                           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
                                             <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>View result</button>
-                                            <button type="button" onClick={() => handleArchive(p.id)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
+                                            <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
                                           </div>
                                         </td>
                                       </tr>
@@ -1785,7 +1791,7 @@ export default function BidAdminDashboardPage() {
                                     <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
                                       <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, boxShadow: "0 2px 8px rgba(255,143,143,0.25)", whiteSpace: "nowrap" }}>View result</button>
                                       <button type="button" onClick={() => openAssignModalForAdmin(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "rgba(79,70,229,0.12)", color: "#4f46e5", border: "1px solid rgba(79,70,229,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Assign Bid Managers or Technical Managers">Assign</button>
-                                      <button type="button" onClick={() => handleArchive(p.id)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
+                                      <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
                                     </div>
                                   </td>
                                 </tr>
@@ -1805,10 +1811,10 @@ export default function BidAdminDashboardPage() {
                     <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "2px solid #E87878" }}>
                       <FolderKanban size={18} color="#E87878" />
                     </span>
-                    {teamsViewFilter === "bid_manager" ? "Bid Managers" : teamsViewFilter === "technical_manager" ? "Technical Managers" : "Projects"}
+                    {teamsViewFilter === "bid_manager" ? "Bid Managers" : teamsViewFilter === "technical_manager" ? "Technical Managers" : teamsViewFilter === "admin" ? "Admin projects" : "Projects"}
                   </h2>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {(["bid_manager", "technical_manager", "project"] as const).map((f) => (
+                    {(["bid_manager", "technical_manager", "project", "admin"] as const).map((f) => (
                       <button
                         key={f}
                         type="button"
@@ -1824,7 +1830,7 @@ export default function BidAdminDashboardPage() {
                           cursor: "pointer",
                         }}
                       >
-                        {f === "bid_manager" ? "Bid Manager" : f === "technical_manager" ? "Technical Manager" : "Project"}
+                        {f === "bid_manager" ? "Bid Manager" : f === "technical_manager" ? "Technical Manager" : f === "admin" ? "Admin" : "Project"}
                       </button>
                     ))}
                   </div>
@@ -1833,7 +1839,7 @@ export default function BidAdminDashboardPage() {
                       <Search size={18} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
                       <input
                         type="text"
-                        placeholder={teamsViewFilter === "project" ? "Search projects..." : "Search by name or email..."}
+                        placeholder={teamsViewFilter === "project" || teamsViewFilter === "admin" ? "Search projects..." : "Search by name or email..."}
                         value={teamSearch}
                         onChange={(e) => setTeamSearch(e.target.value)}
                         style={{
@@ -2142,7 +2148,9 @@ export default function BidAdminDashboardPage() {
                                     )}
                                   </td>
                                   <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    {(tm.assignedProjects || []).length > 0 && (
+                                    {(tm.assignedProjects || []).length === 0 ? (
+                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
+                                    ) : (
                                       <button
                                         type="button"
                                         onClick={() => navigate(`/team-projects/${bidManagers.find((bm) => (bm.technicalManagers || []).some((t) => t.id === tm.id))?.id ?? tm.id}`)}
@@ -2184,6 +2192,7 @@ export default function BidAdminDashboardPage() {
                               <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
                               <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Bid Manager</th>
                               <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Technical Manager(s)</th>
+                              <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 100 }}>Archive</th>
                               <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>Action</th>
                             </tr>
                           </thead>
@@ -2203,7 +2212,12 @@ export default function BidAdminDashboardPage() {
                                 : projectsForFilter;
                               return filtered.map((p) => (
                                 <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                  <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{p.project_name}</td>
+                                  <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: 14, color: "#0f172a" }}>
+                                    {p.project_name}
+                                    {p.user_id === currentUserId && (
+                                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
+                                    )}
+                                  </td>
                                   <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.tender_id ?? "—"}</td>
                                   <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.client_name ?? "—"}</td>
                                   <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
@@ -2217,6 +2231,17 @@ export default function BidAdminDashboardPage() {
                                         ))}
                                       </div>
                                     )}
+                                  </td>
+                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                      title="Archive project"
+                                      style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                                    >
+                                      <Archive size={14} />
+                                      Archive
+                                    </button>
                                   </td>
                                   <td style={{ padding: "14px 16px", textAlign: "right" }}>
                                     <button
@@ -2236,12 +2261,161 @@ export default function BidAdminDashboardPage() {
                     )}
                   </div>
                 )}
+
+                {teamsViewFilter === "admin" && (
+                  <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
+                    {projectsForFilterLoading ? (
+                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
+                        <span style={{ fontSize: 14 }}>Loading…</span>
+                      </div>
+                    ) : (() => {
+                      const adminProjectsList = currentUserId != null ? projectsForFilter.filter((p) => p.user_id === currentUserId) : [];
+                      const bmById: Record<number, string> = {};
+                      bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
+                      const teamSearchLower = (teamSearch || "").toLowerCase();
+                      const filtered = teamSearchLower
+                        ? adminProjectsList.filter((p) =>
+                            (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
+                            (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
+                            (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
+                            (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
+                            (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
+                          )
+                        : adminProjectsList;
+                      if (filtered.length === 0) {
+                        return (
+                          <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
+                            <FolderKanban size={40} style={{ margin: "0 auto 16px", display: "block", opacity: 0.5 }} />
+                            No admin projects. Projects you create (e.g. from Upload & Analyze) appear here.
+                          </div>
+                        );
+                      }
+                      return (
+                        <div style={{ overflowX: "auto" }}>
+                          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
+                            <thead>
+                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
+                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
+                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
+                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
+                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Bid Manager</th>
+                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Technical Manager(s)</th>
+                                <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 100 }}>Archive</th>
+                                <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered.map((p) => (
+                                <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                                  <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: 14, color: "#0f172a" }}>
+                                    {p.project_name}
+                                    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
+                                  </td>
+                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.tender_id ?? "—"}</td>
+                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.client_name ?? "—"}</td>
+                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
+                                  <td style={{ padding: "14px 16px" }}>
+                                    {(p.assigned_users || []).length === 0 ? (
+                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
+                                    ) : (
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                        {(p.assigned_users || []).map((u) => (
+                                          <span key={u.id} style={{ fontSize: 12, padding: "4px 8px", background: "#f1f5f9", borderRadius: 6, color: "#475569" }}>{u.fullName}</span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                      title="Archive project"
+                                      style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                                    >
+                                      <Archive size={14} />
+                                      Archive
+                                    </button>
+                                  </td>
+                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
+                                      style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+                                    >
+                                      View result
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
                 </div>
               </section>
             </>
           )}
         </div>
       </main>
+
+      {createUserSuccessPopup && createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }} onClick={() => setCreateUserSuccessPopup(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 400, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>User created</h3>
+            <p style={{ margin: "0 0 20px", fontSize: 14, color: "#475569" }}>
+              {createUserSuccessPopup.roleLabel} {createUserSuccessPopup.fullName} has been created successfully.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setCreateUserSuccessPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: "pointer" }}>OK</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {createUserErrorPopup && createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }} onClick={() => setCreateUserErrorPopup(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 400, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#b91c1c" }}>Cannot create user</h3>
+            <p style={{ margin: "0 0 20px", fontSize: 14, color: "#475569" }}>{createUserErrorPopup}</p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setCreateUserErrorPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", cursor: "pointer" }}>OK</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {archiveConfirmProjectId != null && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }} onClick={() => { setArchiveConfirmProjectId(null); }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            {archiveConfirmStep === 0 ? (
+              <>
+                <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>⚠️ Archive Project</h3>
+                <p style={{ margin: "0 0 8px", fontSize: 14, color: "#475569" }}>Are you sure you want to move this project to Archived?</p>
+                <p style={{ margin: "0 0 20px", fontSize: 13, color: "#b45309", fontWeight: 600 }}>⚠️ Warning: Unarchiving this project will consume 1 quota.</p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => setArchiveConfirmProjectId(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
+                  <button type="button" onClick={() => setArchiveConfirmStep(1)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", cursor: "pointer" }}>Archive Project</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Archive Project</h3>
+                <p style={{ margin: "0 0 20px", fontSize: 14, color: "#475569" }}>Are you sure you want to move this project to Archived?</p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => { setArchiveConfirmProjectId(null); setArchiveConfirmStep(0); }} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
+                  <button type="button" onClick={() => archiveConfirmProjectId != null && handleArchive(archiveConfirmProjectId)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", cursor: "pointer" }}>Continue</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {assignModalProject && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 24 }} onClick={() => !assignModalSaving && setAssignModalProject(null)}>

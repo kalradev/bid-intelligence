@@ -20,7 +20,7 @@ export default function Navbar() {
           Analysis
         </button>
         <button onClick={() => navigate("/global-intelligence")} className="text-gray-700 hover:text-blue-600 font-medium">
-          Global Intelligence
+          Build Your Stack
         </button>
         <button
           onClick={() => navigate("/")}

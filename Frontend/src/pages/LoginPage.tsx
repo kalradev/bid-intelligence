@@ -68,8 +68,12 @@ export default function LoginPage() {
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
                 }
-                // Navigate to landing page after successful login
-                navigate("/home");
+                // BM/TM created by admin must change password before accessing the app
+                if (data.user?.mustChangePassword) {
+                    navigate("/change-password");
+                } else {
+                    navigate("/home");
+                }
             } else {
                 setError(data.message || data.detail || 'Login failed. Please check your credentials.');
             }

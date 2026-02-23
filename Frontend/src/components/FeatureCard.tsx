@@ -5,9 +5,10 @@ interface FeatureCardProps {
   title: string;
   description: string;
   onClick?: () => void;
+  workInProgress?: boolean;
 }
 
-export default function FeatureCard({ icon, title, description, onClick }: FeatureCardProps) {
+export default function FeatureCard({ icon, title, description, onClick, workInProgress }: FeatureCardProps) {
   // Determine hover color based on title
   const getHoverClass = () => {
     if (title.includes("Smart RFP")) return "hover-blue";
@@ -19,8 +20,8 @@ export default function FeatureCard({ icon, title, description, onClick }: Featu
 
   return (
     <div
-      onClick={onClick}
-      className={`feature-card hoverable-card ${getHoverClass()} cursor-pointer`}
+      onClick={workInProgress ? undefined : onClick}
+      className={`feature-card hoverable-card ${getHoverClass()} ${workInProgress ? "feature-card-disabled" : "cursor-pointer"}`}
     >
       <div className="feature-icon">{icon}</div>
       <h3 className="font-semibold text-lg mb-2 text-gray-900">{title}</h3>

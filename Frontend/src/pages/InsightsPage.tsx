@@ -273,16 +273,23 @@ export default function InsightsPage() {
           {/* ===== FEATURE CARDS ===== */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
             {features.map((feature, idx) => (
-              <FeatureCard
-                key={idx}
-                icon={feature.icon}
-                title={feature.title}
-                description={feature.description}
-                onClick={() => {
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                  navigate(feature.route);
-                }}
-              />
+              <div key={idx} className={feature.workInProgress ? "feature-card-wrap feature-card-wrap-wip" : "feature-card-wrap"}>
+                {feature.workInProgress && (
+                  <div className="work-in-progress-strip" aria-hidden="true">
+                    Work in progress
+                  </div>
+                )}
+                <FeatureCard
+                  icon={feature.icon}
+                  title={feature.title}
+                  description={feature.description}
+                  onClick={feature.workInProgress ? undefined : () => {
+                    window.scrollTo({ top: 0, behavior: "instant" });
+                    navigate(feature.route);
+                  }}
+                  workInProgress={feature.workInProgress}
+                />
+              </div>
             ))}
           </div>
 

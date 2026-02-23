@@ -102,6 +102,8 @@ try:
     from sqlalchemy import text
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"))
+        conn.execute(text("ALTER TABLE org_quota ADD COLUMN IF NOT EXISTS unarchive_quota_used INTEGER DEFAULT 0 NOT NULL"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE"))
         conn.commit()
     logger.info("✅ projects.archived column ready")
 except Exception as e:

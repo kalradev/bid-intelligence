@@ -15,15 +15,16 @@ export const features = [
   },
   {
     icon: <Globe className="w-8 h-8 text-purple-500" />,
-    title: "Global Intelligence",
-    description: "Real-time product research using global internet search",
+    title: "Build Your Stack",
+    description: "Product names and selected OEMs saved from Product Mapping in one place",
     route: "/global-intelligence"
   },
   {
     icon: <TrendingUp className="w-8 h-8 text-orange-500" />,
     title: "Cost Estimation",
     description: "AI-powered pricing intelligence and cost optimization",
-    route: "/cost-estimation"
+    route: "/cost-estimation",
+    workInProgress: true,
   }
 ];
 

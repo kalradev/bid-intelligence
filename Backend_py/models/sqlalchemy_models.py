@@ -24,6 +24,7 @@ class User(Base):
     password = Column(Text, nullable=False)
     role = Column(String(50), default="bid_manager")  # bid_admin | bid_manager | technical_manager
     parent_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    must_change_password = Column(Boolean, default=False)  # True for BM/TM created by admin; must change on first login
     created_at = Column(DateTime(timezone=False), server_default=func.now())
     updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
@@ -310,12 +311,14 @@ class Product(Base):
 
 
 class OrgQuota(Base):
-    """Organization-wide project quota. Single row: base 10 + purchased."""
+    """Organization-wide project quota. Single row: base 10 + purchased.
+    unarchive_quota_used: extra quota consumed by unarchiving (each unarchive uses 1; archiving does not free quota)."""
     __tablename__ = "org_quota"
 
     id = Column(Integer, primary_key=True, index=True)
     base_limit = Column(Integer, nullable=False, default=10)
     purchased_quota = Column(Integer, nullable=False, default=0)
+    unarchive_quota_used = Column(Integer, nullable=False, default=0)  # incremented on each unarchive so 1 quota used per unarchive
     updated_at = Column(DateTime(timezone=False), server_default=func.now(), onupdate=func.now())
 
 

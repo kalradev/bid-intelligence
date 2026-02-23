@@ -1,6 +1,7 @@
 import { CheckCircle, Globe, Package } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "../config";
 import { fetchProjectAnalysis, updateAnalysisData } from "../utils/documentAnalysis";
 
 export default function ProductMappingPage() {
@@ -9,6 +10,9 @@ export default function ProductMappingPage() {
   const [animate, setAnimate] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [projectName, setProjectName] = useState<string>("");
+  /** Selected OEM per product index (string key). Empty string = none/custom. */
+  const [oemSelections, setOemSelections] = useState<Record<string, string>>({});
+  const [savingSelections, setSavingSelections] = useState(false);
 
   // Get project name and fetch fresh data from API
   useEffect(() => {
@@ -47,68 +51,28 @@ export default function ProductMappingPage() {
         
         // If we have a project name, fetch fresh data from API
         if (projName) {
-          console.log(`📡 Fetching fresh product mapping data for project: ${projName}`);
           try {
             const token = localStorage.getItem('token');
             if (token) {
               const result = await fetchProjectAnalysis(projName, docId, null);
               updateAnalysisData(result, projName);
               setAnalysisData(result);
-              
-              // Debug: Log product mapping data
-              const productMapping = result?.data?.departmentalSummaries?.productMapping;
-              if (productMapping) {
-                const productCount = productMapping.miiProductStatus?.length || 0;
-                console.log("📦 Product Mapping Data Found (from API):", {
-                  totalItems: productMapping.totalItems,
-                  productCount: productCount,
-                  products: productMapping.miiProductStatus?.slice(0, 5) // First 5 products
-                });
-              } else {
-                console.warn("⚠️ No productMapping data in API response!");
-                console.log("Available sections:", Object.keys(result?.data?.departmentalSummaries || {}));
-              }
-            } else {
-              console.warn("No token found, using localStorage data only");
-              if (analysisDataLocal) {
-                const parsed = JSON.parse(analysisDataLocal);
-                setAnalysisData(parsed);
-              }
+            } else if (analysisDataLocal) {
+              const parsed = JSON.parse(analysisDataLocal);
+              setAnalysisData(parsed);
             }
-          } catch (error: any) {
-            console.error("Error fetching project analysis:", error);
-            // Fallback to localStorage if API fails
+          } catch (_) {
+            // Backend unreachable: show saved data so the page still works
             if (analysisDataLocal) {
               const parsed = JSON.parse(analysisDataLocal);
               setAnalysisData(parsed);
-              console.warn("Using localStorage data as fallback");
             }
           }
-        } else {
-          // No project name, use localStorage only
-          if (analysisDataLocal) {
-            const parsed = JSON.parse(analysisDataLocal);
-            setAnalysisData(parsed);
-            
-            // Debug: Log product mapping data
-            const productMapping = parsed?.data?.departmentalSummaries?.productMapping;
-            if (productMapping) {
-              const productCount = productMapping.miiProductStatus?.length || 0;
-              console.log("📦 Product Mapping Data Found (localStorage):", {
-                totalItems: productMapping.totalItems,
-                productCount: productCount,
-                products: productMapping.miiProductStatus?.slice(0, 3)
-              });
-            } else {
-              console.warn("⚠️ No productMapping data in analysisData!");
-              console.log("Available sections:", Object.keys(parsed?.data?.departmentalSummaries || {}));
-            }
-          } else {
-            console.warn("⚠️ No analysisData in localStorage and no project name!");
-          }
+        } else if (analysisDataLocal) {
+          const parsed = JSON.parse(analysisDataLocal);
+          setAnalysisData(parsed);
         }
-      } catch (error) {
-        console.error("Error loading product mapping data:", error);
+      } catch (_) {
       } finally {
         setIsLoading(false);
         setTimeout(() => setAnimate(true), 60);
@@ -117,6 +81,95 @@ export default function ProductMappingPage() {
     
     loadData();
   }, []);
+
+  // Hydrate OEM selections from API when analysis data is loaded
+  useEffect(() => {
+    const pm = analysisData?.data?.departmentalSummaries?.productMapping;
+    if (pm?.oemSelections && typeof pm.oemSelections === "object") {
+      setOemSelections(pm.oemSelections);
+    }
+  }, [analysisData]);
+
+  const saveOemSelections = useCallback(async (nextSelections: Record<string, string>) => {
+    const proj = projectName || analysisData?.data?.projectName;
+    let docId = analysisData?.data?.metadata?.documentId;
+    if (docId == null) {
+      try {
+        const currentDoc = localStorage.getItem("currentDocument");
+        if (currentDoc) {
+          const doc = JSON.parse(currentDoc);
+          docId = doc.documentId;
+        }
+      } catch (_) {}
+    }
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const updateLocal = () => {
+      if (analysisData?.data?.departmentalSummaries?.productMapping) {
+        const copy = { ...analysisData };
+        if (!copy.data.departmentalSummaries.productMapping) copy.data.departmentalSummaries.productMapping = {};
+        copy.data.departmentalSummaries.productMapping.oemSelections = nextSelections;
+        setAnalysisData(copy);
+        localStorage.setItem("analysisData", JSON.stringify(copy));
+      }
+    };
+
+    if (!proj || docId == null) {
+      setOemSelections(nextSelections);
+      updateLocal();
+      return;
+    }
+
+    setSavingSelections(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/rfp/save-product-oem-selections`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          project_name: proj,
+          document_id: docId,
+          oem_selections: nextSelections,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setOemSelections(nextSelections);
+        updateLocal();
+      } else {
+        setOemSelections(nextSelections);
+        updateLocal();
+        const { toast } = await import("react-hot-toast");
+        toast.error(data.detail || "Could not save to database. Selections stored locally.");
+      }
+    } catch (_) {
+      setOemSelections(nextSelections);
+      updateLocal();
+      const { toast } = await import("react-hot-toast");
+      toast.error("Backend not reachable. Start your backend server to save to the database. Selections are kept locally until then.");
+    } finally {
+      setSavingSelections(false);
+    }
+  }, [projectName, analysisData]);
+
+  const handleSelectOem = useCallback((productIndex: number, oemName: string) => {
+    const key = String(productIndex);
+    setOemSelections((prev) => {
+      const next = { ...prev };
+      next[key] = (prev[key] === oemName ? "" : oemName);
+      saveOemSelections(next);
+      return next;
+    });
+  }, [saveOemSelections]);
+
+  const handleSelectedOemInput = useCallback((productIndex: number, value: string) => {
+    const key = String(productIndex);
+    setOemSelections((prev) => {
+      const next = { ...prev, [key]: value };
+      saveOemSelections(next);
+      return next;
+    });
+  }, [saveOemSelections]);
 
   if (isLoading) {
     return (
@@ -386,6 +439,7 @@ export default function ProductMappingPage() {
                     <th style={{ padding: 10, textAlign: "left" }}>OEM</th>
                     <th style={{ padding: 10, textAlign: "left" }}>Model</th>
                     <th style={{ padding: 10, textAlign: "left" }}>MII Status</th>
+                    <th style={{ padding: 10, textAlign: "left" }}>Selected OEM</th>
                   </tr>
                 </thead>
 
@@ -418,54 +472,65 @@ export default function ProductMappingPage() {
                           <td style={{ padding: 10, fontWeight: 500 }}>{item.productName || "N/A"}</td>
                           <td style={{ padding: 10 }}>{item.category || "Other"}</td>
                           
-                          {/* OEM Column - Show multiple recommendations if available */}
+                          {/* OEM Column - Checkbox per OEM, one selection per product */}
                           <td style={{ padding: 10 }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                {recommendations.map((rec: any, i: number) => (
-                                  <div 
-                                    key={i} 
-                                    style={{ 
-                                      padding: "6px 8px",
-                                      background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "rgba(107, 114, 128, 0.05)",
-                                      borderRadius: "6px",
-                                      borderLeft: `3px solid ${rec.miiStatus === "Indian OEM" ? "#10b981" : "#3b82f6"}`,
-                                      fontSize: "13px"
-                                    }}
-                                  >
-                                    <div style={{ 
-                                      fontWeight: 600, 
-                                      color: "#111827",
-                                      marginBottom: "2px"
-                                    }}>
-                                      {i + 1}. {rec.oem}
-                                      {i === 0 && (
-                                        <span style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          background: "#3b82f6",
-                                          color: "white",
-                                          padding: "2px 6px",
-                                          borderRadius: "4px",
-                                          fontWeight: 700
-                                        }}>
-                                          BEST
+                                {recommendations.map((rec: any, i: number) => {
+                                  const selected = (oemSelections[String(index)] || "").trim() === (rec.oem || "").trim();
+                                  return (
+                                    <div 
+                                      key={i} 
+                                      style={{ 
+                                        padding: "6px 8px",
+                                        background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "rgba(107, 114, 128, 0.05)",
+                                        borderRadius: "6px",
+                                        borderLeft: `3px solid ${rec.miiStatus === "Indian OEM" ? "#10b981" : "#3b82f6"}`,
+                                        fontSize: "13px",
+                                        display: "flex",
+                                        alignItems: "flex-start",
+                                        gap: "8px"
+                                      }}
+                                    >
+                                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={selected}
+                                          onChange={() => handleSelectOem(index, rec.oem || "")}
+                                          style={{ width: 18, height: 18, cursor: "pointer" }}
+                                        />
+                                        <span style={{ fontWeight: 600, color: "#111827", marginBottom: "2px" }}>
+                                          {i + 1}. {rec.oem}
+                                          {i === 0 && (
+                                            <span style={{
+                                              marginLeft: "6px",
+                                              fontSize: "10px",
+                                              background: "#3b82f6",
+                                              color: "white",
+                                              padding: "2px 6px",
+                                              borderRadius: "4px",
+                                              fontWeight: 700
+                                            }}>
+                                              BEST
+                                            </span>
+                                          )}
                                         </span>
-                                      )}
+                                      </label>
+                                      <div style={{ 
+                                        fontSize: "11px", 
+                                        color: "#6b7280",
+                                        display: "flex",
+                                        gap: "8px",
+                                        alignItems: "center",
+                                        flex: 1
+                                      }}>
+                                        <span>{rec.priceRange || "Mid-Range"}</span>
+                                        <span>•</span>
+                                        <span>Match: {rec.matchScore || 90}%</span>
+                                      </div>
                                     </div>
-                                    <div style={{ 
-                                      fontSize: "11px", 
-                                      color: "#6b7280",
-                                      display: "flex",
-                                      gap: "8px",
-                                      alignItems: "center"
-                                    }}>
-                                      <span>{rec.priceRange || "Mid-Range"}</span>
-                                      <span>•</span>
-                                      <span>Match: {rec.matchScore || 90}%</span>
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <span style={{ color: oemDisplay !== "N/A" ? "#111827" : "#9ca3af" }}>
@@ -561,12 +626,29 @@ export default function ProductMappingPage() {
                               </span>
                             )}
                           </td>
+                          {/* Selected OEM - editable; shows selection or allows typing custom */}
+                          <td style={{ padding: 10 }}>
+                            <input
+                              type="text"
+                              value={oemSelections[String(index)] ?? ""}
+                              onChange={(e) => handleSelectedOemInput(index, e.target.value)}
+                              placeholder="Type OEM or select above"
+                              style={{
+                                width: "100%",
+                                minWidth: 140,
+                                padding: "8px 10px",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: 6,
+                                fontSize: 13,
+                              }}
+                            />
+                          </td>
                         </tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
+                      <td colSpan={6} style={{ padding: 40, textAlign: "center", color: "#6b7280" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
                           <p style={{ fontSize: "16px", fontWeight: 600 }}>No product mapping data available.</p>
                           <p style={{ fontSize: "14px" }}>

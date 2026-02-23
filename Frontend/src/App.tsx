@@ -20,14 +20,30 @@ import Technical from "./pages/Technical.jsx";
 import UploadPage from "./pages/UploadPage";
 
 import AccountPage from "./pages/AccountPage";
+import ChangePasswordRequiredPage from "./pages/ChangePasswordRequiredPage";
 import DocumentViewer from "./pages/DocumentViewer";
 
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 
 export default function App() {
   const location = useLocation();
-  const currentPath = location.pathname.replace(/\/$/, "");
+  const currentPath = location.pathname.replace(/\/$/, "") || "/";
+
+  // Force BM/TM to change password before accessing any other page
+  const token = localStorage.getItem("token");
+  let user: { mustChangePassword?: boolean } | null = null;
+  try {
+    const userStr = localStorage.getItem("user");
+    if (userStr) user = JSON.parse(userStr);
+  } catch {
+    // ignore
+  }
+  const mustChangePaths = ["/", "/login", "/change-password"];
+  if (token && user?.mustChangePassword && !mustChangePaths.includes(currentPath)) {
+    return <Navigate to="/change-password" replace />;
+  }
+
 
   // Pages that should NOT have centered container (full width)
   const fullWidthPages = [
@@ -57,6 +73,7 @@ export default function App() {
           {/* Login is now the default page */}
           <Route path="/" element={<LoginPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/change-password" element={<ChangePasswordRequiredPage />} />
 
           {/* Landing page moved to /home (after login) */}
           <Route path="/home" element={<LandingPage />} />

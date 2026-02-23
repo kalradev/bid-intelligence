@@ -113,6 +113,7 @@ async def get_current_user(
             "email": user.email,
             "role": user.role or "bid_manager",
             "parentId": getattr(user, "parent_id", None),
+            "mustChangePassword": getattr(user, "must_change_password", False),
         }
     except HTTPException:
         raise
@@ -146,6 +147,7 @@ async def get_current_user_optional(
             "email": user.email,
             "role": user.role or "bid_manager",
             "parentId": getattr(user, "parent_id", None),
+            "mustChangePassword": getattr(user, "must_change_password", False),
         }
     except HTTPException:
         raise
@@ -294,6 +296,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
                 "email": user.email,
                 "role": user.role or "bid_manager",
                 "parentId": getattr(user, "parent_id", None),
+                "mustChangePassword": getattr(user, "must_change_password", False),
             }
         }
     except HTTPException:
@@ -337,9 +340,10 @@ async def change_password(
     if not verify_password(request.currentPassword, user.password):
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     user.password = hash_password(request.newPassword)
+    user.must_change_password = False
     db.commit()
     logger.info(f"Password changed for user {user.email}")
-    return {"success": True, "message": "Password changed successfully"}
+    return {"success": True, "message": "Password changed successfully", "mustChangePassword": False}
 
 
 @router.post("/create-user")
@@ -389,6 +393,7 @@ async def create_user(
         password=hashed,
         role=new_role,
         parent_id=parent_id,
+        must_change_password=True,
     )
     db.add(new_user)
     db.commit()

@@ -390,6 +390,39 @@ button {
   transform: scale(1.25) rotate(4deg);
 }
 
+/* Work in progress: strip outside card, card disabled */
+.feature-card-wrap {
+  position: relative;
+}
+.work-in-progress-strip {
+  position: absolute;
+  top: 36px;
+  right: 14px;
+  z-index: 2;
+  width: 140px;
+  padding: 6px 8px;
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: translate(15%, 0) rotate(45deg);
+  transform-origin: center;
+  pointer-events: none;
+}
+.feature-card-disabled {
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+.feature-card-disabled:hover {
+  transform: none !important;
+}
+.feature-card-disabled:hover .feature-icon {
+  transform: none !important;
+}
+
 /* ====== Department Card Hover Effect ====== */
 .dept-card {
   background: #ffffff;

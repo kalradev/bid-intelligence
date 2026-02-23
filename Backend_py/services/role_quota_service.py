@@ -41,18 +41,33 @@ def get_org_quota_limit(db: Optional[Session] = None) -> int:
 
 
 def get_org_project_count(db: Optional[Session] = None) -> int:
-    """Count all non-archived projects in the org (for quota used). Treats NULL archived as active."""
+    """Quota 'used' = count(ALL projects) + unarchive_quota_used.
+    Archiving does NOT reduce used (quota left must not increase). Unarchiving increases used by 1."""
     from sqlalchemy import text
     own_session = db is None
     if own_session:
         db = get_db_session()
     try:
-        result = db.execute(text("SELECT COUNT(*) FROM projects WHERE COALESCE(archived, false) = false"))
+        # Count ALL projects (archived + active) so archiving does not change this count
+        result = db.execute(text("SELECT COUNT(*) FROM projects"))
         row = result.fetchone()
-        return int(row[0]) if row else 0
+        total_projects = int(row[0]) if row else 0
+        # unarchive_quota_used: extra slot consumed each time a project is unarchived
+        try:
+            extra_row = db.execute(text("SELECT COALESCE(unarchive_quota_used, 0) FROM org_quota WHERE id = 1")).fetchone()
+            extra = int(extra_row[0]) if extra_row else 0
+        except Exception:
+            extra = 0
+        return total_projects + extra
     except Exception as e:
-        logger.warning(f"get_org_project_count: {e}, using ORM")
-        return db.query(Project).filter(Project.archived.is_(False)).count()
+        logger.warning(f"get_org_project_count: {e}, using ORM fallback")
+        total = db.query(Project).count()
+        try:
+            extra_row = db.execute(text("SELECT COALESCE(unarchive_quota_used, 0) FROM org_quota WHERE id = 1")).fetchone()
+            extra = int(extra_row[0]) if extra_row else 0
+        except Exception:
+            extra = 0
+        return total + extra
     finally:
         if own_session:
             db.close()
