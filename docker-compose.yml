@@ -1,0 +1,60 @@
+# Bid Intelligence - Run frontend and backend via Docker
+# Usage: docker-compose up --build
+# Frontend: http://localhost:80   Backend API: http://localhost:8000
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bid-intelligence-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: Bid2
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./Backend_py
+      dockerfile: Dockerfile
+    container_name: bid-intelligence-backend
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: Bid2
+      CORS_ORIGINS: "*"
+      JWT_SECRET: change-me-in-production
+      # Add Backend_py/.env (copy from .env.example) for OPENAI_API_KEY, GEMINI_API_KEY, JWT_SECRET, etc.
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_PORT: "8000"
+    container_name: bid-intelligence-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_uploads:
