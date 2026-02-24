@@ -30,7 +30,7 @@
 
    OR using uvicorn directly:
    ```bash
-   uvicorn main:app --host 0.0.0.0 --port 3000 --reload
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
 ## Verify Backend is Running
@@ -41,19 +41,19 @@ Once started, you should see:
    - /api/rfp
    - /api/reference
    - /api/auth (login, register, me, logout)
-INFO:     Uvicorn running on http://0.0.0.0:3000
+INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
 **Test the connection:**
-- Open browser: http://localhost:3000/
-- Health check: http://localhost:3000/health
+- Open browser: http://localhost:8000/
+- Health check: http://localhost:8000/health
 
 ## Troubleshooting
 
-### Port 3000 Already in Use
+### Port 8000 Already in Use
 If you see "Address already in use", either:
-1. Stop the process using port 3000
-2. Change the port in `Backend_py/core/config.py` (PORT setting)
+1. Stop the process using port 8000
+2. Change the port in `Backend_py/.env` (PORT=8000) and set `VITE_API_PORT` in Frontend `.env` to match
 
 ### Database Connection Error
 Make sure:
@@ -71,7 +71,7 @@ pip install -r requirements.txt
 
 ## Default Configuration
 
-- **Port:** 3000
+- **Port:** 8000 (must match frontend; set PORT in .env to override)
 - **Host:** 0.0.0.0 (accessible from all network interfaces)
 - **Database:** PostgreSQL on localhost:5432
 - **Database Name:** "Bid " (with space)
