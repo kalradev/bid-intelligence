@@ -58,8 +58,8 @@ class ProjectService:
 
             logger.info(f"📁 Adding to EXISTING PROJECT: {project_name} (ID: {project_id}, Type: {update_type})")
 
-        # 2. Extract structured data using AI
-        ai_result = await generate_departmental_summaries(extracted_text, file_name)
+        # 2. Extract structured data using AI (pass project_id for learning_feedback injection)
+        ai_result = await generate_departmental_summaries(extracted_text, file_name, project_id=project_id)
         new_summaries = ai_result['summaries']
         
         # Debug: Log product mapping extraction

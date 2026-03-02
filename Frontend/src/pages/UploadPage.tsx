@@ -205,8 +205,8 @@ export default function UploadPage() {
     );
 
     const checkProjectStatus = async (nameToCheck?: string) => {
-        const name = nameToCheck || projectName;
-        if (!name.trim()) {
+        const name = (nameToCheck ?? projectName).trim();
+        if (!name) {
             toast.error("Please enter a project name first");
             return;
         }
@@ -268,12 +268,13 @@ export default function UploadPage() {
         setTenderId("");
         setClientName("");
 
-        setProjectName(selectedName);
+        const trimmed = selectedName.trim();
+        setProjectName(trimmed);
         // Don't set projectSearchTerm - it should only be used for search filtering
         setIsDropdownOpen(false);
 
-        console.log("✅ Project changed to:", selectedName);
-        checkProjectStatus(selectedName);
+        console.log("✅ Project changed to:", trimmed);
+        checkProjectStatus(trimmed);
     };
 
     // Preselected project from TM dashboard "Upload docs" — run once when landing with state

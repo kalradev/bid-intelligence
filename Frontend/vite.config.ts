@@ -16,7 +16,7 @@ export default defineConfig({
     proxy: {
       // Proxy /api to the Python backend. Set VITE_PROXY_TARGET in .env for network IP (e.g. http://192.168.1.5:3000)
       '/api': {
-        target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:3000',
+        target: process.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
     },

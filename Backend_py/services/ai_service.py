@@ -37,14 +37,49 @@ ELIGIBILITY_SECOND_PASS_THRESHOLD = 15
 def estimate_tokens(text: str) -> int:
     return len(text) // 4
 
-async def generate_departmental_summaries(document_text: str, file_name: str) -> Dict[str, Any]:
+
+def get_learning_feedback_prompt(project_id: Optional[int] = None) -> str:
+    """Fetch learning_feedback rows (project-scoped and org-wide) and format for prompt injection."""
+    try:
+        from core.sqlalchemy_db import get_db_session
+        from models.sqlalchemy_models import LearningFeedback
+        db = get_db_session()
+        try:
+            query = db.query(LearningFeedback).order_by(LearningFeedback.created_at.desc())
+            if project_id is not None:
+                query = query.filter(
+                    (LearningFeedback.project_id == project_id) | (LearningFeedback.project_id.is_(None))
+                )
+            else:
+                query = query.filter(LearningFeedback.project_id.is_(None))
+            rows = query.limit(50).all()
+            if not rows:
+                return ""
+            lines = []
+            for r in rows:
+                section = r.section_or_key or "general"
+                user_val = (r.user_value or "").strip()[:500]
+                tool_val = (r.tool_value or "").strip()[:200]
+                if user_val:
+                    lines.append(f"- For '{section}': prefer output like \"{user_val}\"" + (f" (tool previously had: \"{tool_val}\")" if tool_val else ""))
+            if not lines:
+                return ""
+            return "\n\nPAST USER CORRECTIONS (align your extraction with these when relevant):\n" + "\n".join(lines)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"Could not load learning_feedback: {e}")
+        return ""
+
+
+async def generate_departmental_summaries(document_text: str, file_name: str, project_id: Optional[int] = None) -> Dict[str, Any]:
     logger.info(f"🔍 Starting analysis for: {file_name}")
     logger.info(f"   Document length: {len(document_text)} characters")
     if not client:
         raise Exception("OpenAI client not initialized. Please check your OPENAI_API_KEY.")
     
     system_prompt = get_system_prompt()
-    user_prompt = build_user_prompt(document_text, file_name)
+    user_prompt = build_user_prompt(document_text, file_name, project_id)
     
     estimated_tokens = estimate_tokens(document_text)
     document_too_large = estimated_tokens > 25000
@@ -52,7 +87,7 @@ async def generate_departmental_summaries(document_text: str, file_name: str) ->
     try:
         if document_too_large:
             logger.info(f"⚡ Large document ({estimated_tokens} tokens), using OpenAI chunking strategy...")
-            result = await process_large_document(document_text, file_name)
+            result = await process_large_document(document_text, file_name, project_id)
         else:
             logger.info(f"🤖 Generating summaries with OpenAI ({OPENAI_MODEL})...")
             result = await generate_with_openai_async(system_prompt, user_prompt)
@@ -498,9 +533,10 @@ For bidManagement.riskFactors.certifications: Extract ALL mentions of:
 
 - actionItems: Provide 15-25 specific actionable items for bid preparation with deadlines and owners"""
 
-def build_user_prompt(document_text: str, file_name: str) -> str:
+def build_user_prompt(document_text: str, file_name: str, project_id: Optional[int] = None) -> str:
     indian_oems = ", ".join(get_all_indian_oems())
     global_oems = ", ".join(get_all_global_oems())
+    learning_block = get_learning_feedback_prompt(project_id)
     
     return f"""You are analyzing an RFP/tender document. Extract information into the JSON schema below.
 
@@ -509,6 +545,7 @@ Document: {file_name}
 === DOCUMENT CONTENT ===
 {document_text}
 === END DOCUMENT ===
+{learning_block}
 
 EXTRACTION RULES:
 🚨 CRITICAL VALIDATION RULE: For eligibility criteria (preQualificationCriteria), you MUST extract ONLY what is EXPLICITLY written in the document. Before adding any criterion to preQualificationCriteria:
@@ -898,7 +935,7 @@ Return ONLY valid JSON with this structure:
 }}
 """
 
-async def process_large_document(document_text: str, file_name: str) -> Dict[str, Any]:
+async def process_large_document(document_text: str, file_name: str, project_id: Optional[int] = None) -> Dict[str, Any]:
     chunk_size = CHUNK_SIZE_OPENAI
     chunks = [document_text[i:i + chunk_size] for i in range(0, len(document_text), chunk_size)]
     
@@ -915,7 +952,7 @@ async def process_large_document(document_text: str, file_name: str) -> Dict[str
             while retry_count <= 2 and not success:
                 try:
                     system_prompt = get_system_prompt() # Or specialized chunk prompt if needed
-                    user_prompt = build_user_prompt(chunk, f"{file_name} (Part {i + 1}/{len(chunks)})")
+                    user_prompt = build_user_prompt(chunk, f"{file_name} (Part {i + 1}/{len(chunks)})", project_id)
                     
                     result = await generate_with_openai_async(system_prompt, user_prompt)
                     chunk_results.append(result["summaries"])

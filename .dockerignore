@@ -1,0 +1,39 @@
+# Dependencies
+Frontend/node_modules
+Backend_py/venv
+Backend_py/__pycache__
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+
+# Env and secrets (set at runtime)
+Backend_py/.env
+.env
+.env.*
+!.env.example
+
+# Build / IDE
+.git
+.gitignore
+.cursor
+.vscode
+*.md
+!README.md
+
+# Frontend build artifacts (we build in Docker)
+Frontend/dist
+
+# Backend uploads/data (runtime only)
+Backend_py/uploads/*
+Backend_py/data/*
+!Backend_py/uploads/.gitkeep
+!Backend_py/data/.gitkeep
+
+# Logs and temp
+*.log
+*.tmp
+.DS_Store
+
+# Tests and scripts (optional to exclude)
+# Backend_py/scripts/
+# **/test_*

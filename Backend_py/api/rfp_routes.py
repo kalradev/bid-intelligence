@@ -1,11 +1,12 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Body, Request, Form, Depends, Query
 from fastapi.responses import FileResponse, JSONResponse
+import re
 import time
 import os
 import hashlib
 import logging
 import asyncio
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import aiofiles
 import httpx
@@ -459,6 +460,136 @@ async def unarchive_project(
     }
 
 
+@router.post("/projects/{project_id}/final-bid")
+async def upload_final_bid(
+    project_id: int,
+    file: UploadFile = File(...),
+    description: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload final bid document for a project. Bid Admin, Bid Manager, Technical Manager only. Runs comparison and saves results."""
+    from services.role_quota_service import get_visible_project_ids
+    from models.sqlalchemy_models import FinalBidUpload
+    from core.sqlalchemy_db import get_db_session
+    from services.comparison_service import run_comparison_sync
+
+    visible_ids = get_visible_project_ids(current_user)
+    if project_id not in visible_ids:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".pdf", ".docx", ".doc"):
+        raise HTTPException(status_code=400, detail="Only PDF and DOC/DOCX are allowed")
+
+    final_bids_dir = os.path.join(settings.UPLOAD_DIR, "final_bids", str(project_id))
+    os.makedirs(final_bids_dir, exist_ok=True)
+    content = await file.read()
+    file_hash = hashlib.sha256(content).hexdigest()[:16]
+    safe_name = f"{int(time.time())}_{file_hash}{ext}"
+    file_path = os.path.join(final_bids_dir, safe_name)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
+
+    db = get_db_session()
+    try:
+        upload_row = FinalBidUpload(
+            project_id=project_id,
+            user_id=current_user["id"],
+            file_name=file.filename,
+            file_path=os.path.normpath(file_path),
+            description=description.strip() if description and description.strip() else None,
+            status="pending",
+        )
+        db.add(upload_row)
+        db.commit()
+        db.refresh(upload_row)
+        final_bid_upload_id = upload_row.id
+    finally:
+        db.close()
+
+    comparison_result_id = run_comparison_sync(project_id, final_bid_upload_id)
+    return JSONResponse(
+        status_code=201,
+        content={
+            "success": True,
+            "message": "Final bid uploaded and comparison complete.",
+            "final_bid_upload_id": final_bid_upload_id,
+            "comparison_result_id": comparison_result_id,
+        },
+    )
+
+
+@router.get("/projects/{project_id}/comparison-results")
+async def list_comparison_results(
+    project_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """List comparison results for a project (tool vs final bid)."""
+    from services.role_quota_service import get_visible_project_ids
+    from models.sqlalchemy_models import ComparisonResult
+
+    visible_ids = get_visible_project_ids(current_user)
+    if project_id not in visible_ids:
+        raise HTTPException(status_code=404, detail="Project not found or access denied")
+    db = get_db_session()
+    try:
+        rows = (
+            db.query(ComparisonResult)
+            .filter(ComparisonResult.project_id == project_id)
+            .order_by(ComparisonResult.created_at.desc())
+            .all()
+        )
+        return {
+            "success": True,
+            "results": [
+                {
+                    "id": r.id,
+                    "project_id": r.project_id,
+                    "tool_document_id": r.tool_document_id,
+                    "final_bid_upload_id": r.final_bid_upload_id,
+                    "comparison_output": r.comparison_output,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                }
+                for r in rows
+            ],
+        }
+    finally:
+        db.close()
+
+
+@router.get("/comparison-results/{comparison_result_id}")
+async def get_comparison_result(
+    comparison_result_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Get one comparison result by id (if visible to user)."""
+    from services.role_quota_service import get_visible_project_ids
+    from models.sqlalchemy_models import ComparisonResult
+
+    db = get_db_session()
+    try:
+        r = db.query(ComparisonResult).filter(ComparisonResult.id == comparison_result_id).first()
+        if not r:
+            raise HTTPException(status_code=404, detail="Comparison result not found")
+        visible_ids = get_visible_project_ids(current_user)
+        if r.project_id not in visible_ids:
+            raise HTTPException(status_code=404, detail="Access denied")
+        return {
+            "success": True,
+            "result": {
+                "id": r.id,
+                "project_id": r.project_id,
+                "tool_document_id": r.tool_document_id,
+                "final_bid_upload_id": r.final_bid_upload_id,
+                "comparison_output": r.comparison_output,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            },
+        }
+    finally:
+        db.close()
+
+
 def _get_org_quota_after_unarchive():
     """Return (used, limit, left). used = count(all projects) + unarchive_quota_used."""
     from core.sqlalchemy_db import engine
@@ -555,13 +686,16 @@ async def get_assignable_users(
     return {"success": True, "users": users}
 
 
-@router.get("/project-assignments/{project_name}")
+@router.get("/project-assignments/{project_name:path}")
 async def get_project_assignments(
     project_name: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get list of users assigned to this project. Only BM/Admin, and only for visible projects."""
+    project_name = (project_name or "").strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     if not _can_manage_assignments(current_user):
         raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can view project assignments")
     project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
@@ -577,7 +711,7 @@ async def get_project_assignments(
     return {"success": True, "projectName": project_name, "assignedUserIds": assigned_ids, "assignedUsers": assigned_users}
 
 
-@router.post("/project-assignments/{project_name}")
+@router.post("/project-assignments/{project_name:path}")
 async def set_project_assignments(
     project_name: str,
     body: dict = Body(...),
@@ -585,6 +719,9 @@ async def set_project_assignments(
     db: Session = Depends(get_db),
 ):
     """Set which users (Bid Managers or Technical Managers) are assigned to this project. Only BM/Admin."""
+    project_name = (project_name or "").strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     if not _can_manage_assignments(current_user):
         raise HTTPException(status_code=403, detail="Only Bid Manager or Admin can assign users to projects")
     project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
@@ -625,13 +762,21 @@ async def set_project_assignments(
     return {"success": True, "projectName": project_name, "assignedUserIds": verified}
 
 
-@router.get("/project-status/{project_name}")
+@router.get("/project-status/{project_name:path}")
 async def get_project_status(project_name: str, current_user: dict = Depends(get_current_user)):
     from core.sqlalchemy_db import get_db_session
     from models.sqlalchemy_models import ProjectDocument
 
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
+
     try:
-        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+        for name in fallback_names:
+            if project:
+                break
+            project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
         if project:
             # Also check if it has a base RFP
             db = get_db_session()
@@ -659,13 +804,59 @@ async def get_project_status(project_name: str, current_user: dict = Depends(get
         logger.error(f"Error checking project status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/get-project-analysis/{project_name}")
+def _resolve_project_name_from_path(project_name: str) -> Tuple[str, List[str]]:
+    """
+    Resolve project name from path: optionally drop trailing /YYYY and support leading space.
+    Normalizes 'GEM 2025\\B' or 'GEM 2025' -> 'GEM/2025' so malformed names still resolve.
+    Strips trailing slashes so ' GEM/2025/' matches DB name 'GEM/2025'.
+    Returns (primary_name, list of fallback names to try). e.g. ' GEM/2025/' -> ('GEM', [' GEM', ' GEM/2025', 'GEM/2025']).
+    """
+    raw = (project_name or "").strip().rstrip("/")
+    if not raw:
+        return ("", [])
+    # Normalize "GEM 2025\B" or "GEM 2025" -> "GEM/2025" (space+year or trailing \B corruption)
+    normalized = re.sub(r"\\[Bb]?\s*$", "", raw)
+    normalized = re.sub(r"\s+(\d{4})\s*$", r"/\1", normalized)
+    if normalized != raw:
+        raw = normalized.strip().rstrip("/")
+    path_raw = (project_name or "").rstrip().rstrip("/")
+    if path_raw != raw:
+        path_raw = raw
+    fallbacks: List[str] = []
+    # Try exact path client sent (e.g. " GEM/2025") in case DB stores it that way
+    exact_from_client = (project_name or "").rstrip().rstrip("/")
+    if exact_from_client and exact_from_client not in fallbacks:
+        fallbacks.append(exact_from_client)
+    if "/" in path_raw:
+        base, suffix = path_raw.rsplit("/", 1)
+        suffix = (suffix or "").strip()
+        if suffix.isdigit() and len(suffix) == 4:
+            base_stripped = base.strip()
+            primary = base_stripped if base_stripped else raw
+            if base != base_stripped:
+                fallbacks.append(base)  # e.g. " GEM"
+            # If project is stored with year in name (e.g. " GEM/2025"), try those
+            if path_raw.strip() != primary:
+                fallbacks.append(path_raw.strip())  # "GEM/2025"
+            if path_raw != path_raw.strip():
+                fallbacks.append(path_raw.rstrip())  # " GEM/2025" (no trailing slash)
+            fallbacks = list(dict.fromkeys(fallbacks))  # dedupe
+            if exact_from_client and exact_from_client not in fallbacks:
+                fallbacks.append(exact_from_client)
+            return (primary, fallbacks)
+    return (raw, fallbacks)
+
+
+@router.get("/get-project-analysis/{project_name:path}")
 async def get_project_analysis(
     project_name: str, 
     document_type: Optional[str] = Query(None),
     document_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     """
     Get project analysis. 
     - If document_type is provided: returns specific document type (BASE_RFP, CORRIGENDUM, REFERENCE_UPDATE)
@@ -676,9 +867,15 @@ async def get_project_analysis(
     from models.sqlalchemy_models import ProjectDocument
     
     try:
-        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+        for name in fallback_names:
+            if project:
+                break
+            project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
         if not project:
+            logger.info(f"get_project_analysis: project not found for primary={primary_name!r} fallbacks={fallback_names!r}")
             raise HTTPException(status_code=404, detail="Project not found")
+        project_name = project["project_name"]  # use canonical name from DB in response
         
         db = get_db_session()
         try:
@@ -785,9 +982,12 @@ async def save_product_oem_selections(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/get-project-documents/{project_name}")
+@router.get("/get-project-documents/{project_name:path}")
 async def get_project_documents(project_name: str, current_user: dict = Depends(get_current_user)):
     """Get list of all documents for a project with their types and metadata"""
+    project_name = (project_name or "").strip()
+    if not project_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     try:
         project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
         if not project:
@@ -914,15 +1114,22 @@ async def get_sources(query: str = Body(..., embed=True), documentId: str = Body
         logger.error(f"Error in get_sources: {str(e)}")
         return JSONResponse(content={"sources": [], "error": str(e)}, status_code=200)
 
-@router.get("/eligibility-checklist/{project_name}")
+@router.get("/eligibility-checklist/{project_name:path}")
 async def get_eligibility_checklist(
     project_name: str,
     document_id: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user)
 ):
     """Get eligibility checklist for a project/document"""
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     try:
-        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+        for name in fallback_names:
+            if project:
+                break
+            project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]
@@ -945,44 +1152,68 @@ async def get_eligibility_checklist(
         logger.error(f"Error getting eligibility checklist: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/eligibility-checklist/{project_name}")
+@router.post("/eligibility-checklist/{project_name:path}")
 async def save_eligibility_checklist(
     project_name: str,
     request_body: Dict[str, Any] = Body(...),
     current_user: dict = Depends(get_current_user)
 ):
     """Save eligibility checklist for a project/document"""
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     try:
         # Extract checklist and document_id from request body
         checklist = request_body.get("checklist", {})
         document_id = request_body.get("document_id")
         
-        logger.info(f"📥 Saving checklist for project: {project_name}, document: {document_id}")
+        logger.info(f"📥 Saving checklist for project: {primary_name}, document: {document_id}")
         logger.info(f"📋 Checklist data: {checklist}")
         
-        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+        for name in fallback_names:
+            if project:
+                break
+            project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]
         user_id = current_user["id"]
         
+        # Validate document_id: must exist and belong to this project (avoids FK violation)
+        doc_id_to_save = None
+        if document_id is not None and str(document_id).strip() != "":
+            try:
+                from models.sqlalchemy_models import ProjectDocument
+                from core.sqlalchemy_db import get_db_session
+                db = get_db_session()
+                try:
+                    doc = db.query(ProjectDocument).filter(
+                        ProjectDocument.id == int(document_id),
+                        ProjectDocument.project_id == project_id
+                    ).first()
+                    if doc:
+                        doc_id_to_save = str(document_id)
+                finally:
+                    db.close()
+            except (ValueError, TypeError):
+                pass
+        
         # Save checklist to database
         from models.eligibility_checklist import EligibilityChecklistModel
         success = EligibilityChecklistModel.save_checklist(
-            project_id, document_id, user_id, checklist
+            project_id, doc_id_to_save, user_id, checklist
         )
         
         if success:
-            logger.info(f"✅ Checklist saved successfully for project {project_name}")
+            logger.info(f"✅ Checklist saved successfully for project {project.get('project_name', primary_name)}")
             return {
                 "success": True,
                 "message": "Eligibility checklist saved successfully",
                 "project_id": project_id,
-                "document_id": document_id
+                "document_id": doc_id_to_save
             }
         else:
-            # Try to get the last error from some shared state or just return a generic one with more info if possible
-            # For now, since save_checklist returns False on any exception, we rely on the Exception block below
             raise Exception("save_checklist returned False")
     except HTTPException:
         raise
@@ -995,7 +1226,7 @@ async def save_eligibility_checklist(
             content={"success": False, "message": "Failed to save eligibility checklist", "error": str(e), "traceback": error_detail}
         )
 
-@router.patch("/eligibility-checklist/{project_name}/item")
+@router.patch("/eligibility-checklist/{project_name:path}/item")
 async def update_eligibility_item(
     project_name: str,
     criteria_text: str = Body(...),
@@ -1004,8 +1235,15 @@ async def update_eligibility_item(
     current_user: dict = Depends(get_current_user)
 ):
     """Update a single eligibility checklist item"""
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
     try:
-        project = ProjectModel.get_by_name_if_visible(project_name, current_user=current_user)
+        project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+        for name in fallback_names:
+            if project:
+                break
+            project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         project_id = project["id"]

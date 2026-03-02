@@ -1,4 +1,4 @@
-import { ArrowRight, FileUp, FolderOpen, LayoutDashboard, LogOut, RefreshCw, Users } from "lucide-react";
+import { ArrowRight, FileUp, FolderOpen, LayoutDashboard, LogOut, RefreshCw, Star, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -25,6 +25,10 @@ export default function TechnicalManagerDashboardPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [userDisplayName, setUserDisplayName] = useState<string>("Technical Manager");
   const [showByBidManager, setShowByBidManager] = useState(false);
+  const [finalBidModal, setFinalBidModal] = useState<{ projectId: number; projectName: string } | null>(null);
+  const [finalBidFile, setFinalBidFile] = useState<File | null>(null);
+  const [finalBidDescription, setFinalBidDescription] = useState("");
+  const [finalBidUploading, setFinalBidUploading] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
@@ -74,6 +78,45 @@ export default function TechnicalManagerDashboardPage() {
     localStorage.removeItem("user");
     toast.success("Logged out");
     navigate("/login");
+  };
+
+  const openFinalBidModal = (projectId: number, projectName: string) => {
+    setFinalBidModal({ projectId, projectName });
+    setFinalBidFile(null);
+    setFinalBidDescription("");
+  };
+
+  const submitFinalBidUpload = async () => {
+    if (!finalBidModal || !finalBidFile) return;
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Please log in again");
+      return;
+    }
+    setFinalBidUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", finalBidFile);
+      if (finalBidDescription.trim()) formData.append("description", finalBidDescription.trim());
+      const res = await fetch(`${API_BASE_URL}/api/rfp/projects/${finalBidModal.projectId}/final-bid`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.detail || "Upload failed");
+        return;
+      }
+      toast.success(data.message || "Final bid uploaded. Comparison complete.");
+      setFinalBidModal(null);
+      setFinalBidFile(null);
+      setFinalBidDescription("");
+    } catch (e) {
+      toast.error("Upload failed");
+    } finally {
+      setFinalBidUploading(false);
+    }
   };
 
   const navButtonBase = {
@@ -364,6 +407,25 @@ export default function TechnicalManagerDashboardPage() {
                               </div>
                               <button
                                 type="button"
+                                onClick={() => openFinalBidModal(p.id, p.project_name)}
+                                style={{
+                                  padding: "8px 14px",
+                                  background: "rgba(34,197,94,0.12)",
+                                  color: "#16a34a",
+                                  border: "1px solid rgba(34,197,94,0.3)",
+                                  borderRadius: 10,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                  fontSize: 13,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                <FileUp size={14} /> Upload final bid
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                                 style={{
                                   padding: "8px 16px",
@@ -418,6 +480,7 @@ export default function TechnicalManagerDashboardPage() {
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
                       <th style={{ padding: "16px 24px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13 }}>Actions</th>
+                      <th style={{ padding: "16px 24px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -439,10 +502,9 @@ export default function TechnicalManagerDashboardPage() {
                         <td style={{ padding: "16px 24px", color: "#64748b", fontSize: 14 }}>{p.tender_id || "—"}</td>
                         <td style={{ padding: "16px 24px", color: "#64748b", fontSize: 14 }}>{p.client_name || "—"}</td>
                         <td style={{ padding: "16px 24px", textAlign: "right" }}>
-                          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                               style={{
                                 padding: "10px 18px",
                                 background: "#FF8F8F",
@@ -460,7 +522,27 @@ export default function TechnicalManagerDashboardPage() {
                             >
                               View result <ArrowRight size={16} />
                             </button>
-                          </div>
+                        </td>
+                        <td style={{ padding: "16px 24px", textAlign: "center", verticalAlign: "middle" }}>
+                          <button
+                            type="button"
+                            onClick={() => openFinalBidModal(p.id, p.project_name)}
+                            style={{
+                              padding: "10px 16px",
+                              background: "rgba(34,197,94,0.12)",
+                              color: "#16a34a",
+                              border: "1px solid rgba(34,197,94,0.3)",
+                              borderRadius: 10,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              fontSize: 13,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <FileUp size={14} /> Upload final bid
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -471,6 +553,23 @@ export default function TechnicalManagerDashboardPage() {
           )}
         </div>
       </main>
+
+      {finalBidModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 24 }} onClick={() => !finalBidUploading && setFinalBidModal(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 420, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Upload final bid</h3>
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>Project: {finalBidModal.projectName}</p>
+            <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFinalBidFile(e.target.files?.[0] ?? null)} style={{ marginBottom: 16, display: "block", width: "100%" }} />
+            {finalBidFile && <p style={{ margin: "0 0 16px", fontSize: 13, color: "#475569" }}>Selected: {finalBidFile.name}</p>}
+            <label style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 6, fontSize: 13, fontWeight: 600, color: "#475569" }}>What did you upload? <Star size={12} fill="#e11d48" color="#e11d48" /></label>
+            <textarea value={finalBidDescription} onChange={(e) => setFinalBidDescription(e.target.value)} placeholder="e.g. Final commercial bid, signed version, annex A..." rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 16, resize: "vertical", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => !finalBidUploading && setFinalBidModal(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
+              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }

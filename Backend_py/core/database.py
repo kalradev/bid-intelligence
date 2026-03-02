@@ -148,6 +148,44 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_project_doc ON eligibility_checklist(project_id, document_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_user ON eligibility_checklist(user_id);")
         
+        # Fallback model: final bid uploads and comparison
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS final_bid_uploads (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                status VARCHAR(20) DEFAULT 'pending',
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_final_bid_uploads_project ON final_bid_uploads(project_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_final_bid_uploads_user ON final_bid_uploads(user_id);")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS comparison_results (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                tool_document_id INTEGER REFERENCES project_documents(id) ON DELETE CASCADE,
+                final_bid_upload_id INTEGER NOT NULL REFERENCES final_bid_uploads(id) ON DELETE CASCADE,
+                comparison_output JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_comparison_results_project ON comparison_results(project_id);")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS learning_feedback (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+                source_comparison_id INTEGER REFERENCES comparison_results(id) ON DELETE SET NULL,
+                section_or_key TEXT NOT NULL,
+                tool_value TEXT,
+                user_value TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_learning_feedback_project ON learning_feedback(project_id);")
+        
         conn.commit()
         cursor.close()
         conn.close()

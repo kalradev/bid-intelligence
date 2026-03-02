@@ -4,6 +4,12 @@ import { API_BASE_URL } from "../config";
 import { ArrowLeft, FileText } from "lucide-react";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 
+// Normalize project name for API: strip leading/trailing space and trailing slashes so " GEM/2025/" -> "GEM/2025"
+function normalizeProjectNameForApi(name: string | undefined): string {
+  if (name == null || typeof name !== "string") return name ?? "";
+  return name.trim().replace(/\/+$/, "");
+}
+
 export default function ProjectResultsPage() {
   const { projectName } = useParams<{ projectName: string }>();
   const navigate = useNavigate();
@@ -36,8 +42,9 @@ export default function ProjectResultsPage() {
       setLoading(true);
       setError(null);
       try {
+        const nameForApi = normalizeProjectNameForApi(projectName);
         const res = await fetch(
-          `${API_BASE_URL}/api/rfp/get-project-analysis/${encodeURIComponent(projectName)}`,
+          `${API_BASE_URL}/api/rfp/get-project-analysis/${encodeURIComponent(nameForApi)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!res.ok) {

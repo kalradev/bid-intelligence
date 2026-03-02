@@ -10,6 +10,7 @@ import LandingPage from "./pages/LandingPage";
 import Legal from "./pages/Legal.jsx";
 import LoginPage from "./pages/LoginPage";
 import ProductMappingPage from "./pages/ProductMappingPage";
+import ProjectComparisonPage from "./pages/ProjectComparisonPage";
 import ProjectResultsPage from "./pages/ProjectResultsPage";
 import SCM from "./pages/SCM.jsx";
 import SmartRfpPage from "./pages/SmartRfpPage";
@@ -63,7 +64,7 @@ export default function App() {
     "/project-results",
   ];
 
-  const isFullWidth = fullWidthPages.includes(currentPath) || currentPath.startsWith("/project-results") || currentPath.startsWith("/team-projects");
+  const isFullWidth = fullWidthPages.includes(currentPath) || currentPath.startsWith("/project-results") || currentPath.startsWith("/project-comparison") || currentPath.startsWith("/team-projects");
 
   return (
     <>
@@ -93,6 +94,7 @@ export default function App() {
           <Route path="/bid-management" element={<BidManagement />} />
           <Route path="/team" element={<TeamPage />} />
           <Route path="/project-results/:projectName" element={<ProjectResultsPage />} />
+          <Route path="/project-comparison/:projectId" element={<ProjectComparisonPage />} />
           <Route path="/team-projects/:bidManagerId" element={<TeamProjectsPage />} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/team-quota" element={<TeamQuotaPage />} />

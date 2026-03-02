@@ -118,6 +118,45 @@ class EligibilityChecklist(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class FinalBidUpload(Base):
+    """User-uploaded final bid document per project (fallback model)."""
+    __tablename__ = "final_bid_uploads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_name = Column(Text, nullable=False)
+    file_path = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)  # user-written note about what they uploaded
+    status = Column(String(20), default="pending")  # pending | processed
+    uploaded_at = Column(DateTime(timezone=False), server_default=func.now())
+
+
+class ComparisonResult(Base):
+    """Comparison of tool-generated analysis vs uploaded final bid."""
+    __tablename__ = "comparison_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    tool_document_id = Column(Integer, ForeignKey("project_documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    final_bid_upload_id = Column(Integer, ForeignKey("final_bid_uploads.id", ondelete="CASCADE"), nullable=False, index=True)
+    comparison_output = Column(JSON, nullable=False)  # { sections, differences: [{ section, field, tool_value, user_value, summary }], summary }
+    created_at = Column(DateTime(timezone=False), server_default=func.now())
+
+
+class LearningFeedback(Base):
+    """Stored differences for improving future tool accuracy (prompt-level learning)."""
+    __tablename__ = "learning_feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=True, index=True)
+    source_comparison_id = Column(Integer, ForeignKey("comparison_results.id", ondelete="SET NULL"), nullable=True, index=True)
+    section_or_key = Column(Text, nullable=False)
+    tool_value = Column(Text, nullable=True)
+    user_value = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=False), server_default=func.now())
+
+
 class FileCache(Base):
     """File cache - matches public.file_cache (UUID id, extra columns)"""
     __tablename__ = "file_cache"

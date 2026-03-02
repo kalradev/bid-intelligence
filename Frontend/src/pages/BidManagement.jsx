@@ -4,13 +4,23 @@ import { API_BASE_URL } from "../config";
 import { filterEMD, processDepartmentData } from "../utils/deduplication";
 import { exportToPDF } from "../utils/pdfExport";
 
+// Normalize project name: "GEM 2025\B" or "GEM 2025" -> "GEM/2025" so API can resolve
+function normalizeProjectName(name) {
+    if (name == null || typeof name !== "string") return name;
+    let s = name.trim().replace(/\\[Bb]?\s*$/, "");
+    s = s.replace(/\s+(\d{4})\s*$/, "/$1");
+    return s.trim() || name;
+}
+
 const BidManagement = () => {
     const [data, setData] = useState(null);
     const contentRef = useRef(null);
     const [eligibilityChecks, setEligibilityChecks] = useState({});
+    const [eligibilityDocuments, setEligibilityDocuments] = useState({}); // { criteriaText: { name, file } }
     const [projectName, setProjectName] = useState(null);
     const [documentId, setDocumentId] = useState(null);
     const [isLoadingChecklist, setIsLoadingChecklist] = useState(false);
+    const fileInputRefs = useRef({});
 
     // Load eligibility checklist from API
     const loadEligibilityChecklist = useCallback(async (projName, docId) => {
@@ -28,7 +38,8 @@ const BidManagement = () => {
                 return;
             }
 
-            let url = `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projName)}`;
+            const trimmedProj = normalizeProjectName(projName) || (projName || "").trim();
+            let url = `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(trimmedProj)}`;
             if (docId) {
                 url += `?document_id=${docId}`;
             }
@@ -71,8 +82,8 @@ const BidManagement = () => {
                 const parsed = JSON.parse(storedData);
                 const bidManagementData = parsed?.data?.departmentalSummaries?.bidManagement;
 
-                // Extract project name and document ID
-                const projName = parsed?.data?.projectName;
+                // Extract project name and document ID (normalize project name e.g. "GEM 2025\\B" -> "GEM/2025")
+                const projName = normalizeProjectName(parsed?.data?.projectName) ?? parsed?.data?.projectName;
                 const docId = parsed?.data?.metadata?.documentId;
                 setProjectName(projName);
                 setDocumentId(docId);
@@ -92,13 +103,7 @@ const BidManagement = () => {
                     setData(null);
                 }
 
-                // Load eligibility checklist after data is loaded
-                if (projName) {
-                    // Small delay to ensure state is set
-                    setTimeout(() => {
-                        loadEligibilityChecklist(projName, docId);
-                    }, 100);
-                }
+                // Checklist is loaded by the effect below when projectName/documentId/data are set (no delayed load here to avoid overwriting user Yes/No)
             } else {
                 setData(null);
             }
@@ -151,8 +156,9 @@ const BidManagement = () => {
             console.log(`📤 Saving to API: ${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`);
             console.log(`📦 Payload:`, { checklist: newChecks, document_id: documentId });
 
+            const trimmedProjectName = normalizeProjectName(projectName) || (projectName || "").trim();
             const response = await fetch(
-                `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(projectName)}`,
+                `${API_BASE_URL}/api/rfp/eligibility-checklist/${encodeURIComponent(trimmedProjectName)}`,
                 {
                     method: 'POST',
                     headers: {
@@ -161,7 +167,7 @@ const BidManagement = () => {
                     },
                     body: JSON.stringify({
                         checklist: newChecks,
-                        document_id: documentId ? String(documentId) : null
+                        document_id: documentId != null && documentId !== "" ? String(documentId) : null
                     })
                 }
             );
@@ -176,17 +182,36 @@ const BidManagement = () => {
                     // No need to reload - optimistic update already applied
                 }
             } else {
-                console.error("❌ Failed to save eligibility checklist:", response.status);
                 const errorText = await response.text();
-                console.error("❌ Error details:", errorText);
-                // Revert on error
+                console.error("❌ Failed to save eligibility checklist:", response.status, errorText);
+                // Keep optimistic selection visible; only revert so user can retry with clear feedback
                 setEligibilityChecks(previousChecks);
+                alert("Could not save eligibility selection. Please check your connection and try again.");
             }
         } catch (error) {
             console.error("❌ Error saving eligibility checklist:", error);
-            // Revert on error
             setEligibilityChecks(previousChecks);
+            alert("Could not save eligibility selection. Please check your connection and try again.");
         }
+    };
+
+    // Handle document upload for a specific eligibility criterion
+    const handleEligibilityDocumentUpload = (item, event) => {
+        const file = event?.target?.files?.[0];
+        if (!file) return;
+        setEligibilityDocuments(prev => ({
+            ...prev,
+            [item]: { name: file.name, file }
+        }));
+        event.target.value = "";
+    };
+
+    const handleRemoveEligibilityDocument = (item) => {
+        setEligibilityDocuments(prev => {
+            const next = { ...prev };
+            delete next[item];
+            return next;
+        });
     };
 
     const handleDownloadPDF = () => {
@@ -330,9 +355,12 @@ const BidManagement = () => {
                         {/* Eligibility Criteria with Yes/No Buttons */}
                         {data.successFactors.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria) && data.successFactors.preQualificationCriteria.length > 0 && (
                             <div style={{ marginBottom: "24px", background: "#fef3c7", padding: "16px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                                <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "12px", marginTop: "0" }}>
+                                <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "4px", marginTop: "0" }}>
                                     Eligibility Criteria
                                 </h4>
+                                <p style={{ fontSize: "13px", color: "#78350f", marginBottom: "12px", marginTop: "0" }}>
+                                    Mark each criterion Yes/No and optionally upload supporting documents.
+                                </p>
                                 {isLoadingChecklist && (
                                     <p style={{ fontSize: "14px", color: "#92400e", marginBottom: "12px" }}>
                                         Loading checklist...
@@ -461,6 +489,58 @@ const BidManagement = () => {
                                                         >
                                                             ✗ No
                                                         </button>
+                                                        {/* Upload document for this criterion */}
+                                                        <span style={{ marginLeft: "8px" }}>
+                                                            {eligibilityDocuments[item] ? (
+                                                                <span style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "14px", color: "#0369a1" }}>
+                                                                    <span title={eligibilityDocuments[item].name}>📎 {eligibilityDocuments[item].name.length > 20 ? eligibilityDocuments[item].name.slice(0, 18) + "…" : eligibilityDocuments[item].name}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleRemoveEligibilityDocument(item)}
+                                                                        style={{
+                                                                            padding: "4px 8px",
+                                                                            fontSize: "12px",
+                                                                            background: "#fef2f2",
+                                                                            color: "#b91c1c",
+                                                                            border: "1px solid #fecaca",
+                                                                            borderRadius: "6px",
+                                                                            cursor: "pointer"
+                                                                        }}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </span>
+                                                            ) : (
+                                                                <>
+                                                                    <input
+                                                                        type="file"
+                                                                        ref={el => { fileInputRefs.current[`file-${idx}`] = el; }}
+                                                                        style={{ display: "none" }}
+                                                                        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+                                                                        onChange={(e) => handleEligibilityDocumentUpload(item, e)}
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => fileInputRefs.current[`file-${idx}`]?.click()}
+                                                                        disabled={isLoadingChecklist}
+                                                                        style={{
+                                                                            padding: "8px 16px",
+                                                                            fontSize: "14px",
+                                                                            fontWeight: "600",
+                                                                            borderRadius: "8px",
+                                                                            border: "2px solid #0369a1",
+                                                                            background: "#f0f9ff",
+                                                                            color: "#0369a1",
+                                                                            cursor: isLoadingChecklist ? "not-allowed" : "pointer",
+                                                                            opacity: isLoadingChecklist ? 0.6 : 1
+                                                                        }}
+                                                                        title="Upload document"
+                                                                    >
+                                                                        📤
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </li>
