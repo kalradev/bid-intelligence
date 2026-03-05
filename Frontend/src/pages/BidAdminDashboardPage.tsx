@@ -595,6 +595,7 @@ export default function BidAdminDashboardPage() {
   const totalProjects = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
   const totalPeople = bidManagers.reduce((s, b) => s + 1 + (b.technicalManagers?.length || 0), 0);
   const adminProjects = currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : [];
+  const totalProjectsWithAdmin = totalProjects + adminProjects.length;
   const totalQuotaLeft = orgQuota?.teamProjectsLeft ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
   const totalQuotaLimit = orgQuota?.teamProjectsLimit ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
   const quotaLeftPercent = totalQuotaLimit > 0 ? (totalQuotaLeft / totalQuotaLimit) * 100 : 100;
@@ -1372,17 +1373,8 @@ export default function BidAdminDashboardPage() {
                         setShowGrandTotalProjects(false);
                       } else {
                         setActiveToggle("projects");
-                        const firstBmWithProjects = bidManagers.find((bm) => {
-                          const teamUserIds = [bm.id, ...(bm.technicalManagers || []).map((t) => t.id)];
-                          return personalProjects.some((p) => p.user_id != null && teamUserIds.includes(p.user_id));
-                        });
-                        if (firstBmWithProjects) {
-                          setExpandedBmIdForProjects(firstBmWithProjects.id);
-                          setShowGrandTotalProjects(false);
-                        } else {
-                          setShowGrandTotalProjects(true);
-                          setExpandedBmIdForProjects(null);
-                        }
+                        setShowGrandTotalProjects(true);
+                        setExpandedBmIdForProjects(null);
                       }
                     }}
                     style={{
@@ -1417,7 +1409,7 @@ export default function BidAdminDashboardPage() {
                       <FolderKanban size={26} color="#E87878" />
                     </div>
                     <div>
-                      <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalProjects}</div>
+                      <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalProjectsWithAdmin}</div>
                       <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginTop: 2 }}>Total projects</div>
                     </div>
                   </button>
@@ -1581,8 +1573,7 @@ export default function BidAdminDashboardPage() {
                         }}
                       >
                         {showGrandTotalProjects ? (() => {
-                          const allTeamUserIds = bidManagers.flatMap((bm) => [bm.id, ...(bm.technicalManagers || []).map((t: { id: number }) => t.id)]);
-                          const grandTotalProjects = personalProjects.filter((p) => p.user_id != null && allTeamUserIds.includes(p.user_id));
+                          const grandTotalProjects = personalProjects;
                           return (
                             <>
                               <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 14 }}>All projects (Grand Total)</div>
@@ -1699,7 +1690,7 @@ export default function BidAdminDashboardPage() {
                           }
                         }}
                       >
-                        Grand Total: {totalProjects} projects
+                        Grand Total: {totalProjectsWithAdmin} projects
                       </button>
                     </div>
                   )}
