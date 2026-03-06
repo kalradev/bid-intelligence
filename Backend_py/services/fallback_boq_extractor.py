@@ -122,44 +122,53 @@ def is_table_header(text: str) -> bool:
     
     return False
 
-def looks_like_product(text: str) -> bool:
-    """Check if text looks like an actual product name"""
-    if not text or len(text) < 5:
+
+def is_ministry_state_or_eligibility_row(text: str) -> bool:
+    """Skip rows from ministry/state lists, eligibility tables, department lists - NOT products."""
+    if not text or len(text) < 2:
         return False
-    
-    # Products often contain:
-    # - Model numbers (alphanumeric codes)
-    # - Technical terms
-    # - Brand names
-    # - Specifications
-    
+    t = text.strip().lower()
+    # Header or label for ministry/state/department tables
+    if re.search(r'ministry|state\s*name|department\s*name|office\s*name|location\s*name', t):
+        return True
+    if re.search(r'eligibility|qualification\s*criteria|pre-qualification', t) and len(t) < 80:
+        return True
+    # Common non-product table headers
+    if re.search(r'^(sr|s\.?no|sl\.?no)[.\s]*$', t) and len(t) < 15:
+        return True
+    # Row that looks like "Ministry of X" or "State Name" or just a ministry/state name
+    if re.match(r'^(ministry|department|state|office)\s+(of|name)?', t):
+        return True
+    return False
+
+def looks_like_product(text: str, from_table_row: bool = False) -> bool:
+    """Check if text looks like an actual product name. If from_table_row, accept more generic names."""
+    if not text or len(text) < 3:
+        return False
+    text_stripped = text.strip()
+    if len(text_stripped) > 300:
+        return False
+
     product_indicators = [
-        r'[A-Z]{2,}\d+',  # Model codes like "ABC123", "X1-Carbon"
-        r'\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|core|cores|ram|ssd|hdd)',  # Technical specs
+        r'[A-Z]{2,}\d+',
+        r'\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|core|cores|ram|ssd|hdd)',
         r'(server|switch|router|firewall|sensor|device|equipment|system|software|license|subscription|module)',
         r'(platform|solution|management|interface|gateway|controller|appliance|application|tool|utility)',
         r'(security|network|cloud|storage|backup|recovery|monitoring|analytical|intelligence|analytics)',
         r'(laptop|desktop|tablet|monitor|printer|scanner|camera|workstation|handset|terminal)',
         r'(processor|memory|storage|hardware|component|peripheral|accessory|cable|connector)',
         r'\b(siem|soar|itsm|tip|dast|sast|iam|pam|endpoint|antivirus|edr|xdr|vulnerability|scanner|gsoc)\b',
+        r'(computer|pc|ac|air\s*conditioner|ups|projector|furniture|chair|table|cabinet)',
+        r'(item|product|goods|material|equipment|machine|unit)\b',
     ]
-    
-    text_lower = text.lower()
-    indicator_count = sum(1 for pattern in product_indicators if re.search(pattern, text, re.IGNORECASE))
-    
-    # If it has product indicators, it's likely a product
+    indicator_count = sum(1 for pattern in product_indicators if re.search(pattern, text_stripped, re.IGNORECASE))
     if indicator_count > 0:
         return True
-    
-    # If it's very short and doesn't look like a product, skip
-    if len(text) < 10:
+    # In table context, accept short descriptive names (e.g. "Laptop", "Printer")
+    if from_table_row and 3 <= len(text_stripped) <= 120:
+        return True
+    if len(text_stripped) < 10:
         return False
-    
-    # If it's too long (likely a sentence/instruction), skip
-    if len(text) > 300:  # Increased from 150 as software products/platforms often have long descriptions
-        return False
-    
-    # Default: if it passes other filters, consider it
     return True
 
 def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
@@ -172,54 +181,68 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
     products = []
     lines = document_text.split('\n')
     
-    # Find BOQ sections more precisely - prioritize ANNEXURE II/III
+    # Find BOQ sections - only sections that are clearly item/product/goods lists, NOT ministry/state/eligibility
     boq_section_starts = []
+    non_boq_section_patterns = [
+        r'ministry|state\s*name|department\s*list|office\s*list|list\s+of\s+(ministries|states|offices|departments|locations)',
+        r'eligibility|qualification\s*criteria|pre-qualification|post-qualification',
+        r'list\s+of\s+bidders|contractors|vendors',
+    ]
+    boq_patterns = [
+        r'bill\s+of\s+(quantities|materials|qty|quantity)|bill\s+of\s+quantity|bill\s+of\s+supply',
+        r'\bboq\b', r'\bbom\b',
+        r'schedule\s+of\s+(items|supply|products|materials)',
+        r'list\s+of\s+(items|products|materials|equipment|goods)',
+        r'item\s+list|product\s+(list|schedule|catalog)',
+        r'description\s+of\s+(items|goods|products)',
+        r'annexure\s+(ii|iii|iv|v|2|3|4|5|\d+).*?(item|product|quantity|supply|boq)',
+        r'schedule\s+[a-z]*\s*[-\s]*\s*(i|ii|iii|iv|v|\d+).*?(item|product|quantity)',
+    ]
     for i, line in enumerate(lines):
         line_lower = line.lower().strip()
-        # Prioritize actual BOQ sections
-        if re.search(r'annexure\s+(ii|iii|iv|v|2|3|4|5)', line_lower) or \
-           re.search(r'bill\s+of\s+(quantities|materials|qty|quantity)', line_lower) or \
-           re.search(r'\bboq\b', line_lower) or \
-           re.search(r'\bbom\b', line_lower) or \
-           re.search(r'schedule\s+of\s+items', line_lower):
-            boq_section_starts.append(i)
-            logger.info(f"   Found potential BOQ section at line {i}: {line[:80]}")
+        if any(re.search(p, line_lower) for p in non_boq_section_patterns):
+            continue
+        for pat in boq_patterns:
+            if re.search(pat, line_lower):
+                boq_section_starts.append(i)
+                logger.info(f"   Found potential BOQ section at line {i}: {line[:80]}")
+                break
     
-    # If no specific BOQ sections found, look for any annexure
+    # Fallback: look for annexure/schedule that has item/product/quantity nearby (next few lines)
     if not boq_section_starts:
         for i, line in enumerate(lines):
-            if re.search(r'annexure', line.lower()):
-                boq_section_starts.append(i)
-                if len(boq_section_starts) >= 5:  # Limit to 5 sections
-                    break
+            if re.search(r'annexure|schedule', line.lower()):
+                context = " ".join(lines[i:min(i + 5, len(lines))]).lower()
+                if re.search(r'item|product|quantity|description|rate|amount', context):
+                    if not any(re.search(p, line.lower()) for p in non_boq_section_patterns):
+                        boq_section_starts.append(i)
+                        if len(boq_section_starts) >= 5:
+                            break
     
     if not boq_section_starts:
         logger.warning("   No BOQ section found - searching entire document for tables...")
         boq_section_starts = [0]
     
-    # Extract table rows from BOQ sections only
+    # Extract table rows from BOQ sections: pipe/tab-delimited or space-separated columns
     all_table_rows = []
     for boq_section_start in boq_section_starts[:10]:  # Check up to 10 sections
-        # Extract table rows from BOQ section (next 500 lines after header)
         table_section = lines[boq_section_start:min(boq_section_start + 500, len(lines))]
-        
-        # Look for rows with delimiters (| or tab) - these are likely table rows
         for line in table_section:
-            # Only process lines that look like table rows
-            if '|' in line or '\t' in line:
-                line_clean = line.strip()
-                if line_clean and not all(c in '-=|+\t ' for c in line_clean):
-                    all_table_rows.append(line_clean)
+            line_clean = line.strip()
+            if not line_clean or all(c in '-=|+\t ' for c in line_clean):
+                continue
+            # Rows with | or tab (from PDF table extraction or Excel)
+            if '|' in line_clean or '\t' in line_clean:
+                all_table_rows.append(line_clean)
+                continue
+            # Space-separated columns: e.g. "1  Laptop Computer  5  Nos" (2+ spaces between fields)
+            parts = re.split(r'\s{2,}', line_clean)
+            if len(parts) >= 2 and any(len(p) > 2 for p in parts):
+                # Rejoin with | so downstream parsing treats as table row
+                all_table_rows.append(" | ".join(p.strip() for p in parts if p.strip()))
     
-    # If no table rows found, DO NOT fall back to numbered lists
-    # Numbered lists in RFP documents are usually section headers, not products
-    # Only extract from actual BOQ tables with delimiters
     if not all_table_rows:
-        logger.warning("   No table rows found in BOQ sections - strict mode: only extracting from actual tables")
-        logger.info("   Skipping numbered lists to avoid extracting section headers as products")
-    
-    if not all_table_rows:
-        logger.warning("   No table rows or numbered lists found")
+        logger.warning("   No table rows found in BOQ sections")
         return []
     
     logger.info(f"   Found {len(all_table_rows)} potential table rows")
@@ -261,6 +284,11 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
         if is_table_header(row_clean):
             skipped_count += 1
             logger.debug(f"   ⏭️ Skipped table header: {row_clean[:60]}...")
+            continue
+        
+        if is_ministry_state_or_eligibility_row(row_clean):
+            skipped_count += 1
+            logger.debug(f"   ⏭️ Skipped ministry/state/eligibility row: {row_clean[:60]}...")
             continue
         
         # Parse the row
@@ -336,44 +364,31 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
             skipped_count += 1
             continue
         
-        # Final validation checks - VERY STRICT
-        if len(product_name) < 5 or len(product_name) > 150:
+        # Validation: allow short names in table context (GeM, BOQ often have "Laptop", "Printer")
+        from_table_row = len(cells) >= 2 or quantity != "N/A"
+        if len(product_name) < 3 or len(product_name) > 150:
             skipped_count += 1
             continue
-        
-        # Check section header again after cleaning
         if is_section_header(product_name):
             skipped_count += 1
             continue
-        
-        # Check if it's just dots/underscores
         if re.match(r'^[\.\_\-]{3,}$', product_name):
             skipped_count += 1
             continue
-        
-        # Check if it's all caps (likely a header)
-        if product_name.isupper() and len(product_name) > 10:
+        if product_name.isupper() and len(product_name) > 15:
             skipped_count += 1
             continue
-        
         if is_date_or_time(product_name):
             skipped_count += 1
             continue
-        
         if is_instruction_or_guideline(product_name):
             skipped_count += 1
             continue
-        
-        # Check if it looks like a product - must have product indicators
-        if not looks_like_product(product_name):
+        if not looks_like_product(product_name, from_table_row=from_table_row):
             skipped_count += 1
             continue
         
-        # Additional check: If it doesn't have any technical terms, model numbers, or specs, skip
-        # This catches generic headers that passed other checks
-        has_technical_content = bool(re.search(r'[A-Z]{2,}\d+|\d+\s*(gb|tb|mb|ghz|mhz|w|v|amp|ah|core|ram|ssd|hdd|server|switch|router|firewall|sensor|device|equipment|system|software|license|laptop|desktop|tablet|monitor|printer|scanner|camera|processor|memory|storage|hardware|component|platform|solution|management|interface|gateway|controller|appliance|application|tool|security|network|cloud|storage|backup|recovery|monitoring|analytical|intelligence|analytics|siem|soar|itsm|tip|dast|sast|iam|pam|endpoint|antivirus|edr|xdr|vulnerability|scanner)', product_name, re.IGNORECASE))
-        if not has_technical_content and len(product_name) < 20:
-            # Short text without technical content is likely not a product
+        if is_ministry_state_or_eligibility_row(product_name):
             skipped_count += 1
             continue
         

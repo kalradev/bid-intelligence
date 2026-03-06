@@ -100,12 +100,15 @@ except Exception as e:
 try:
     from core.sqlalchemy_db import engine
     from sqlalchemy import text
+    org_quota_base = getattr(settings, "ORG_QUOTA_BASE", 10)
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"))
         conn.execute(text("ALTER TABLE org_quota ADD COLUMN IF NOT EXISTS unarchive_quota_used INTEGER DEFAULT 0 NOT NULL"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE"))
+        # Sync org quota base limit from config (.env ORG_QUOTA_BASE) so env changes take effect after restart
+        conn.execute(text("UPDATE org_quota SET base_limit = :base WHERE id = 1"), {"base": org_quota_base})
         conn.commit()
-    logger.info("✅ projects.archived column ready")
+    logger.info("✅ projects.archived column ready; org quota base_limit synced to %s", org_quota_base)
 except Exception as e:
     logger.warning(f"⚠️ Could not add projects.archived column: {e}")
 

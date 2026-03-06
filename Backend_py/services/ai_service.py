@@ -299,12 +299,12 @@ Completeness is more important than brevity.
 You are also an expert RFP/tender analyst. Extract critical bidding intelligence from tender documents.
 
 🚨 CRITICAL PRIORITY: PRODUCT EXTRACTION IS MANDATORY
-- You MUST extract ALL products from BOQ/BOM/product lists if they exist in the document
-- This is the HIGHEST PRIORITY extraction task
-- Extract productName, category, oem, model, specifications, quantity, unit for EVERY product found
-- ⚠️ CRITICAL: ALL products MUST go into productMapping.miiProductStatus array
-- ⚠️ DO NOT put products in technical.keySpecifications - that's for technical specs only, NOT product lists
-- If NO products found after thorough search, return empty array [] for productMapping.miiProductStatus
+- You MUST extract ONLY the actual BOQ/product list (goods or items to be supplied) into productMapping.miiProductStatus
+- ⚠️ DO NOT put rows from eligibility tables, ministry/state lists, list of offices/departments, or any non-product tables into productMapping.miiProductStatus
+- Only the table that lists deliverables (e.g. LRC Server, External Storage Device, Server Rack) belongs in miiProductStatus
+- Extract productName, category, oem, model, specifications, quantity, unit for each product from the BOQ/BOM/Schedule of Items only
+- ⚠️ CRITICAL: ALL products MUST go into productMapping.miiProductStatus array; DO NOT put products in technical.keySpecifications
+- If NO product list found after thorough search, return empty array [] for productMapping.miiProductStatus
 
 FOCUS: Extract UNIQUE, SPECIFIC information needed to WIN the bid.
 
@@ -710,15 +710,15 @@ If any NEW eligibility conditions are found in this second pass:
 - If you find products mentioned in technical specs, extract them to productMapping.miiProductStatus, NOT technical.keySpecifications
 
 **SEARCH STRATEGY:**
-1. Scan ENTIRE document from start to finish for ANY product/item mentions
-2. Look for these sections: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, Technical Specifications, Annexures, Appendices
-3. Search for tables with columns like: "Item", "Description", "Product", "Make", "Model", "Quantity", "Unit", "Specification"
-4. Extract EVERY product/item listed - do NOT skip ANY entries
-5. Each row in BOQ/BOM = one product entry in productMapping.miiProductStatus array
-6. MANDATORY: Extract ALL items, even if they seem repetitive or similar
+1. Identify ONLY the BOQ/BOM/Schedule of Items table (the table that lists goods/items to supply, e.g. LRC Server, Storage Device, Server Rack)
+2. Do NOT use tables that list ministries, states, offices, departments, eligibility criteria, or bidders - those are NOT products
+3. Look for sections: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, with columns like "Item", "Description", "Product", "Quantity", "Unit"
+4. Extract ONLY rows from that product/BOQ table - each row = one product entry in productMapping.miiProductStatus
+5. If the document has 3 products, return exactly 3 entries in miiProductStatus - do not inflate with other tables
 
 **EXTRACTION RULES:**
-- If you find a table with products, extract EVERY row as a separate product into productMapping.miiProductStatus
+- Put in productMapping.miiProductStatus ONLY rows from the actual BOQ/product table (goods/items to supply). Never add rows from ministry lists, state lists, office lists, eligibility tables, or list of bidders.
+- If you find the BOQ/product table, extract every product row into productMapping.miiProductStatus
 - If product name is missing, use the item description or first column value
 - If multiple products are listed in one row, split them into separate entries in productMapping.miiProductStatus
 - ⚠️ CRITICAL: Services/Activities (Supply, Installation, Configuration, Commissioning, etc.) at DIFFERENT LOCATIONS are SEPARATE PRODUCTS

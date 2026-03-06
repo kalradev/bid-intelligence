@@ -58,7 +58,22 @@ async def extract_from_pdf(buffer: bytes) -> Dict[str, Any]:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-        
+                # Only extract tables that look like BOQ/product lists (have item/description/product/quantity)
+                tables = page.extract_tables()
+                if tables:
+                    boq_header_keywords = ("item", "description", "product", "quantity", "qty", "rate", "amount", "unit", "specification", "make", "model")
+                    for table in tables:
+                        if not table:
+                            continue
+                        first_row = " ".join(str(c or "").lower() for c in table[0] if c).strip()
+                        if not any(kw in first_row for kw in boq_header_keywords):
+                            continue
+                        for row in table:
+                            if row and any(cell and str(cell).strip() for cell in row):
+                                line = " | ".join(str(cell or "").strip() for cell in row)
+                                if line.strip():
+                                    text += line + "\n"
+                        text += "\n"
         return {
             "text": text,
             "metadata": {"pages": page_count}
