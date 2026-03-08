@@ -160,6 +160,7 @@ def looks_like_product(text: str, from_table_row: bool = False) -> bool:
         r'\b(siem|soar|itsm|tip|dast|sast|iam|pam|endpoint|antivirus|edr|xdr|vulnerability|scanner|gsoc)\b',
         r'(computer|pc|ac|air\s*conditioner|ups|projector|furniture|chair|table|cabinet)',
         r'(item|product|goods|material|equipment|machine|unit)\b',
+        r'(\d+(?:st|nd|rd|th)\s*year\s*(?:camc|amc)\s*rate|\b(?:camc|amc)\s*rate\b)',  # BOQ rate line items
     ]
     indicator_count = sum(1 for pattern in product_indicators if re.search(pattern, text_stripped, re.IGNORECASE))
     if indicator_count > 0:
@@ -171,13 +172,205 @@ def looks_like_product(text: str, from_table_row: bool = False) -> bool:
         return False
     return True
 
+
+# PDF unicode artifacts and label fragments to strip from product names
+_CID_PATTERN = re.compile(r'\(cid:\d+\)', re.IGNORECASE)
+_LABEL_ARTIFACTS = re.compile(
+    r'^(?:dd|वस्तु\s*श्रेणी|item\s*category|product\s*category)[\s\/]*',
+    re.IGNORECASE
+)
+
+
+def clean_product_name(name: str) -> str:
+    """Remove PDF (cid:XX) artifacts and label fragments from product names."""
+    if not name or not isinstance(name, str):
+        return name
+    s = _CID_PATTERN.sub('', name)
+    s = _LABEL_ARTIFACTS.sub('', s)
+    s = re.sub(r'[\s\/]+$', '', s)
+    s = re.sub(r'^\s+', '', s)
+    # If still starting with garbage (non-letter), take from first letter (e.g. ".../ Monitors" -> "Monitors")
+    if s:
+        for i, c in enumerate(s):
+            if c.isalpha():
+                s = s[i:].strip()
+                break
+    return s[:100].strip() if s else name
+
+
+# GeM / form-style "Item Category" field: one line with comma/semicolon-separated product types
+# Include corrupted PDF Hindi (ववरातु, णेणे) and plain "category" / "item"
+_ITEM_CATEGORY_LABELS = re.compile(
+    r'(?:item\s+category|product\s+category|वस्तु\s*श्रेणी|item\s*category\s*\/|product\s*type|'
+    r'ववरातु|णेणे|श्रेणी|category\s*\/|bid\s+details)',
+    re.IGNORECASE
+)
+# Known product-type words (GeM / IT hardware) – accept these as product names
+_KNOWN_PRODUCT_TYPES = {
+    'computers', 'computer', 'ups', 'upss', 'printers', 'printer', 'mfms', 'mfm',
+    'scanners', 'scanner', 'servers', 'server', 'switches', 'switch', 'laptops', 'laptop',
+    'monitors', 'monitor', 'routers', 'router', 'storage', 'workstation', 'workstations',
+    'projectors', 'projector', 'cables', 'cable', 'keyboards', 'keyboard', 'mice', 'mouse',
+}
+# Known brands – skip when they appear as standalone tokens (avoid "HP" as a product)
+_KNOWN_BRANDS = {
+    'hp', 'dell', 'compaq', 'lenovo', 'tyrone', 'canon', 'apc', 'luminous', 'microtek',
+    'samtek', 'asia power', 'solus', 'bpe', 'datex', 'educomp', 'everon', 'eln', 'ibm',
+    'cisco', 'hcl', 'acer', 'asus', 'lenovo', 'wipro',
+}
+
+
+def extract_products_from_item_category_field(document_text: str) -> List[Dict[str, Any]]:
+    """
+    Extract products from GeM-style 'Item Category' / 'वस्तु श्रेणी' field:
+    single line with comma/semicolon-separated product types (e.g. Computers, UPSs, Printers).
+    """
+    if not document_text or len(document_text.strip()) < 10:
+        return []
+    lines = document_text.split('\n')
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        if not _ITEM_CATEGORY_LABELS.search(line_stripped):
+            continue
+        # Take this line and optionally next line (value can wrap)
+        value = line_stripped
+        for sep in [':', '/']:
+            if sep in value:
+                parts = value.split(sep, 1)
+                if len(parts) == 2 and parts[0].strip() and _ITEM_CATEGORY_LABELS.search(parts[0]):
+                    value = parts[1].strip()
+                    break
+        if not value or len(value) < 3:
+            if i + 1 < len(lines):
+                value = lines[i + 1].strip()
+            else:
+                continue
+        # If value still starts with the label (e.g. "Item Category Computers, ..."), strip the label
+        value = _ITEM_CATEGORY_LABELS.sub('', value).strip()
+        if not value or len(value) < 3:
+            continue
+        # Remove leading descriptive phrase (e.g. "Customized AMC/CMC for Pre-owned Products - ")
+        value = re.sub(r'^[^,;]{10,}?\s*-\s*', '', value, count=1)
+        # Split by comma and semicolon only so product list is not broken
+        raw_tokens = re.split(r'[,;]', value)
+        seen = set()
+        products = []
+        for idx, token in enumerate(raw_tokens):
+            t = token.strip().strip('.;')
+            if not t or len(t) < 2 or len(t) > 80:
+                continue
+            t_lower = t.lower()
+            if t_lower in _KNOWN_BRANDS:
+                continue
+            if t_lower in seen:
+                continue
+            if re.match(r'^\d+$', t):
+                continue
+            if re.search(r'\b(amc|cmc|customized|pre-owned|products?)\b', t_lower) and len(t) > 25:
+                continue
+            known = t_lower in _KNOWN_PRODUCT_TYPES or any(t_lower.startswith(p) for p in _KNOWN_PRODUCT_TYPES)
+            if known or looks_like_product(t, from_table_row=True):
+                seen.add(t_lower)
+                name = t.strip().title() if len(t) < 50 else t.strip()
+                name = clean_product_name(name)
+                if not name:
+                    continue
+                products.append({
+                    "srNo": str(len(products) + 1),
+                    "productName": name[:100],
+                    "category": "Hardware",
+                    "specifications": "",
+                    "quantity": "N/A",
+                    "unit": "N/A",
+                    "oem": "Unspecified",
+                    "model": "N/A",
+                    "miiStatus": "Pending Classification",
+                    "source": "fallback-item-category",
+                })
+        if products:
+            logger.info(f"   ✅ Item Category field: extracted {len(products)} products (GeM-style)")
+            return products
+
+    # Fallback: scan document for a block containing multiple known product types (no label needed)
+    return _extract_products_by_known_types_scan(document_text)
+
+
+def _extract_products_by_known_types_scan(document_text: str) -> List[Dict[str, Any]]:
+    """
+    Find a segment of text that lists several known product types (Computers, UPSs, Printers, etc.)
+    and extract all of them. Works when the Item Category label is missing or corrupted in PDF.
+    """
+    if not document_text or len(document_text) < 20:
+        return []
+    text_lower = document_text.lower()
+    # Sliding window: find ~800-char block with most known product-type hits
+    window_size = 800
+    step = 400
+    best_start = -1
+    best_count = 0
+    for start in range(0, max(1, len(document_text) - window_size), step):
+        end = min(start + window_size, len(document_text))
+        window = text_lower[start:end]
+        count = sum(1 for p in _KNOWN_PRODUCT_TYPES if p in window)
+        if count > best_count and count >= 3:
+            best_count = count
+            best_start = start
+    if best_start < 0 or best_count < 3:
+        return []
+    block = document_text[best_start:best_start + window_size]
+    # Split by comma, semicolon, newline
+    raw_tokens = re.split(r'[,;\n]', block)
+    seen = set()
+    products = []
+    for t in raw_tokens:
+        t = t.strip().strip('.;')
+        if not t or len(t) < 2 or len(t) > 80:
+            continue
+        t_lower = t.lower()
+        if t_lower in _KNOWN_BRANDS:
+            continue
+        if t_lower in seen:
+            continue
+        if re.match(r'^\d+$', t):
+            continue
+        if re.search(r'\b(amc|cmc|customized|pre-owned|products?)\b', t_lower) and len(t) > 25:
+            continue
+        known = t_lower in _KNOWN_PRODUCT_TYPES or any(t_lower.startswith(p) for p in _KNOWN_PRODUCT_TYPES)
+        if known or looks_like_product(t, from_table_row=True):
+            seen.add(t_lower)
+            name = t.strip().title() if len(t) < 50 else t.strip()
+            name = clean_product_name(name)
+            if not name:
+                continue
+            products.append({
+                "srNo": str(len(products) + 1),
+                "productName": name[:100],
+                "category": "Hardware",
+                "specifications": "",
+                "quantity": "N/A",
+                "unit": "N/A",
+                "oem": "Unspecified",
+                "model": "N/A",
+                "miiStatus": "Pending Classification",
+                "source": "fallback-item-category-scan",
+            })
+    if products:
+        logger.info(f"   ✅ Known-types scan: extracted {len(products)} products (GeM-style, no label)")
+    return products
+
+
 def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
     """
     Extract products from document text when AI fails
-    Looks for BOQ/BOM tables and parses them with STRICT validation
+    Tries GeM-style Item Category field first, then BOQ/BOM tables with STRICT validation
     """
     logger.info("🔧 Fallback: Attempting direct BOQ extraction from document text...")
-    
+
+    # GeM / form-style: single "Item Category" field with comma-separated product types
+    item_category_products = extract_products_from_item_category_field(document_text)
+    if item_category_products:
+        return item_category_products
+
     products = []
     lines = document_text.split('\n')
     
@@ -431,27 +624,51 @@ def extract_products_from_text(document_text: str) -> List[Dict[str, Any]]:
 
 def enhance_analysis_with_fallback_products(analysis_data: Dict[str, Any], document_text: str) -> Dict[str, Any]:
     """
-    Check if productMapping is empty and try fallback extraction if needed
+    Check if productMapping is empty or incomplete; try Item Category and fallback BOQ extraction.
+    When the document has an Item Category field with more products than the AI found, use it.
     """
     if not analysis_data.get("productMapping"):
         logger.warning("No productMapping in analysis data")
         return analysis_data
-    
+
     product_mapping = analysis_data["productMapping"]
     current_products = product_mapping.get("miiProductStatus", [])
-    
+
+    # Always try Item Category (GeM-style): if it yields more products, prefer it
+    item_category_products = extract_products_from_item_category_field(document_text)
+    if item_category_products and len(item_category_products) > len(current_products):
+        logger.info(f"🔄 Item Category has {len(item_category_products)} products > AI {len(current_products)} - using Item Category list")
+        product_mapping["miiProductStatus"] = item_category_products
+        product_mapping["totalItems"] = len(item_category_products)
+        product_mapping["extractionMethod"] = "fallback-item-category"
+        analysis_data["productMapping"] = product_mapping
+        _clean_all_product_names(product_mapping)
+        return analysis_data
+
     if len(current_products) == 0:
         logger.info("🔄 AI extracted 0 products - trying fallback BOQ extraction...")
         fallback_products = extract_products_from_text(document_text)
-        
+
         if fallback_products:
             logger.info(f"✅ Fallback extraction successful: {len(fallback_products)} products found")
             product_mapping["miiProductStatus"] = fallback_products
             product_mapping["totalItems"] = len(fallback_products)
             product_mapping["extractionMethod"] = "fallback"
             analysis_data["productMapping"] = product_mapping
+            _clean_all_product_names(product_mapping)
         else:
             logger.warning("⚠️ Fallback extraction also found 0 products")
-    
+    else:
+        # Clean existing product names (remove PDF cid: and label artifacts)
+        _clean_all_product_names(product_mapping)
+
     return analysis_data
+
+
+def _clean_all_product_names(product_mapping: Dict[str, Any]) -> None:
+    """Clean productName for all entries in miiProductStatus (in-place)."""
+    products = product_mapping.get("miiProductStatus") or []
+    for p in products:
+        if p.get("productName"):
+            p["productName"] = clean_product_name(p["productName"])
 

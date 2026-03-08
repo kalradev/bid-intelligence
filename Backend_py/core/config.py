@@ -34,8 +34,8 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = "change-me-in-production"
     
-    # Org-wide quota: 10 base + purchased (shared by Bid Admin + all Bid Managers)
-    ORG_QUOTA_BASE: int = 10
+    # Org-wide quota: base + purchased (shared by Bid Admin + all Bid Managers)
+    ORG_QUOTA_BASE: int = 50
     RECHARGE_SINGLE_AMOUNT: float = 3.0   # 1 project = $3
     RECHARGE_BULK_AMOUNT: float = 25.0    # 10 projects = $25
     RECHARGE_SINGLE_PROJECTS: int = 1

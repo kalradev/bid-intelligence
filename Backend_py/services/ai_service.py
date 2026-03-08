@@ -715,10 +715,12 @@ If any NEW eligibility conditions are found in this second pass:
 3. Look for sections: BOQ (Bill of Quantities), BOM (Bill of Materials), Schedule of Items, Product List, with columns like "Item", "Description", "Product", "Quantity", "Unit"
 4. Extract ONLY rows from that product/BOQ table - each row = one product entry in productMapping.miiProductStatus
 5. If the document has 3 products, return exactly 3 entries in miiProductStatus - do not inflate with other tables
+6. GeM / form-style: If there is an "Item Category" or "वस्तु श्रेणी" or "Product Category" field with a comma/semicolon-separated list (e.g. "Computers, UPSs, Printers, MFMs, Scanners, Servers, Switches, Laptops, Monitors"), extract EACH item as a separate entry in miiProductStatus. Ignore brand names in the same list (e.g. HP, DELL); extract only the product types.
 
 **EXTRACTION RULES:**
 - Put in productMapping.miiProductStatus ONLY rows from the actual BOQ/product table (goods/items to supply). Never add rows from ministry lists, state lists, office lists, eligibility tables, or list of bidders.
 - If you find the BOQ/product table, extract every product row into productMapping.miiProductStatus
+- ⚠️ INCLUDE rate/maintenance BOQ rows: Rows like "4th year CAMC Rate", "5th year CAMC Rate", "AMC Rate", "CAMC Rate" are BOQ line items and MUST be extracted as separate entries in miiProductStatus (one entry per row).
 - If product name is missing, use the item description or first column value
 - If multiple products are listed in one row, split them into separate entries in productMapping.miiProductStatus
 - ⚠️ CRITICAL: Services/Activities (Supply, Installation, Configuration, Commissioning, etc.) at DIFFERENT LOCATIONS are SEPARATE PRODUCTS
