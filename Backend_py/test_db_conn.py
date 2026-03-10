@@ -16,7 +16,7 @@ def test_connection():
             port=port
         )
         print("✅ Connection to 'postgres' database successful!")
-        
+          
         cursor = conn.cursor()
         cursor.execute("SELECT 1 FROM pg_database WHERE datname='bid_intelligence'")
         exists = cursor.fetchone()
