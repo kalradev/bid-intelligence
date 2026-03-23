@@ -6,7 +6,7 @@ _backend_dir = Path(__file__).resolve().parent
 if str(_backend_dir) not in sys.path:
     sys.path.insert(0, str(_backend_dir))
 
-# Load .env from Backend_py so password/port are correct
+# Load .env from Backend_py so password/port are correct 
 _env_file = _backend_dir / ".env"
 if _env_file.exists():
     from dotenv import load_dotenv
