@@ -190,7 +190,7 @@ flowchart TB
     build[build_user_prompt]
     get_fb[get_learning_feedback_prompt]
     user_prompt[user_prompt with "PAST USER CORRECTIONS"]
-    gen[generate_departmental_summaries - OpenAI]
+    gen[generate_departmental_summaries - Ollama]
   end
 
   subgraph UIVisibility [UI Visibility]

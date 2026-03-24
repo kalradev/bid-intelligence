@@ -13,22 +13,14 @@ import json
 import logging
 import re
 from typing import List, Dict, Any, Optional
-from openai import AsyncOpenAI
-from core.config import settings
+from services.ollama_client import ollama_configured, ollama_chat_json_async
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client with API key from settings
-async_client = None
-if settings.OPENAI_API_KEY:
-    try:
-        async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info("✅ OEM Recommendation Service: OpenAI client initialized")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize OpenAI client for OEM recommendations: {str(e)}")
-        async_client = None
+if ollama_configured():
+    logger.info("✅ OEM Recommendation Service: Ollama available")
 else:
-    logger.warning("⚠️ OPENAI_API_KEY not found - OEM recommendations will be disabled")
+    logger.warning("⚠️ Ollama not configured — OEM recommendations will be disabled")
 
 
 def is_valid_product_for_enrichment(product: Dict[str, Any]) -> bool:
@@ -97,9 +89,8 @@ async def recommend_oem_models_batch(
         Dictionary mapping product names to their recommendations
     """
     
-    # Check if OpenAI client is initialized
-    if not async_client:
-        logger.debug(f"⏭️ Skipping batch OEM recommendations - OpenAI client not available")
+    if not ollama_configured():
+        logger.debug("⏭️ Skipping batch OEM recommendations — Ollama not configured")
         return {}
     
     if not products:
@@ -193,18 +184,16 @@ Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Global when relevant)."""
 
     try:
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
+        out = await ollama_chat_json_async(
+            [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
-            max_tokens=4096,  # Increased for batch processing
-            response_format={"type": "json_object"}
+            num_predict=4096,
+            json_format=True,
         )
-        
-        result = json.loads(response.choices[0].message.content)
+        result = out["parsed"]
         product_recs = result.get("product_recommendations", {})
         
         # Validate and ensure all models are not "N/A" - generate better model names
@@ -290,9 +279,8 @@ async def recommend_oem_models(
         List of 2-5 OEM recommendations with model names, match scores, and reasoning
     """
     
-    # Check if OpenAI client is initialized
-    if not async_client:
-        logger.debug(f"⏭️ Skipping OEM recommendations for {product_name} - OpenAI client not available")
+    if not ollama_configured():
+        logger.debug(f"⏭️ Skipping OEM recommendations for {product_name} — Ollama not configured")
         return []
     
     # Build the AI prompt with actual specifications
@@ -375,17 +363,16 @@ Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 Return 2-5 recommendations, ranked by best match score (prefer more Indian OEMs)."""
 
     try:
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",  # Using gpt-4o-mini for cost-effectiveness
-            messages=[
+        out = await ollama_chat_json_async(
+            [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=0.3,  # Low temperature for consistent, factual responses
-            response_format={"type": "json_object"}
+            temperature=0.3,
+            num_predict=4096,
+            json_format=True,
         )
-        
-        result = json.loads(response.choices[0].message.content)
+        result = out["parsed"]
         recommendations = result.get("recommendations", [])
         
         # Validate and ensure models are not "N/A"

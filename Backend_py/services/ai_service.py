@@ -2,34 +2,27 @@ import json
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
 import os
 import copy
 
 from core.config import settings
 from data.mii_database import get_all_indian_oems, get_all_global_oems
+from services.ollama_client import ollama_configured, ollama_chat_json_sync, ollama_chat_json_async
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = None
-if settings.OPENAI_API_KEY:
-    try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info("✅ OpenAI client initialized")
-    except Exception as e:
-        logger.error(f"❌ OpenAI initialization failed: {str(e)}")
+if ollama_configured():
+    logger.info(f"✅ Ollama configured: {settings.OLLAMA_BASE_URL} model={settings.OLLAMA_MODEL}")
 else:
-    logger.error("❌ OPENAI_API_KEY not found in settings")
+    logger.error("❌ OLLAMA_BASE_URL and/or OLLAMA_MODEL not set")
 
 # Configuration
-OPENAI_MODEL = "gpt-4o-mini"
 TEMPERATURE = 0.3
-MAX_TOKENS_OPENAI = 16384
+MAX_TOKENS_LLM = 16384
 
 # Chunking configuration
-CHUNK_SIZE_OPENAI = 150000
-MAX_CONTEXT_OPENAI = 100000
+CHUNK_SIZE_LLM = 150000
+MAX_CONTEXT_LLM = 100000
 
 # Eligibility second pass: if first-pass rule count is below this, run second pass automatically
 ELIGIBILITY_SECOND_PASS_THRESHOLD = 15
@@ -75,8 +68,8 @@ def get_learning_feedback_prompt(project_id: Optional[int] = None) -> str:
 async def generate_departmental_summaries(document_text: str, file_name: str, project_id: Optional[int] = None) -> Dict[str, Any]:
     logger.info(f"🔍 Starting analysis for: {file_name}")
     logger.info(f"   Document length: {len(document_text)} characters")
-    if not client:
-        raise Exception("OpenAI client not initialized. Please check your OPENAI_API_KEY.")
+    if not ollama_configured():
+        raise Exception("Ollama is not configured. Set OLLAMA_BASE_URL and OLLAMA_MODEL in your environment.")
     
     system_prompt = get_system_prompt()
     user_prompt = build_user_prompt(document_text, file_name, project_id)
@@ -86,12 +79,12 @@ async def generate_departmental_summaries(document_text: str, file_name: str, pr
     
     try:
         if document_too_large:
-            logger.info(f"⚡ Large document ({estimated_tokens} tokens), using OpenAI chunking strategy...")
+            logger.info(f"⚡ Large document ({estimated_tokens} tokens), using LLM chunking strategy...")
             result = await process_large_document(document_text, file_name, project_id)
         else:
-            logger.info(f"🤖 Generating summaries with OpenAI ({OPENAI_MODEL})...")
-            result = await generate_with_openai_async(system_prompt, user_prompt)
-            logger.info("✅ OpenAI generation successful")
+            logger.info(f"🤖 Generating summaries with Ollama ({settings.OLLAMA_MODEL})...")
+            result = await generate_with_ollama_async(system_prompt, user_prompt)
+            logger.info("✅ Ollama generation successful")
         
         # Check if AI extracted any products, if not try fallback
         summaries = result.get("summaries", {})
@@ -148,27 +141,20 @@ async def generate_departmental_summaries(document_text: str, file_name: str, pr
         
         return result
     except Exception as e:
-        logger.error(f"❌ OpenAI generation failed: {str(e)}")
+        logger.error(f"❌ Ollama generation failed: {str(e)}")
         raise Exception(f"AI generation failed: {str(e)}")
 
-async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-    # Since openai-python doesn't have a simple async call for sync client, 
-    # and we want to avoid complex async setups for now, we'll use run_in_executor if needed,
-    # but for simplicity, we'll just run it. FastAPI handles sync routes in threads.
-    
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
+async def generate_with_ollama_async(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    out = await ollama_chat_json_async(
+        [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ],
         temperature=TEMPERATURE,
-        max_tokens=MAX_TOKENS_OPENAI,
-        response_format={"type": "json_object"}
+        num_predict=MAX_TOKENS_LLM,
+        json_format=True,
     )
-    
-    response_text = response.choices[0].message.content
-    summaries = json.loads(response_text)
+    summaries = out["parsed"]
     
     # Debug: Log product mapping extraction
     if summaries.get("productMapping"):
@@ -186,12 +172,12 @@ async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Di
     return {
         "summaries": summaries,
         "usage": {
-            "promptTokens": response.usage.prompt_tokens,
-            "completionTokens": response.usage.completion_tokens,
-            "totalTokens": response.usage.total_tokens
+            "promptTokens": out["prompt_tokens"],
+            "completionTokens": out["completion_tokens"],
+            "totalTokens": out["total_tokens"],
         },
-        "model": OPENAI_MODEL,
-        "provider": "openai"
+        "model": settings.OLLAMA_MODEL,
+        "provider": "ollama",
     }
 
 
@@ -246,24 +232,23 @@ Return ONLY valid JSON, no other text."""
 
 
 def _call_eligibility_second_pass_sync(prompt: str, system: str) -> List[str]:
-    """Sync OpenAI call for second pass; run in executor from async code."""
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
+    """Sync Ollama call for second pass; run in executor from async code."""
+    result = ollama_chat_json_sync(
+        [
             {"role": "system", "content": system},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ],
         temperature=0.2,
-        max_tokens=4096,
-        response_format={"type": "json_object"}
+        num_predict=4096,
+        json_format=True,
     )
-    out = json.loads(response.choices[0].message.content)
+    out = result["parsed"]
     return out.get("additionalCriteria") or []
 
 
 async def run_eligibility_second_pass(document_text: str, file_name: str, existing_criteria: List[str]) -> List[str]:
     """Run second-pass extraction for eligibility; returns list of ADDITIONAL criteria only (no duplicates)."""
-    if not client:
+    if not ollama_configured():
         return []
     prompt = _build_eligibility_second_pass_prompt(document_text, existing_criteria)
     system = "You are an Expert Government Tender Eligibility Analyst. Return only valid JSON with key 'additionalCriteria' (array of strings). Extract ONLY eligibility conditions explicitly stated in the document. Do not duplicate; do not infer."
@@ -938,10 +923,10 @@ Return ONLY valid JSON with this structure:
 """
 
 async def process_large_document(document_text: str, file_name: str, project_id: Optional[int] = None) -> Dict[str, Any]:
-    chunk_size = CHUNK_SIZE_OPENAI
+    chunk_size = CHUNK_SIZE_LLM
     chunks = [document_text[i:i + chunk_size] for i in range(0, len(document_text), chunk_size)]
     
-    logger.info(f"📄 Processing large document with OpenAI in {len(chunks)} chunks...")
+    logger.info(f"📄 Processing large document with Ollama in {len(chunks)} chunks...")
     
     chunk_results = []
     for i, chunk in enumerate(chunks):
@@ -956,7 +941,7 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     system_prompt = get_system_prompt() # Or specialized chunk prompt if needed
                     user_prompt = build_user_prompt(chunk, f"{file_name} (Part {i + 1}/{len(chunks)})", project_id)
                     
-                    result = await generate_with_openai_async(system_prompt, user_prompt)
+                    result = await generate_with_ollama_async(system_prompt, user_prompt)
                     chunk_results.append(result["summaries"])
                     success = True
                 except asyncio.CancelledError:
@@ -965,11 +950,12 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     raise  # Re-raise to propagate cancellation
                 except Exception as e:
                     error_str = str(e)
-                    # Check for quota errors
-                    if "insufficient_quota" in error_str or "429" in error_str:
-                        logger.error(f"❌ OpenAI quota exceeded. Please check your billing and plan details.")
-                        logger.error(f"   Visit: https://platform.openai.com/account/billing")
-                        raise Exception("OpenAI API quota exceeded. Please check your billing and plan details.")
+                    # Ollama / network hard failures — do not retry forever
+                    if "model" in error_str.lower() and ("not found" in error_str.lower() or "pull" in error_str.lower()):
+                        logger.error("❌ Ollama model missing on server. Run: ollama pull %s", settings.OLLAMA_MODEL)
+                        raise Exception(
+                            f"Ollama model '{settings.OLLAMA_MODEL}' not found. Pull it on the Ollama host or set OLLAMA_MODEL."
+                        )
                     
                     retry_count += 1
                     if retry_count <= 2:
@@ -1000,8 +986,8 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     "chunkCount": len(chunks),
                     "processedChunks": len(chunk_results),
                     "cancelled": True,
-                    "model": OPENAI_MODEL,
-                    "provider": "openai"
+                    "model": settings.OLLAMA_MODEL,
+                    "provider": "ollama",
                 }
             raise  # Re-raise if no chunks were processed
                     
@@ -1019,8 +1005,8 @@ async def process_large_document(document_text: str, file_name: str, project_id:
         "summaries": final_summaries,
         "chunked": True,
         "chunkCount": len(chunks),
-        "model": OPENAI_MODEL,
-        "provider": "openai"
+        "model": settings.OLLAMA_MODEL,
+        "provider": "ollama",
     }
 
 def naive_merge_summaries(results: List[Dict[str, Any]]) -> Dict[str, Any]:

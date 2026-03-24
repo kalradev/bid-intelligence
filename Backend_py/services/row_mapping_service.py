@@ -3,12 +3,10 @@ import logging
 import asyncio
 import re
 from typing import List, Dict, Any, Optional
-from openai import AsyncOpenAI
-from core.config import settings
+
+from services.ollama_client import ollama_configured, ollama_chat_json_async
 
 logger = logging.getLogger(__name__)
-
-async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 def validate_product_row(mapped_product: Dict[str, Any], raw_row: List[str]) -> bool:
     if not mapped_product.get("isValid"):
@@ -40,6 +38,9 @@ def validate_product_row(mapped_product: Dict[str, Any], raw_row: List[str]) -> 
 
 async def map_row_to_product(row: List[str], headers: List[str] = None, document_context: str = '') -> Optional[Dict[str, Any]]:
     try:
+        if not ollama_configured():
+            logger.debug("Skipping row mapping — Ollama not configured")
+            return None
         headers = headers or []
         row_data = {}
         for i, h in enumerate(headers):
@@ -91,17 +92,16 @@ Map this row to a structured product object. Extract:
   "isValid": true/false
 }}"""
 
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
+        out = await ollama_chat_json_async(
+            [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.0,
-            response_format={"type": "json_object"}
+            num_predict=2048,
+            json_format=True,
         )
-        
-        mapped = json.loads(response.choices[0].message.content)
+        mapped = out["parsed"]
         
         if not validate_product_row(mapped, row):
             return None

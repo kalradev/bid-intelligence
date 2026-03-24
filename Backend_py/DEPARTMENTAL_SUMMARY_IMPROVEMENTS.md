@@ -296,7 +296,7 @@ After these improvements, your departmental summaries should:
 ## 📞 **IF STILL SEEING N/A:**
 
 Check if:
-1. OpenAI API key is valid and loaded
+1. Ollama is configured (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`) and the model is available on the host
 2. Document actually contains the information
 3. Backend logs show successful analysis
 4. Using latest code (after this update)

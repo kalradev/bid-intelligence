@@ -12,8 +12,10 @@ services:
         value: 10000
       - key: MONGODB_STRING
         sync: false
-      - key: OPENAI_API_KEY
+      - key: OLLAMA_BASE_URL
         sync: false
+      - key: OLLAMA_MODEL
+        value: llama3.2
       - key: ENVIRONMENT
         value: production
       - key: PROCESSING_VERSION

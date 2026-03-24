@@ -269,12 +269,11 @@ async def analyze_rfp(
         raise HTTPException(status_code=499, detail="Analysis cancelled by user")
     except Exception as e:
         error_str = str(e)
-        # Check for quota errors and provide helpful message
-        if "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
-            logger.error(f"❌ OpenAI quota exceeded: {error_str}")
+        if "AI generation failed" in error_str or "Ollama" in error_str:
+            logger.error(f"❌ AI (Ollama) error: {error_str}")
             raise HTTPException(
-                status_code=402, 
-                detail="OpenAI API quota exceeded. Please check your billing and plan details at https://platform.openai.com/account/billing"
+                status_code=502,
+                detail="AI service (Ollama) failed. Check OLLAMA_BASE_URL, OLLAMA_MODEL, network reachability, and that the model is pulled on the Ollama host.",
             )
         logger.error(f"Error analyzing RFP: {error_str}", exc_info=True)
         if isinstance(e, HTTPException): raise e

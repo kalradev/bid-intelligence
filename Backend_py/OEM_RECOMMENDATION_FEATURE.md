@@ -316,20 +316,16 @@ Quantity: 100 units
 
 Required in `.env`:
 ```bash
-OPENAI_API_KEY=sk-your-key-here
+OLLAMA_BASE_URL=http://172.16.200.30:11434
+OLLAMA_MODEL=llama3.2
 ```
 
-### Cost Optimization
+### Cost & hosting
 
-**Current Configuration:**
-- Model: `gpt-4o-mini` (cost-effective)
+**Current configuration:**
+- Model: set via `OLLAMA_MODEL` (must be pulled on the Ollama host)
 - Temperature: `0.3` (consistent, factual)
-- Concurrent requests: `5` (rate limit friendly)
-
-**Estimated Cost:**
-- ~$0.001 per product recommendation
-- 100 products = ~$0.10
-- 1000 products = ~$1.00
+- Runs against your Ollama server (no OpenAI billing)
 
 ### Performance
 
@@ -414,9 +410,9 @@ No manual intervention needed!
 ### No Recommendations Generated
 
 **Possible Causes:**
-1. OpenAI API key missing/invalid
-2. Rate limit reached
-3. Network issues
+1. Ollama not configured (`OLLAMA_BASE_URL` / `OLLAMA_MODEL`) or model not pulled on host
+2. Network unreachable to Ollama host
+3. Ollama host overloaded or out of memory
 
 **Check Logs:**
 ```python
@@ -459,8 +455,8 @@ logger.info("✅ OEM Enrichment Complete: ...")
 
 For issues or questions:
 1. Check logs in Backend console
-2. Verify OpenAI API key is valid
-3. Ensure internet connectivity
+2. Verify Ollama is reachable and the model exists (`ollama list` on host)
+3. Ensure the backend can reach `OLLAMA_BASE_URL` (firewall / VPN)
 4. Review this documentation
 
 ---

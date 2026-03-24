@@ -6,7 +6,7 @@ Sure — here is the **full README.md in one copy-paste block** (no explanation 
 # 📌 Bid-Intelligence.ai — RFP Analysis & Bid Management Platform
 
 Bid-Intelligence.ai is an AI-powered platform that automates the extraction, analysis, and cost estimation of **RFP (Request for Proposal) documents**.  
-Users upload bid documents, and the system processes them through AI providers (OpenAI / Gemini) to generate summaries, departmental insights, and bid-management support.
+Users upload bid documents, and the system processes them through AI providers (Ollama / Gemini) to generate summaries, departmental insights, and bid-management support.
 
 ---
 
@@ -79,14 +79,14 @@ User → React SPA → Upload RFP → Fetch AI-generated results → Navigate be
 | rfpRoutes | Routing for RFP operations |
 | rfpController | Business logic for RFP processing |
 | documentExtractor Service | Converts documents to raw text |
-| openaiService | Sends extracted text to OpenAI for AI analysis |
+| ai_service | Sends extracted text to Ollama for AI analysis |
 | errorHandler | Handles backend errors & failed requests |
 | .env | Stores API keys and configuration |
 
 Backend Processing Flow:
 ```
 
-File Upload → Extract Text → Chunk & Process → OpenAI Call → Save to DB/Storage → Return JSON Response
+File Upload → Extract Text → Chunk & Process → Ollama Call → Save to DB/Storage → Return JSON Response
 
 ```
 
@@ -96,7 +96,7 @@ File Upload → Extract Text → Chunk & Process → OpenAI Call → Save to DB/
 
 | Service | Purpose |
 |--------|---------|
-| OpenAI API | AI-powered summarization and insights |
+| Ollama | AI-powered summarization and insights (self-hosted) |
 | Cloud Storage (S3 or similar) | Stores uploaded documents |
 | Auth Provider / OAuth | Authentication (optional) |
 | Database | Stores RFP records and AI results |
@@ -152,7 +152,7 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 
 1. Extract and clean text from uploaded document
 2. Split text into semantic chunks
-3. Summarize each chunk using OpenAI
+3. Summarize each chunk using Ollama
 4. Merge chunk-summaries into a unified RFP analysis
 5. Map analysis to departments / timeline / requirements
 6. Store results in database
@@ -178,7 +178,7 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 
 * Centralized Express error handler
 * File type validation and size limits
-* Retry logic for OpenAI rate limits (optional)
+* Retry logic for transient Ollama / network errors (optional)
 * Environment-based configuration
 * Logging for debugging & monitoring
 

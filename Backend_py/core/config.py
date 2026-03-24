@@ -3,8 +3,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
-    # API Keys
-    OPENAI_API_KEY: Optional[str] = None
+    # Ollama (local / LAN) — e.g. http://172.16.200.30:11434
+    OLLAMA_BASE_URL: Optional[str] = None
+    OLLAMA_MODEL: str = "llama3.2"
+
     GEMINI_API_KEY: Optional[str] = None
     
     # Server Config

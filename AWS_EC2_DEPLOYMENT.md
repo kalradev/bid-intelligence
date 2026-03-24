@@ -126,7 +126,8 @@ Used for deployment; keep secrets out of version control.
 | `POSTGRES_PASSWORD` | PostgreSQL password | (your password) |
 | `POSTGRES_DB` | Database name | `Bid` or `Bid2` |
 | `JWT_SECRET` | JWT signing secret | Long random string (e.g. `openssl rand -hex 32`) |
-| `OPENAI_API_KEY` | OpenAI API key | (for AI analysis) |
+| `OLLAMA_BASE_URL` | Ollama API base URL (e.g. `http://host:11434`) | (for AI analysis) |
+| `OLLAMA_MODEL` | Model name on Ollama host | e.g. `llama3.2` |
 
 ### Optional but Recommended
 | Variable | Description | Example |
@@ -224,7 +225,8 @@ docker run -p 8001:8001 \
   -e POSTGRES_HOST=host.docker.internal \
   -e POSTGRES_PASSWORD=yourpassword \
   -e JWT_SECRET=your-secret \
-  -e OPENAI_API_KEY=your-key \
+  -e OLLAMA_BASE_URL=http://your-ollama-host:11434 \
+  -e OLLAMA_MODEL=llama3.2 \
   bid-intelligence:latest
 ```
 
