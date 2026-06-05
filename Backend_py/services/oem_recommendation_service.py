@@ -12,23 +12,103 @@ import asyncio
 import json
 import logging
 import re
+import hashlib
 from typing import List, Dict, Any, Optional
-from openai import AsyncOpenAI
-from core.config import settings
+from services import llm_client
+from data.mii_database import classify_mii_status, get_all_global_oems, get_all_indian_oems
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client with API key from settings
-async_client = None
-if settings.OPENAI_API_KEY:
-    try:
-        async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info("✅ OEM Recommendation Service: OpenAI client initialized")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize OpenAI client for OEM recommendations: {str(e)}")
-        async_client = None
-else:
-    logger.warning("⚠️ OPENAI_API_KEY not found - OEM recommendations will be disabled")
+
+def _split_oems(oem_value: str) -> List[str]:
+    if not oem_value:
+        return []
+    parts = re.split(r"\s*/\s*|\s+or\s+|,", str(oem_value), flags=re.I)
+    cleaned = []
+    seen = set()
+    for p in parts:
+        v = (p or "").strip()
+        if not v:
+            continue
+        k = v.lower()
+        if k in {"unspecified", "n/a", "na"}:
+            continue
+        if k in seen:
+            continue
+        seen.add(k)
+        cleaned.append(v)
+    return cleaned
+
+
+def _looks_unspecified_oem(value: Any) -> bool:
+    text = (value or "").strip().lower() if isinstance(value, str) else str(value or "").strip().lower()
+    return text in {"", "unspecified", "unspecified oem", "n/a", "na", "none"}
+
+
+def _fallback_oems_for_product(product: Dict[str, Any], max_count: int = 3) -> List[str]:
+    """Pick deterministic real OEM names based on product category/name."""
+    category = str(product.get("category", "")).lower()
+    name = str(product.get("productName", "")).lower()
+
+    indian_pool = get_all_indian_oems()
+    global_pool = get_all_global_oems()
+
+    candidate_indian = ["Wipro", "HCL", "Dell India"]
+    candidate_global = ["Dell", "HPE", "Cisco"]
+
+    if any(k in category or k in name for k in ["network", "switch", "router", "firewall"]):
+        candidate_indian = ["Wipro", "HCL", "Dell India"]
+        candidate_global = ["Cisco", "HPE", "Juniper"]
+    elif any(k in category or k in name for k in ["server", "storage", "compute"]):
+        candidate_indian = ["Wipro", "HCL", "Dell India"]
+        candidate_global = ["Dell", "HPE", "Lenovo"]
+    elif any(k in category or k in name for k in ["security", "monitoring"]):
+        candidate_indian = ["Wipro", "HCL", "Tata"]
+        candidate_global = ["IBM", "Cisco", "Microsoft"]
+
+    # Keep only OEMs available in database lists
+    ordered = []
+    for o in candidate_indian + candidate_global:
+        if o in indian_pool or o in global_pool:
+            ordered.append(o)
+
+    # deterministic but stable ordering by product key
+    key = f"{product.get('productName','')}|{product.get('category','')}"
+    digest = hashlib.md5(key.encode("utf-8")).hexdigest()
+    shift = int(digest[:8], 16) % max(1, len(ordered))
+    rotated = ordered[shift:] + ordered[:shift]
+    return rotated[:max_count] if rotated else ["Dell", "HPE", "Cisco"][:max_count]
+
+
+def _build_fallback_recommendations(product: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Ensure UI always gets checklist-style recommendations for each product.
+    Uses extracted OEM/model when AI recommendations are unavailable.
+    """
+    product_name = str(product.get("productName", "")).strip()
+    model = str(product.get("model", "N/A")).strip() or "N/A"
+    existing_oem = str(product.get("oem", "")).strip()
+    mii_status = str(product.get("miiStatus", "")).strip()
+
+    oems = _split_oems(existing_oem)
+    if not oems:
+        oems = _fallback_oems_for_product(product, max_count=3)
+
+    recs: List[Dict[str, Any]] = []
+    for i, oem in enumerate(oems[:4]):
+        status = classify_mii_status(oem, str(product.get("category", "")))
+        if mii_status in {"Indian OEM", "Global OEM"} and i == 0:
+            status = mii_status
+        recs.append({
+            "oem": oem,
+            "model": model if model not in {"", "N/A", "NA"} else f"{oem} {product_name}".strip(),
+            "miiStatus": status,
+            "matchScore": 95 if i == 0 else 90,
+            "priceRange": "From document",
+            "availability": "From document",
+            "reasoning": "Fallback recommendation generated from extracted tender data",
+        })
+    return recs
 
 
 def is_valid_product_for_enrichment(product: Dict[str, Any]) -> bool:
@@ -97,9 +177,8 @@ async def recommend_oem_models_batch(
         Dictionary mapping product names to their recommendations
     """
     
-    # Check if OpenAI client is initialized
-    if not async_client:
-        logger.debug(f"⏭️ Skipping batch OEM recommendations - OpenAI client not available")
+    if not llm_client.get_async_chat_client():
+        logger.debug("⏭️ Skipping batch OEM recommendations - LLM client not available")
         return {}
     
     if not products:
@@ -193,18 +272,17 @@ Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models for EACH
 Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Global when relevant)."""
 
     try:
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",
+        content, _ = await llm_client.chat_completion_async(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
+            model=llm_client.get_model_oem(),
             temperature=0.3,
-            max_tokens=4096,  # Increased for batch processing
-            response_format={"type": "json_object"}
+            max_tokens=4096,
+            json_object=True,
         )
-        
-        result = json.loads(response.choices[0].message.content)
+        result = llm_client.parse_json_from_response_content(content)
         product_recs = result.get("product_recommendations", {})
         
         # Validate and ensure all models are not "N/A" - generate better model names
@@ -214,6 +292,8 @@ Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Globa
             for rec in recs:
                 model = rec.get("model", "").strip()
                 oem = rec.get("oem", "").strip()
+                if _looks_unspecified_oem(oem):
+                    continue
                 
                 # If model is missing or "N/A", generate a proper model name
                 if not model or model.upper() in ["N/A", "NA", "NONE", ""]:
@@ -250,6 +330,7 @@ Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Globa
                         rec["model"] = model
                         logger.info(f"✅ Replaced generic model with '{model}' for {product_name}")
                 
+                rec["miiStatus"] = classify_mii_status(oem, "")
                 validated_list.append(rec)
             
             # 🇮🇳 PRIORITIZE INDIAN OEMs - Sort to show Make in India OEMs first
@@ -258,6 +339,8 @@ Return 2-5 recommendations per product (prefer more Indian OEMs; include 1 Globa
                 -x.get("matchScore", 0)  # Then by match score descending
             ))
             
+            if not validated_list:
+                validated_list = _build_fallback_recommendations({"productName": product_name})
             validated_recs[product_name] = validated_list
         
         logger.info(f"✅ Generated batch recommendations for {len(validated_recs)} products")
@@ -290,9 +373,8 @@ async def recommend_oem_models(
         List of 2-5 OEM recommendations with model names, match scores, and reasoning
     """
     
-    # Check if OpenAI client is initialized
-    if not async_client:
-        logger.debug(f"⏭️ Skipping OEM recommendations for {product_name} - OpenAI client not available")
+    if not llm_client.get_async_chat_client():
+        logger.debug(f"⏭️ Skipping OEM recommendations for {product_name} - LLM client not available")
         return []
     
     # Build the AI prompt with actual specifications
@@ -375,17 +457,17 @@ Recommend 2-5 suitable OEM manufacturers and their SPECIFIC REAL models that mat
 Return 2-5 recommendations, ranked by best match score (prefer more Indian OEMs)."""
 
     try:
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",  # Using gpt-4o-mini for cost-effectiveness
+        content, _ = await llm_client.chat_completion_async(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
-            temperature=0.3,  # Low temperature for consistent, factual responses
-            response_format={"type": "json_object"}
+            model=llm_client.get_model_oem(),
+            temperature=0.3,
+            max_tokens=4096,
+            json_object=True,
         )
-        
-        result = json.loads(response.choices[0].message.content)
+        result = llm_client.parse_json_from_response_content(content)
         recommendations = result.get("recommendations", [])
         
         # Validate and ensure models are not "N/A"
@@ -589,6 +671,9 @@ async def enrich_products_with_recommendations(
                     validated_recommendations = []
                     for rec in recommendations:
                         model = rec.get("model", "N/A")
+                        oem = (rec.get("oem") or "").strip()
+                        if _looks_unspecified_oem(oem):
+                            continue
                         if not model or model == "N/A" or model.strip() == "":
                             oem = rec.get("oem", "")
                             # Try to extract from product name or generate better model
@@ -609,6 +694,7 @@ async def enrich_products_with_recommendations(
                                 model = f"{oem} {clean_name}" if oem else f"{clean_name} Standard"
                             rec["model"] = model
                             logger.warning(f"⚠️ Generated default model '{model}' for {product_name} - OEM: {oem}")
+                        rec["miiStatus"] = classify_mii_status(oem, p_copy.get("category", ""))
                         validated_recommendations.append(rec)
                     
                     # 🇮🇳 PRIORITIZE INDIAN OEMs - Sort to show Make in India OEMs first
@@ -616,6 +702,24 @@ async def enrich_products_with_recommendations(
                         0 if x.get("miiStatus") == "Indian OEM" else 1,  # Indian OEMs first
                         -x.get("matchScore", 0)  # Then by match score descending
                     ))
+
+                    # Prepend document-extracted OEM(s) so they always show in product mapping
+                    existing_oem_str = (p_copy.get("oem") or "").strip()
+                    if existing_oem_str and existing_oem_str not in ["Unspecified", "N/A", ""]:
+                        rec_oems = {r.get("oem", "").strip().lower() for r in validated_recommendations}
+                        for part in re.split(r"\s*/\s*|\s+or\s+", existing_oem_str, flags=re.I):
+                            part = part.strip()
+                            if part and part.lower() not in rec_oems:
+                                validated_recommendations.insert(0, {
+                                    "oem": part,
+                                    "model": p_copy.get("model") or "From document",
+                                    "miiStatus": p_copy.get("miiStatus") or "Requires Review",
+                                    "matchScore": 100,
+                                    "priceRange": "From document",
+                                    "availability": "From document",
+                                    "reasoning": "Extracted from tender document",
+                                })
+                                rec_oems.add(part.lower())
                     
                     # Store all recommendations
                     p_copy["oemRecommendations"] = validated_recommendations
@@ -632,7 +736,10 @@ async def enrich_products_with_recommendations(
                     if not existing_model or existing_model in ["N/A", "", "Unspecified"]:
                         p_copy["model"] = best.get("model", "N/A")
                     # Update MII status from best recommendation
-                    p_copy["miiStatus"] = best.get("miiStatus", p_copy.get("miiStatus", "Unmapped"))
+                    p_copy["miiStatus"] = classify_mii_status(
+                        p_copy.get("oem", best.get("oem", "")),
+                        p_copy.get("category", "")
+                    )
                     p_copy["recommendationSource"] = "ai_generated"
                     
                     logger.debug(f"✅ Enriched {product_name} with {len(validated_recommendations)} recommendations")
@@ -662,13 +769,25 @@ async def enrich_products_with_recommendations(
                             else:
                                 p_copy["model"] = f"{clean_name} Standard"
                         logger.info(f"✅ Generated model '{p_copy['model']}' for product without recommendations: {product_name}")
+                    # Ensure checklist UI still has options for this row
+                    p_copy["oemRecommendations"] = _build_fallback_recommendations(p_copy)
+                    if _looks_unspecified_oem(p_copy.get("oem")):
+                        p_copy["oem"] = p_copy["oemRecommendations"][0]["oem"]
+                    p_copy["miiStatus"] = classify_mii_status(p_copy.get("oem", ""), p_copy.get("category", ""))
                 
                 enriched_products.append(p_copy)
         
         except Exception as e:
             logger.error(f"❌ Error processing batch {batch_num}: {str(e)}")
-            # Add products without enrichment if batch fails
-            enriched_products.extend([p.copy() for p in batch])
+            # Add products with fallback recommendations if batch fails
+            for p in batch:
+                p_copy = p.copy()
+                if not p_copy.get("oemRecommendations"):
+                    p_copy["oemRecommendations"] = _build_fallback_recommendations(p_copy)
+                if _looks_unspecified_oem(p_copy.get("oem")):
+                    p_copy["oem"] = p_copy["oemRecommendations"][0]["oem"]
+                p_copy["miiStatus"] = classify_mii_status(p_copy.get("oem", ""), p_copy.get("category", ""))
+                enriched_products.append(p_copy)
     
     # Combine complete products, enriched products, and invalid products (keep them but without enrichment)
     final_products = products_already_complete + enriched_products + products_invalid
@@ -706,6 +825,13 @@ async def enrich_products_with_recommendations(
                     product["model"] = f"{clean_name} Standard"
             
             logger.info(f"✅ Final pass: Generated model '{product['model']}' for {product_name[:50]}...")
+
+        # Final guarantee: every product must have checklist recommendations for UI.
+        if not product.get("oemRecommendations"):
+            product["oemRecommendations"] = _build_fallback_recommendations(product)
+        if _looks_unspecified_oem(product.get("oem")):
+            product["oem"] = product["oemRecommendations"][0]["oem"]
+        product["miiStatus"] = classify_mii_status(product.get("oem", ""), product.get("category", ""))
     
     logger.info(f"✅ Enrichment Complete:")
     logger.info(f"   - Total products: {len(final_products)}")

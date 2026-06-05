@@ -3,9 +3,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
-    # API Keys
+    # LLM: Sarvam (SARVAM_API_KEY) or OpenAI / Azure OpenAI (OPENAI_*).
+    # If SARVAM_API_KEY is set, it takes precedence over OPENAI_API_KEY.
+    SARVAM_API_KEY: Optional[str] = None
+    SARVAM_BASE_URL: str = "https://api.sarvam.ai/v1"
+    SARVAM_CHAT_MODEL: str = "sarvam-105b"
+
     OPENAI_API_KEY: Optional[str] = None
-    GEMINI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: Optional[str] = None
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+
+    # Per-task model overrides (optional; default to the active provider's chat model)
+    LLM_MODEL_SUMMARY: Optional[str] = None
+    LLM_MODEL_ELIGIBILITY: Optional[str] = None
+    LLM_MODEL_OEM: Optional[str] = None
+    LLM_MODEL_ROW: Optional[str] = None
     
     # Server Config
     PORT: int = 3000

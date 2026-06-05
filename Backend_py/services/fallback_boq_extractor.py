@@ -198,11 +198,29 @@ def clean_product_name(name: str) -> str:
     return s[:100].strip() if s else name
 
 
+def _is_garbled_or_non_product_token(name: str) -> bool:
+    """Reject obvious header/garbled tokens from Item Category extraction."""
+    if not name or not name.strip():
+        return True
+    n = name.strip()
+    lower = n.lower()
+    if lower in {"bid details", "item category", "product category", "details", "category"}:
+        return True
+    # Repeated-char artifact like "बबडड ववववररणण"
+    if len(n) >= 4:
+        pairs = [n[i:i + 2] for i in range(0, len(n) - 1, 2)]
+        if pairs:
+            repeated = sum(1 for p in pairs if len(p) == 2 and p[0] == p[1])
+            if repeated >= len(pairs) * 0.5:
+                return True
+    return False
+
+
 # GeM / form-style "Item Category" field: one line with comma/semicolon-separated product types
 # Include corrupted PDF Hindi (ववरातु, णेणे) and plain "category" / "item"
 _ITEM_CATEGORY_LABELS = re.compile(
     r'(?:item\s+category|product\s+category|वस्तु\s*श्रेणी|item\s*category\s*\/|product\s*type|'
-    r'ववरातु|णेणे|श्रेणी|category\s*\/|bid\s+details)',
+    r'ववरातु|णेणे|श्रेणी|category\s*\/)',
     re.IGNORECASE
 )
 # Known product-type words (GeM / IT hardware) – accept these as product names
@@ -273,7 +291,7 @@ def extract_products_from_item_category_field(document_text: str) -> List[Dict[s
                 seen.add(t_lower)
                 name = t.strip().title() if len(t) < 50 else t.strip()
                 name = clean_product_name(name)
-                if not name:
+                if not name or _is_garbled_or_non_product_token(name):
                     continue
                 products.append({
                     "srNo": str(len(products) + 1),
@@ -340,7 +358,7 @@ def _extract_products_by_known_types_scan(document_text: str) -> List[Dict[str, 
             seen.add(t_lower)
             name = t.strip().title() if len(t) < 50 else t.strip()
             name = clean_product_name(name)
-            if not name:
+            if not name or _is_garbled_or_non_product_token(name):
                 continue
             products.append({
                 "srNo": str(len(products) + 1),

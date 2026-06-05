@@ -28,6 +28,8 @@
     "react-hot-toast": "^2.6.0",
     "react-pdf": "^10.2.0",
     "react-router-dom": "^7.9.5",
+    "react-virtualized-auto-sizer": "^2.0.3",
+    "react-window": "^1.8.10",
     "recharts": "^3.4.1"
   },
   "devDependencies": {

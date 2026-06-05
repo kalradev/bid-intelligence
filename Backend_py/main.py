@@ -20,6 +20,7 @@ import logging
 import time
 import asyncio
 import os
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from core.config import settings
 from core.sqlalchemy_db import init_db
@@ -27,6 +28,7 @@ from api.rfp_routes import router as rfp_router
 from api.auth_routes import router as auth_router
 from api.payment_routes import router as payment_router
 from api.admin_routes import router as admin_router
+from services import llm_client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -96,10 +98,11 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Could not init DB tables (ensure PostgreSQL is running): {e}")
 
-# Ensure projects.archived column exists (Bid Admin archive feature)
-try:
+def _apply_startup_schema_updates() -> None:
+    """Best-effort schema updates that should never block API startup."""
     from core.sqlalchemy_db import engine
     from sqlalchemy import text
+
     org_quota_base = getattr(settings, "ORG_QUOTA_BASE", 10)
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE"))
@@ -109,8 +112,33 @@ try:
         conn.execute(text("UPDATE org_quota SET base_limit = :base WHERE id = 1"), {"base": org_quota_base})
         conn.commit()
     logger.info("✅ projects.archived column ready; org quota base_limit synced to %s", org_quota_base)
+
+
+# Ensure projects.archived column exists (Bid Admin archive feature)
+try:
+    # Prevent startup hangs if DB connection/lock is slow.
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_apply_startup_schema_updates)
+    future.result(timeout=8)
+    executor.shutdown(wait=False, cancel_futures=True)
+except FuturesTimeoutError:
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)  # type: ignore[name-defined]
+    except Exception:
+        pass
+    logger.warning("⚠️ Startup schema updates timed out; continuing server startup")
 except Exception as e:
+    try:
+        executor.shutdown(wait=False, cancel_futures=True)  # type: ignore[name-defined]
+    except Exception:
+        pass
     logger.warning(f"⚠️ Could not add projects.archived column: {e}")
+
+if not llm_client.is_llm_configured():
+    logger.warning(
+        "LLM is not configured (%s); /api/rfp/analyze and other LLM routes need a valid API key.",
+        llm_client.llm_configuration_hint(),
+    )
 
 # Register Routes
 app.include_router(rfp_router, prefix="/api/rfp", tags=["RFP"])
@@ -158,12 +186,19 @@ if os.path.exists(FRONTEND_BUILD_PATH):
 
 @app.get("/")
 async def root():
+    if llm_client.is_llm_configured():
+        prov = llm_client.llm_provider_label()
+        key_name = "SARVAM_API_KEY" if prov == "sarvam" else "OPENAI_API_KEY"
+        llm_info = f"{prov} ({key_name})"
+    else:
+        llm_info = llm_client.llm_configuration_hint()
     return {
         "message": "Bid Intelligence.ai - RFP Analysis API (Python)",
         "version": "1.0.0",
+        "llm": llm_info,
         "endpoints": {
             "analyze": "POST /api/rfp/analyze",
-            "health": "GET /api/rfp/health"
+            "health": "GET /health"
         }
     }
 

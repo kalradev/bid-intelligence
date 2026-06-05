@@ -8,18 +8,34 @@ const SCM = () => {
   const contentRef = useRef(null);
 
   useEffect(() => {
-    const storedData = localStorage.getItem("analysisData");
-    if (storedData) {
-      const parsed = JSON.parse(storedData);
-      const scmData = parsed?.data?.departmentalSummaries?.scm;
+    try {
+      const storedData = localStorage.getItem("analysisData");
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        const scmData = parsed?.data?.departmentalSummaries?.scm;
+        const bm = parsed?.data?.departmentalSummaries?.bidManagement;
 
-      // Process and deduplicate all list-based fields, filter N/A
-      if (scmData) {
-        const processedData = processDepartmentData(scmData);
+        const fallbackScm = {
+          keyPoints: bm?.keyPoints || {},
+          complianceRequirements: bm?.complianceRequirements || {},
+          riskAreas: bm?.riskAreas || {},
+          actionItems: Array.isArray(bm?.actionItems) ? bm.actionItems : [],
+        };
+
+        const hasScmPayload = scmData && Object.keys(scmData || {}).length > 0;
+        const mergedScm = hasScmPayload
+          ? { ...fallbackScm, ...scmData }
+          : fallbackScm;
+
+        // Process and deduplicate all list-based fields, filter N/A
+        const processedData = processDepartmentData(mergedScm || {});
         setData(processedData);
       } else {
-        setData(null);
+        setData({});
       }
+    } catch (error) {
+      console.error("Error loading SCM data:", error);
+      setData({});
     }
   }, []);
 
@@ -188,13 +204,14 @@ const SCM = () => {
               // New organized structure with subheadings
               Object.entries(data.keyPoints).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                return filteredItems && filteredItems.length > 0 && (
+                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                return listItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {filteredItems.map((point, idx) => (
+                      {listItems.map((point, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
                       ))}
                     </ul>
@@ -243,13 +260,14 @@ const SCM = () => {
               // New organized structure with subheadings
               Object.entries(data.complianceRequirements).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                return filteredItems && filteredItems.length > 0 && (
+                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                return listItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {filteredItems.map((req, idx) => (
+                      {listItems.map((req, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
                       ))}
                     </ul>
@@ -282,13 +300,14 @@ const SCM = () => {
               // New organized structure with subheadings
               Object.entries(data.riskAreas).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                return filteredItems && filteredItems.length > 0 && (
+                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                return listItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                      {filteredItems.map((risk, idx) => (
+                      {listItems.map((risk, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
                       ))}
                     </ul>

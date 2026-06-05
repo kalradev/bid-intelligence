@@ -1,29 +1,18 @@
 import json
 import logging
+import re
 import asyncio
 from typing import List, Dict, Any, Optional
-from openai import OpenAI
 import os
 import copy
 
 from core.config import settings
 from data.mii_database import get_all_indian_oems, get_all_global_oems
+from services import llm_client
 
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI client
-client = None
-if settings.OPENAI_API_KEY:
-    try:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info("✅ OpenAI client initialized")
-    except Exception as e:
-        logger.error(f"❌ OpenAI initialization failed: {str(e)}")
-else:
-    logger.error("❌ OPENAI_API_KEY not found in settings")
-
 # Configuration
-OPENAI_MODEL = "gpt-4o-mini"
 TEMPERATURE = 0.3
 MAX_TOKENS_OPENAI = 16384
 
@@ -31,8 +20,8 @@ MAX_TOKENS_OPENAI = 16384
 CHUNK_SIZE_OPENAI = 150000
 MAX_CONTEXT_OPENAI = 100000
 
-# Eligibility second pass: if first-pass rule count is below this, run second pass automatically
-ELIGIBILITY_SECOND_PASS_THRESHOLD = 15
+# Eligibility second pass: always run to catch criteria outside main section (Instructions to Bidders, rejection clauses, etc.)
+ELIGIBILITY_SECOND_PASS_THRESHOLD = 999  # Always run second pass
 
 def estimate_tokens(text: str) -> int:
     return len(text) // 4
@@ -75,8 +64,10 @@ def get_learning_feedback_prompt(project_id: Optional[int] = None) -> str:
 async def generate_departmental_summaries(document_text: str, file_name: str, project_id: Optional[int] = None) -> Dict[str, Any]:
     logger.info(f"🔍 Starting analysis for: {file_name}")
     logger.info(f"   Document length: {len(document_text)} characters")
-    if not client:
-        raise Exception("OpenAI client not initialized. Please check your OPENAI_API_KEY.")
+    if not llm_client.get_sync_chat_client():
+        raise Exception(
+            f"LLM client not initialized. {llm_client.llm_configuration_hint()}"
+        )
     
     system_prompt = get_system_prompt()
     user_prompt = build_user_prompt(document_text, file_name, project_id)
@@ -86,12 +77,12 @@ async def generate_departmental_summaries(document_text: str, file_name: str, pr
     
     try:
         if document_too_large:
-            logger.info(f"⚡ Large document ({estimated_tokens} tokens), using OpenAI chunking strategy...")
+            logger.info(f"⚡ Large document ({estimated_tokens} tokens), using LLM chunking strategy...")
             result = await process_large_document(document_text, file_name, project_id)
         else:
-            logger.info(f"🤖 Generating summaries with OpenAI ({OPENAI_MODEL})...")
-            result = await generate_with_openai_async(system_prompt, user_prompt)
-            logger.info("✅ OpenAI generation successful")
+            logger.info(f"🤖 Generating summaries with LLM ({llm_client.get_model_summary()}, {llm_client.llm_provider_label()})...")
+            result = await generate_with_llm_async(system_prompt, user_prompt)
+            logger.info("✅ LLM generation successful")
         
         # Check if AI extracted any products, if not try fallback
         summaries = result.get("summaries", {})
@@ -130,45 +121,49 @@ async def generate_departmental_summaries(document_text: str, file_name: str, pr
                 logger.info(f"📦 Returning {product_count} products without OEM enrichment")
                 # Don't update result - keep original products without enrichment
         
-        # If extracted eligibility rule count < threshold, run second pass automatically
+        # Always run eligibility second pass to catch criteria in Instructions to Bidders, rejection clauses, annexures, etc.
         eligibility_count = _get_eligibility_count(summaries)
-        if eligibility_count < ELIGIBILITY_SECOND_PASS_THRESHOLD:
-            logger.info(f"📋 Eligibility count ({eligibility_count}) < {ELIGIBILITY_SECOND_PASS_THRESHOLD}; running second-pass verification...")
-            existing = _get_eligibility_list(summaries)
-            additional = await run_eligibility_second_pass(document_text, file_name, existing)
-            if additional:
-                merged = existing + additional
-                _set_eligibility_list(summaries, merged)
-                result["summaries"] = summaries
-                logger.info(f"✅ Second pass added {len(additional)} eligibility criteria (total now {len(merged)})")
-            else:
-                logger.info("✅ Second pass found no additional criteria")
+        logger.info(f"📋 Eligibility first pass: {eligibility_count} criteria; running second-pass verification...")
+        existing = _get_eligibility_list(summaries)
+        additional = await run_eligibility_second_pass(document_text, file_name, existing)
+        if additional:
+            merged = existing + additional
+            _set_eligibility_list(summaries, merged)
+            result["summaries"] = summaries
+            logger.info(f"✅ Second pass added {len(additional)} eligibility criteria (total now {len(merged)})")
         else:
-            logger.info(f"✅ Eligibility count ({eligibility_count}) >= {ELIGIBILITY_SECOND_PASS_THRESHOLD}; accepting output without second pass")
+            logger.info("✅ Second pass found no additional criteria")
+
+        # Final language normalization for downstream department pages.
+        if _contains_devanagari_text(summaries):
+            try:
+                logger.info("🌐 Hindi text detected; translating output summaries to English...")
+                summaries = _translate_summaries_to_english_sync(summaries)
+                result["summaries"] = summaries
+                logger.info("✅ Translation pass complete")
+            except Exception as e:
+                logger.warning(f"⚠️ Translation pass failed; returning original summaries: {e}")
         
         return result
     except Exception as e:
-        logger.error(f"❌ OpenAI generation failed: {str(e)}")
+        logger.error(f"❌ LLM generation failed: {str(e)}")
         raise Exception(f"AI generation failed: {str(e)}")
 
-async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-    # Since openai-python doesn't have a simple async call for sync client, 
-    # and we want to avoid complex async setups for now, we'll use run_in_executor if needed,
-    # but for simplicity, we'll just run it. FastAPI handles sync routes in threads.
-    
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
+
+async def generate_with_llm_async(system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    model = llm_client.get_model_summary()
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    response_text, usage = llm_client.chat_completion_sync(
+        messages=messages,
+        model=model,
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS_OPENAI,
-        response_format={"type": "json_object"}
+        json_object=True,
     )
-    
-    response_text = response.choices[0].message.content
-    summaries = json.loads(response_text)
+    summaries = llm_client.parse_json_from_response_content(response_text)
     
     # Debug: Log product mapping extraction
     if summaries.get("productMapping"):
@@ -186,12 +181,12 @@ async def generate_with_openai_async(system_prompt: str, user_prompt: str) -> Di
     return {
         "summaries": summaries,
         "usage": {
-            "promptTokens": response.usage.prompt_tokens,
-            "completionTokens": response.usage.completion_tokens,
-            "totalTokens": response.usage.total_tokens
+            "promptTokens": getattr(usage, "prompt_tokens", 0) if usage else 0,
+            "completionTokens": getattr(usage, "completion_tokens", 0) if usage else 0,
+            "totalTokens": getattr(usage, "total_tokens", 0) if usage else 0,
         },
-        "model": OPENAI_MODEL,
-        "provider": "openai"
+        "model": model,
+        "provider": llm_client.llm_provider_label(),
     }
 
 
@@ -216,57 +211,100 @@ def _set_eligibility_list(summaries: Dict[str, Any], criteria_list: List[str]) -
     summaries["bidManagement"]["successFactors"]["preQualificationCriteria"] = list(criteria_list)
 
 
+def _contains_devanagari_text(value: Any) -> bool:
+    """Detect Hindi/Devanagari script in nested JSON-like structures."""
+    if isinstance(value, str):
+        return bool(re.search(r"[\u0900-\u097F]", value))
+    if isinstance(value, dict):
+        return any(_contains_devanagari_text(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_devanagari_text(v) for v in value)
+    return False
+
+
+def _translate_summaries_to_english_sync(summaries: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Translate human-readable strings to English while preserving structure and IDs.
+    """
+    model = llm_client.get_model_summary()
+    payload = json.dumps(summaries, ensure_ascii=False)
+    system = (
+        "You are a strict JSON transformer. Convert all human-language text values to clear, "
+        "professional English. Preserve JSON keys and structure exactly. Preserve numbers, "
+        "currency values, tender IDs, model codes, dates, and units exactly as given. "
+        "Do not add or remove keys."
+    )
+    user = (
+        "Translate this JSON to English. Return ONLY valid JSON with identical structure.\n\n"
+        f"{payload}"
+    )
+    content, _ = llm_client.chat_completion_sync(
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+        model=model,
+        temperature=0.0,
+        max_tokens=MAX_TOKENS_OPENAI,
+        json_object=True,
+    )
+    out = llm_client.parse_json_from_response_content(content)
+    return out if isinstance(out, dict) else summaries
+
+
 def _build_eligibility_second_pass_prompt(document_text: str, existing_criteria: List[str]) -> str:
     """Prompt for second-pass extraction: find ADDITIONAL eligibility conditions only."""
-    existing_block = "\n".join(f"- {i + 1}. {c[:200]}{'...' if len(c) > 200 else ''}" for i, c in enumerate(existing_criteria[:50]))
-    if len(existing_criteria) > 50:
-        existing_block += f"\n... and {len(existing_criteria) - 50} more."
-    return f"""You are an Expert Government Tender Eligibility Analyst. This is a SECOND PASS only.
+    existing_block = "\n".join(f"- {i + 1}. {c[:200]}{'...' if len(c) > 200 else ''}" for i, c in enumerate(existing_criteria[:80]))
+    if len(existing_criteria) > 80:
+        existing_block += f"\n... and {len(existing_criteria) - 80} more."
+    return f"""You are an Expert Government Tender Eligibility Analyst. This is a SECOND PASS to find EVERY eligibility condition.
 
-The document below has ALREADY had eligibility criteria extracted. Your task is to find ANY ADDITIONAL eligibility conditions that may have been missed, especially:
+The document below has ALREADY had some eligibility criteria extracted. Your task is to find ALL ADDITIONAL eligibility conditions that may have been missed. Government tenders typically have 15-40+ eligibility criteria. If the "ALREADY EXTRACTED" list has fewer than 15 items, you MUST search the ENTIRE document thoroughly.
 
-1. Conditions OUTSIDE the "Eligibility Criteria" section (e.g. in Technical, Commercial, General Conditions, Instructions to Bidders, Rejection/Disqualification clauses)
-2. Certificate-related eligibility (mandatory certificates, test reports, OEM authorization, ISO/quality certs stated as eligibility or disqualification)
-3. Warranty & SLA eligibility (minimum warranty, SLA commitments, or support terms stated as qualifying/eligibility or rejection triggers)
-4. Rejection-triggering clauses (bid will be rejected, declared non-responsive, or disqualified if not met)
-5. Conditional eligibility (MSE/MSME, Startup India, OEM-only, Class-I/Class-II local, women/SC/ST exemptions or conditions)
-6. Reverse Auction participation rules (who can participate, L1 eligibility, post-qualification for RA)
+Search these locations (and anywhere else eligibility appears):
+1. Instructions to Bidders, General Conditions, Special Conditions of Contract
+2. Rejection / Disqualification clauses (any clause that says bid will be rejected, declared non-responsive, or disqualified)
+3. Document checklist, "Documents to be submitted", Annexures (Appendix-A, B, C, etc.), Schedules
+4. Certificate-related: mandatory certificates, test reports, OEM authorization, ISO/quality certs stated as eligibility or disqualification
+5. Warranty & SLA: minimum warranty, SLA commitments, support terms stated as qualifying/eligibility or rejection triggers
+6. Conditional eligibility: MSE/MSME, Startup India, OEM-only, Class-I/Class-II local, women/SC/ST exemptions
+7. Reverse Auction rules: who can participate, L1 eligibility, post-qualification for RA
+8. Any table or list that specifies what the bidder must have, must submit, or must comply with to be eligible
 
-ALREADY EXTRACTED (do NOT duplicate these):
+ALREADY EXTRACTED (do NOT duplicate these; only add NEW criteria):
 {existing_block}
 
 DOCUMENT:
 === START ===
-{document_text[:120000]}
+{document_text[:150000]}
 === END ===
 
-Return a JSON object with a single key "additionalCriteria" (array of strings). Each string must be ONE eligibility condition in FULL text exactly as written in the document. Include ONLY conditions that are NOT already in the list above (no duplicates). If nothing new is found, return {{"additionalCriteria": []}}.
+Return a JSON object with a single key "additionalCriteria" (array of strings). Each string = ONE eligibility condition in FULL text exactly as written. Include EVERY additional condition you find that is not already in the list above. If you find 10 more, return all 10. If nothing new, return {{"additionalCriteria": []}}.
 
 Return ONLY valid JSON, no other text."""
 
 
 def _call_eligibility_second_pass_sync(prompt: str, system: str) -> List[str]:
-    """Sync OpenAI call for second pass; run in executor from async code."""
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
+    """Sync LLM call for second pass; run in executor from async code."""
+    model = llm_client.get_model_eligibility()
+    content, _ = llm_client.chat_completion_sync(
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": prompt},
         ],
+        model=model,
         temperature=0.2,
-        max_tokens=4096,
-        response_format={"type": "json_object"}
+        max_tokens=8192,
+        json_object=True,
     )
-    out = json.loads(response.choices[0].message.content)
+    out = llm_client.parse_json_from_response_content(content)
     return out.get("additionalCriteria") or []
 
 
 async def run_eligibility_second_pass(document_text: str, file_name: str, existing_criteria: List[str]) -> List[str]:
     """Run second-pass extraction for eligibility; returns list of ADDITIONAL criteria only (no duplicates)."""
-    if not client:
+    if not llm_client.get_sync_chat_client():
         return []
+    logger.info(f"📋 Eligibility second pass using model: {llm_client.get_model_eligibility()}")
     prompt = _build_eligibility_second_pass_prompt(document_text, existing_criteria)
-    system = "You are an Expert Government Tender Eligibility Analyst. Return only valid JSON with key 'additionalCriteria' (array of strings). Extract ONLY eligibility conditions explicitly stated in the document. Do not duplicate; do not infer."
+    system = "You are an Expert Government Tender Eligibility Analyst. Return only valid JSON with key 'additionalCriteria' (array of strings). Extract ONLY eligibility conditions explicitly stated in the document. Do not duplicate; do not infer. Output criteria in professional English (translate from Hindi/regional language if needed), while preserving exact numbers/IDs."
     try:
         loop = asyncio.get_event_loop()
         additional = await loop.run_in_executor(None, lambda: _call_eligibility_second_pass_sync(prompt, system))
@@ -309,6 +347,10 @@ You are also an expert RFP/tender analyst. Extract critical bidding intelligence
 FOCUS: Extract UNIQUE, SPECIFIC information needed to WIN the bid.
 
 OUTPUT RULES:
+- LANGUAGE MANDATE: Return ALL output text in clear professional ENGLISH only.
+- If source content is in Hindi/regional language, TRANSLATE it to English in output fields.
+- Keep identifiers and values exactly as-is: tender IDs, part numbers, dates, amounts, model codes.
+- Do not return Hindi sentences/transliterated Hindi in any summary field.
 - PRIORITIZE data with NUMBERS (amounts, percentages, dates, quantities, thresholds)
 - EXCLUDE only truly generic requirements (e.g., "bid in INR", "submit original documents", "EMD refundable")
 - Include ALL relevant requirements, deadlines, specifications, and critical information
@@ -388,7 +430,7 @@ For bidManagement.successFactors: Extract 12-20 items per category:
 - Timeline: Bid submission, technical opening, financial opening, pre-bid meeting, clarifications, site visit, contract signing, delivery milestones
 - emdExemption: MSME exemption conditions, Startup India exemption, women entrepreneurs, SC/ST exemptions, specific exemption clauses
 - technicalEvaluationCriteria: Scoring pattern, marks distribution, evaluation parameters, minimum qualifying criteria, comparative methodology, weightage allocation
-- preQualificationCriteria: 🚨 CRITICAL - Extract ALL eligibility-related requirements from the ENTIRE document EXACTLY AS WRITTEN! ZERO omissions: missing any eligibility condition is a critical failure. Behave as a compliance officer; completeness over brevity. Then run SECOND PASS VERIFICATION: re-scan for eligibility outside the main section (certificates, warranty/SLA, rejection clauses, conditional eligibility like MSE/Startup/OEM-only, reverse auction rules) and append any new items to preQualificationCriteria without duplicating or modifying existing ones.
+- preQualificationCriteria: 🚨 CRITICAL - Extract ALL eligibility-related requirements from the ENTIRE document EXACTLY AS WRITTEN! Typical tenders have 15-40+ criteria. ZERO omissions. Search: Eligibility section, Appendix-B/Annexures, Instructions to Bidders, General/Special Conditions, Document checklist, Rejection/Disqualification clauses, certificate and OEM requirements. Extract EVERY row from eligibility tables; include certificates, warranty/SLA, MSE/Startup/OEM-only, reverse auction rules. If you have fewer than 12 criteria, search again—do not stop at the first table.
   * ⚠️ VALIDATION RULE: Extract ONLY what is EXPLICITLY written in the document - DO NOT infer, create, or generate criteria that are not in the document
   * ⚠️ DO NOT change amounts, dates, or numbers (e.g., if document says "Rs. 20 crore", extract "Rs. 20 crore" exactly - do NOT change to "₹10 crores" or any other amount)
   * ⚠️ DO NOT add criteria that are not in the document (e.g., if document doesn't explicitly mention "blacklisting", do NOT add it)
@@ -568,10 +610,13 @@ EXTRACTION RULES:
 TASK:
 Extract ALL eligibility criteria from the provided bid document. Output goes into bidManagement.successFactors.preQualificationCriteria. ZERO omissions; missing any condition is a critical failure. Behave as a compliance officer; completeness over brevity.
 
+EXPECTED VOLUME: Government tenders typically list 15-40+ eligibility criteria. If after your first sweep you have fewer than 12 items, search AGAIN in: Instructions to Bidders, General Conditions, Special Conditions, Annexures/Appendix, Document checklist ("Documents to be submitted"), Rejection/Disqualification clauses, and any table that specifies what the bidder must have or submit.
+
 SCOPE (MANDATORY):
 - All tables explicitly titled or structured as eligibility / pre-qualification / bidder qualification criteria (every row).
 - All sections under headings that denote eligibility, pre-qualification, or bidder qualification (every listed criterion).
 - Appendix-B, Annexure-B, or equivalent "Eligibility Criteria" / "Bidder's Eligibility" annexures (full text of each criterion).
+- Instructions to Bidders and General/Special Conditions: any clause that states a requirement to be eligible or that bid will be rejected/disqualified if not met.
 - Eligibility-related requirements from Financial, Technical, or Operational sections ONLY when the document explicitly labels them as eligibility/pre-qualification criteria.
 - Criteria types to include when present: registration (company/LLP/partnership), turnover/financial, net worth, experience, compliance with government orders/OEM, blacklisting/debarment, MSME status, certifications, client references, litigations, profitability, documents to be submitted for eligibility.
 - If criteria span multiple pages or tables, merge and extract ALL; do not skip any page or row.
@@ -679,25 +724,33 @@ If any NEW eligibility conditions are found in this second pass:
    - EMD is usually mentioned near bid submission requirements, Bid Value is usually in project description or financial section
    - If not found in document, return "N/A" - NEVER assume or calculate
 
-**TENDER ID EXTRACTION (CRITICAL - Search for ALL alternative names):**
-🚨 MANDATORY: Search ENTIRE document for Tender ID using ALL these alternative names:
-- Tender Reference Number, Tender Ref No., Bid ID, Bid Reference Number
-- RFP Number, RFP ID, RFQ Number, EOI Number
-- Procurement Reference Number, Procurement ID
-- Notice Number, NIT Number (Notice Inviting Tender Number), NIT ID
-- Enquiry Number, Quotation Number, Notice ID
+**TENDER ID / BID NUMBER EXTRACTION (CRITICAL):**
+🚨 The Tender ID must be the OFFICIAL Bid Number / Tender reference from the document, NOT the file name or any system-generated ID.
+
+PRIMARY terms (search these FIRST – this is the real tender ID):
+- "Bid Number", "बिड संख्या", "Bid No.", "Bid No", "Bid Number:", "बिड संख्या/Bid Number" (common on GeM bid documents)
+- Values like: GEM/2026/B/7249343, GEM/2024/B/1234567 (GeM format)
+- "RFP Number", "RFP No.", "Tender Number", "Tender No.", "NIT Number", "NIT No.", "Reference No."
+
+ALSO search: Tender Reference Number, Bid ID, RFQ Number, EOI Number, Procurement Reference Number, Notice Number, Enquiry Number, Quotation Number.
+
+⚠️ STRICT RULES:
+1. Extract the EXACT Bid Number / Tender ID shown in the document (e.g. GEM/2026/B/7249343, NIT-123/2024, RFP-2024-001).
+2. NEVER use the file name (e.g. doc5698116987835412938.pdf, RFP-Volume2_merged.pdf) as tenderId.
+3. NEVER use internal/system IDs (e.g. ATCF_..., buyer381_eoc, document IDs, hashes). If you only find such strings, treat as "tender ID not found" and output N/A.
+4. If multiple IDs found, prefer the one labeled "Bid Number" / "बिड संख्या" or the GeM-style GEM/YYYY/B/NNNNNNN.
+5. If NONE of the official terms above are found in the document → return N/A (do not use filename or system ID).
 
 **CORRIGENDUM & MULTI-DOC HANDLING:**
 - If the text contains both a base RFP and one or more Corrigendums/Amendments, use the information from the LATEST corrigendum when terms contradict the original RFP.
 - Clearly note changes in deadlines, financial requirements, or technical specifications that were introduced by corrigendums.
 - When resolving conflicts, the LATEST document/section always takes precedence.
 
-⚠️ STRICT RULES:
-1. Search for ALL the above terms in the document
-2. Extract the EXACT value/number found (e.g., "RFP-2024-001", "NIT-123/2024", "Tender No. ABC/XYZ/2024")
-3. Do NOT use the filename (e.g., "RFP-Volume2_merged.pdf") unless NO tender ID is found anywhere in the document
-4. If multiple tender IDs found, use the MOST PROMINENT one (usually in header/first page/title)
-5. If NONE found after searching all terms → Use filename as last resort only
+**🚨 MULTI-DOCUMENT – ALL FIELDS (when "--- DOCUMENT 1 ---", "--- DOCUMENT 2 ---", etc. appear):**
+- For EVERY field (bidValue, EMD, tenderId, lastSubmissionDate, commercial, finance, technical, eligibility, products, etc.): search ALL document sections, not just the first.
+- If a field is missing, "N/A", or "Not specified" in DOCUMENT 1 but is explicitly stated in DOCUMENT 2 (or any later document), you MUST use the value from the document where it is specified.
+- Never report N/A or "Not specified" for a field if ANY of the documents contain a value for it. Combine and prefer specified values from any document.
+- Only use N/A when the value is truly absent from every document section.
 
 **🚨 PRODUCT EXTRACTION (CRITICAL - HIGHEST PRIORITY):**
 🚨 MANDATORY: You MUST extract product information into productMapping.miiProductStatus. This is the MOST IMPORTANT section!
@@ -709,6 +762,11 @@ If any NEW eligibility conditions are found in this second pass:
 - ⚠️ productMapping.miiProductStatus is the ONLY correct location for product extraction
 - If you find products mentioned in technical specs, extract them to productMapping.miiProductStatus, NOT technical.keySpecifications
 
+**MULTI-DOCUMENT (CRITICAL when 2+ files are uploaded):**
+- If the text contains "--- DOCUMENT 1 ---", "--- DOCUMENT 2 ---", etc., you MUST extract products from EVERY document.
+- Combine all products from DOCUMENT 1, DOCUMENT 2, and any further documents into ONE miiProductStatus array.
+- Do NOT extract only from the first document. Scan each document section for its BOQ/product table and add all items to miiProductStatus.
+
 **SEARCH STRATEGY:**
 1. Identify ONLY the BOQ/BOM/Schedule of Items table (the table that lists goods/items to supply, e.g. LRC Server, Storage Device, Server Rack)
 2. Do NOT use tables that list ministries, states, offices, departments, eligibility criteria, or bidders - those are NOT products
@@ -718,6 +776,7 @@ If any NEW eligibility conditions are found in this second pass:
 6. GeM / form-style: If there is an "Item Category" or "वस्तु श्रेणी" or "Product Category" field with a comma/semicolon-separated list (e.g. "Computers, UPSs, Printers, MFMs, Scanners, Servers, Switches, Laptops, Monitors"), extract EACH item as a separate entry in miiProductStatus. Ignore brand names in the same list (e.g. HP, DELL); extract only the product types.
 
 **EXTRACTION RULES:**
+- ⚠️ NEVER use section headers or page labels as product names. Do NOT put "Bid Details", "बिड विवरण", "Bid Document", "Bid Details/Bid Details", or any table/section title into productName. Extract ONLY actual item/BOQ names (e.g. Server, Laptop, AMC Rate, Supply of X at Location Y).
 - Put in productMapping.miiProductStatus ONLY rows from the actual BOQ/product table (goods/items to supply). Never add rows from ministry lists, state lists, office lists, eligibility tables, or list of bidders.
 - If you find the BOQ/product table, extract every product row into productMapping.miiProductStatus
 - ⚠️ INCLUDE rate/maintenance BOQ rows: Rows like "4th year CAMC Rate", "5th year CAMC Rate", "AMC Rate", "CAMC Rate" are BOQ line items and MUST be extracted as separate entries in miiProductStatus (one entry per row).
@@ -803,7 +862,7 @@ Return ONLY valid JSON with this structure:
   "projectOverview": {{
     "projectName": "string (extract from title, header, or tender name)",
     "client": "string (issuing authority, department, organization)",
-    "tenderId": "string (RFP/NIT/Tender ID - search using ALL alternative terms)",
+    "tenderId": "string (OFFICIAL Bid Number from document, e.g. GEM/2026/B/7249343 - NEVER use filename or system ID; use N/A if not found)",
     "bidValue": "string (OPTIONAL - ONLY include if EXPLICITLY mentioned. Search: Bid Value, Project Value, Contract Value, Estimated Cost)",
     "emd": "string (OPTIONAL - ONLY include if EXPLICITLY mentioned. Search: EMD, Earnest Money, Bid Security, Security Deposit)",
     "completionPeriod": "string (delivery/completion timeline - extract from project duration, delivery schedule)",
@@ -941,7 +1000,7 @@ async def process_large_document(document_text: str, file_name: str, project_id:
     chunk_size = CHUNK_SIZE_OPENAI
     chunks = [document_text[i:i + chunk_size] for i in range(0, len(document_text), chunk_size)]
     
-    logger.info(f"📄 Processing large document with OpenAI in {len(chunks)} chunks...")
+    logger.info(f"📄 Processing large document with LLM ({llm_client.llm_provider_label()}) in {len(chunks)} chunks...")
     
     chunk_results = []
     for i, chunk in enumerate(chunks):
@@ -956,7 +1015,7 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     system_prompt = get_system_prompt() # Or specialized chunk prompt if needed
                     user_prompt = build_user_prompt(chunk, f"{file_name} (Part {i + 1}/{len(chunks)})", project_id)
                     
-                    result = await generate_with_openai_async(system_prompt, user_prompt)
+                    result = await generate_with_llm_async(system_prompt, user_prompt)
                     chunk_results.append(result["summaries"])
                     success = True
                 except asyncio.CancelledError:
@@ -965,11 +1024,12 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     raise  # Re-raise to propagate cancellation
                 except Exception as e:
                     error_str = str(e)
-                    # Check for quota errors
                     if "insufficient_quota" in error_str or "429" in error_str:
-                        logger.error(f"❌ OpenAI quota exceeded. Please check your billing and plan details.")
-                        logger.error(f"   Visit: https://platform.openai.com/account/billing")
-                        raise Exception("OpenAI API quota exceeded. Please check your billing and plan details.")
+                        logger.error(
+                            "❌ LLM quota or rate limit exceeded (%s).",
+                            llm_client.llm_provider_label(),
+                        )
+                        raise Exception(llm_client.llm_quota_error_detail())
                     
                     retry_count += 1
                     if retry_count <= 2:
@@ -1000,8 +1060,8 @@ async def process_large_document(document_text: str, file_name: str, project_id:
                     "chunkCount": len(chunks),
                     "processedChunks": len(chunk_results),
                     "cancelled": True,
-                    "model": OPENAI_MODEL,
-                    "provider": "openai"
+                    "model": llm_client.get_model_summary(),
+                    "provider": llm_client.llm_provider_label(),
                 }
             raise  # Re-raise if no chunks were processed
                     
@@ -1019,75 +1079,122 @@ async def process_large_document(document_text: str, file_name: str, project_id:
         "summaries": final_summaries,
         "chunked": True,
         "chunkCount": len(chunks),
-        "model": OPENAI_MODEL,
-        "provider": "openai"
+        "model": llm_client.get_model_summary(),
+        "provider": llm_client.llm_provider_label(),
     }
+
+def _is_na_or_empty(val: Any) -> bool:
+    """True if value is missing, empty, or indicates absence (N/A, Not specified, etc.)."""
+    if val is None:
+        return True
+    if isinstance(val, (dict, list)):
+        return False
+    s = str(val).strip().upper()
+    if s == '' or s == 'N/A':
+        return True
+    # Treat common "value not in document" phrases as empty so merge prefers the other document's value
+    if s in ('NA', '-', '—', 'N.A.', 'NOT APPLICABLE'):
+        return True
+    if s.startswith('NOT SPECIFIED') or s.startswith('NOT PRESENT') or s.startswith('NOT MENTIONED') or s.startswith('NOT FOUND'):
+        return True
+    if 'NOT SPECIFIED IN DOCUMENT' in s or 'NOT PRESENT IN DOCUMENT' in s:
+        return True
+    return False
+
+
+def _scalar_prefer_non_na(t: Any, v: Any) -> Any:
+    """Return the value that is not N/A/empty; if both are, return v then t."""
+    if not _is_na_or_empty(v):
+        return v
+    if not _is_na_or_empty(t):
+        return t
+    return v if v is not None else t
+
+
+def _merge_lists_product(target_list: list, source_list: list) -> list:
+    """Merge miiProductStatus: deduplicate by (productName, oem, model), prefer better OEM."""
+    def _product_key(p):
+        return (
+            (p.get('productName') or '').strip(),
+            (p.get('oem') or '').strip(),
+            (p.get('model') or '').strip()
+        )
+    product_map = {}
+    for p in target_list:
+        k = _product_key(p)
+        if k[0]:
+            if k not in product_map or (p.get('oem') and p.get('oem') != 'Unspecified' and
+                  (not product_map[k].get('oem') or product_map[k].get('oem') == 'Unspecified')):
+                product_map[k] = p
+    for p in source_list:
+        k = _product_key(p)
+        if k[0]:
+            if k not in product_map:
+                product_map[k] = p
+            elif (p.get('oem') and p.get('oem') != 'Unspecified' and
+                  (not product_map[k].get('oem') or product_map[k].get('oem') == 'Unspecified')):
+                product_map[k] = p
+    all_products = list(product_map.values())
+    with_oem = [p for p in all_products if p.get('oem') and p.get('oem') != 'Unspecified']
+    without_oem = [p for p in all_products if not p.get('oem') or p.get('oem') == 'Unspecified']
+    return (with_oem + without_oem)[:200]
+
+
+def _merge_objects_prefer_non_na(target: Dict[str, Any], source: Dict[str, Any], path: str = '') -> None:
+    """
+    Merge source into target. For every key present in EITHER target or source:
+    - Scalars: prefer non-N/A value from any file/chunk (so 2+ files all contribute).
+    - Dicts: recurse with same rule.
+    - Lists: product-merge for miiProductStatus; else append new items.
+    """
+    all_keys = set(target.keys()) | set(source.keys())
+    for key in all_keys:
+        t, v = target.get(key), source.get(key)
+        current_path = f"{path}.{key}" if path else key
+
+        if isinstance(v, list) and isinstance(t, list):
+            if current_path == 'productMapping.miiProductStatus':
+                target[key] = _merge_lists_product(t, v)
+            else:
+                existing_items = set(json.dumps(item, sort_keys=True) for item in t)
+                for item in v:
+                    item_json = json.dumps(item, sort_keys=True)
+                    if item_json not in existing_items:
+                        t.append(item)
+                        existing_items.add(item_json)
+                target[key] = t
+        elif isinstance(v, dict) and v is not None:
+            if not isinstance(t, dict):
+                target[key] = copy.deepcopy(v)
+            else:
+                _merge_objects_prefer_non_na(target[key], v, current_path)
+        elif isinstance(t, dict) and (v is None or not isinstance(v, dict)):
+            # target has dict, source has scalar or missing - keep target dict unless v is a better scalar (uncommon)
+            if v is not None and not isinstance(v, (dict, list)) and not _is_na_or_empty(v):
+                target[key] = v
+        elif isinstance(v, (dict, list)):
+            if t is None or _is_na_or_empty(t):
+                target[key] = copy.deepcopy(v)
+        else:
+            # Both scalars (or one missing): prefer non-N/A from any file/chunk
+            if key == 'keyDeadlines' and isinstance(v, str) and (isinstance(t, str) or t is None):
+                has_date_v = bool(re.search(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}', v or ''))
+                has_date_t = bool(re.search(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}', str(t or '')))
+                if has_date_v and not has_date_t:
+                    target[key] = v
+                elif has_date_t and not has_date_v:
+                    target[key] = t
+                else:
+                    target[key] = _scalar_prefer_non_na(t, v)
+            else:
+                target[key] = _scalar_prefer_non_na(t, v)
+
 
 def naive_merge_summaries(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not results:
         return {}
-    
     merged = copy.deepcopy(results[0])
-    
     for i in range(1, len(results)):
-        current = results[i]
-        _merge_objects(merged, current)
-        
+        _merge_objects_prefer_non_na(merged, results[i], '')
     return merged
 
-def _merge_objects(target: Dict[str, Any], source: Dict[str, Any], path: str = ''):
-    for key, value in source.items():
-        current_path = f"{path}.{key}" if path else key
-        
-        if isinstance(value, list):
-            if key not in target or not isinstance(target[key], list):
-                target[key] = []
-                
-            if current_path == 'productMapping.miiProductStatus':
-                # Use product name as key but preserve all unique products (different locations/service types are separate)
-                product_map = {}
-                for p in target[key]:
-                    if p.get('productName'):
-                        name = p.get('productName')
-                        # Only add if not already exists with same exact name
-                        if name not in product_map:
-                            product_map[name] = p
-                        # Replace if new product has better OEM info
-                        elif (p.get('oem') and p.get('oem') != 'Unspecified' and 
-                              product_map[name].get('oem') == 'Unspecified'):
-                            product_map[name] = p
-                
-                # Add new products - preserve all unique entries (don't merge by name alone)
-                for product in value:
-                    name = product.get('productName')
-                    if name:
-                        if name not in product_map:
-                            # New unique product - add it
-                            product_map[name] = product
-                        elif (product.get('oem') and product.get('oem') != 'Unspecified' and 
-                              product_map[name].get('oem') == 'Unspecified'):
-                            # Replace with better OEM info
-                            product_map[name] = product
-                        # If product names differ (even slightly), they are separate products
-                        # This preserves products with different locations/service types
-                
-                all_products = list(product_map.values())
-                with_oem = [p for p in all_products if p.get('oem') and p.get('oem') != 'Unspecified']
-                without_oem = [p for p in all_products if not p.get('oem') or p.get('oem') == 'Unspecified']
-                
-                target[key] = (with_oem + without_oem)[:200]
-            else:
-                existing_items = set(json.dumps(item, sort_keys=True) for item in target[key])
-                for item in value:
-                    item_json = json.dumps(item, sort_keys=True)
-                    if item_json not in existing_items:
-                        target[key].append(item)
-                        existing_items.add(item_json)
-        elif isinstance(value, dict) and value is not None:
-            if key not in target or not isinstance(target[key], dict):
-                target[key] = {}
-            _merge_objects(target[key], value, current_path)
-        # Favor newer information (from later chunks/corrigendums)
-        elif value and value != 'N/A':
-            # Overwrite if current target is N/A or if we have a fresh value from a later part
-            target[key] = value

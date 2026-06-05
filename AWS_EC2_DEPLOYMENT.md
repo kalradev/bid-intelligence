@@ -126,13 +126,14 @@ Used for deployment; keep secrets out of version control.
 | `POSTGRES_PASSWORD` | PostgreSQL password | (your password) |
 | `POSTGRES_DB` | Database name | `Bid` or `Bid2` |
 | `JWT_SECRET` | JWT signing secret | Long random string (e.g. `openssl rand -hex 32`) |
-| `OPENAI_API_KEY` | OpenAI API key | (for AI analysis) |
+| `OPENAI_API_KEY` | OpenAI API key | (required for AI analysis) |
+| `OPENAI_CHAT_MODEL` | Chat model name | `gpt-4o-mini` or your deployment name |
 
 ### Optional but Recommended
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `CORS_ORIGINS` | Allowed origins (comma-separated) | `https://yourdomain.com` or `*` (dev only) |
-| `GEMINI_API_KEY` | Gemini API key | If using Gemini |
+| `OPENAI_BASE_URL` | Azure OpenAI or compatible endpoint | Only if not using api.openai.com |
 | `NODE_ENV` | Environment | `production` |
 | `MAX_FILE_SIZE_MB` | Max upload size (MB) | `50` |
 

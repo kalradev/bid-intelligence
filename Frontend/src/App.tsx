@@ -62,6 +62,7 @@ export default function App() {
     "/team",
     "/team-quota",
     "/project-results",
+    "/product mapping",
   ];
 
   const isFullWidth = fullWidthPages.includes(currentPath) || currentPath.startsWith("/project-results") || currentPath.startsWith("/project-comparison") || currentPath.startsWith("/team-projects");
@@ -89,6 +90,7 @@ export default function App() {
           <Route path="/smart-rfp" element={<SmartRfpPage />} />
           <Route path="/cost-estimation" element={<CostEstimationPage />} />
           <Route path="/product-mapping" element={<ProductMappingPage />} />
+          <Route path="/product mapping" element={<Navigate to="/product-mapping" replace />} />
           <Route path="/global-intelligence" element={<GlobalIntelligencePage />} />
           <Route path="/technical" element={<Technical />} />
           <Route path="/bid-management" element={<BidManagement />} />
@@ -100,6 +102,7 @@ export default function App() {
           <Route path="/team-quota" element={<TeamQuotaPage />} />
 
           <Route path="/document-viewer" element={<DocumentViewer />} />
+          <Route path="*" element={<Navigate to="/insights" replace />} />
         </Routes>
       </div>
     </>

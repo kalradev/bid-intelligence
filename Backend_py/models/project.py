@@ -18,6 +18,28 @@ def _get_visible_project_ids(current_user: dict) -> List[int]:
 
 class ProjectModel:
     @staticmethod
+    def get_by_tender_id(tender_id: str) -> Optional[Dict[str, Any]]:
+        """Get project by unique tender_id."""
+        db = get_db_session()
+        try:
+            project = db.query(Project).filter(Project.tender_id == tender_id).first()
+            if not project:
+                return None
+            return {
+                "id": project.id,
+                "project_name": project.project_name,
+                "tender_id": project.tender_id,
+                "client_name": project.client_name,
+                "user_id": project.user_id,
+                "created_at": project.created_at,
+            }
+        except Exception as e:
+            logger.error(f"Error getting project by tender_id: {str(e)}")
+            return None
+        finally:
+            db.close()
+
+    @staticmethod
     def get_by_name(project_name: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """Get project by name and optionally user_id"""
         db = get_db_session()

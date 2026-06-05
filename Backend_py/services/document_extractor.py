@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 import pdfplumber
 import docx
 import mammoth
@@ -10,6 +11,23 @@ from typing import Dict, Any, Optional
 import re
 
 logger = logging.getLogger(__name__)
+
+# Allow explicit tesseract binary path via env (useful on Windows where PATH is often missing).
+_tesseract_cmd = (os.getenv("TESSERACT_CMD") or "").strip()
+if _tesseract_cmd:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract_cmd
+
+
+def _ocr_pdf_page(page) -> str:
+    """Best-effort OCR for PDF pages that have no extractable text."""
+    try:
+        # pdfplumber can rasterize a page to PIL image; OCR that image.
+        pil_img = page.to_image(resolution=220).original
+        text = pytesseract.image_to_string(pil_img)
+        return text.strip() if text else ""
+    except Exception as e:
+        logger.warning("PDF page OCR fallback failed: %s", e)
+        return ""
 
 async def extract_text(buffer: bytes, mimetype: str, filename: str) -> Dict[str, Any]:
     result = {}
@@ -54,12 +72,13 @@ async def extract_from_pdf(buffer: bytes) -> Dict[str, Any]:
         page_count = 0
         with pdfplumber.open(io.BytesIO(buffer)) as pdf:
             page_count = len(pdf.pages)
-            for page in pdf.pages:
+            for idx, page in enumerate(pdf.pages, start=1):
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
                 # Only extract tables that look like BOQ/product lists (have item/description/product/quantity)
                 tables = page.extract_tables()
+                page_had_table_rows = False
                 if tables:
                     boq_header_keywords = ("item", "description", "product", "quantity", "qty", "rate", "amount", "unit", "specification", "make", "model")
                     for table in tables:
@@ -73,7 +92,17 @@ async def extract_from_pdf(buffer: bytes) -> Dict[str, Any]:
                                 line = " | ".join(str(cell or "").strip() for cell in row)
                                 if line.strip():
                                     text += line + "\n"
+                                    page_had_table_rows = True
                         text += "\n"
+
+                # OCR fallback for scanned/embedded-image PDF pages.
+                # Trigger only when native extraction is poor to avoid noisy duplication.
+                native_word_count = len(re.findall(r"\w+", page_text or ""))
+                if native_word_count < 20 and not page_had_table_rows:
+                    ocr_text = _ocr_pdf_page(page)
+                    if ocr_text and len(re.findall(r"\w+", ocr_text)) >= 20:
+                        logger.info("📄 OCR fallback used for PDF page %s", idx)
+                        text += ocr_text + "\n"
         return {
             "text": text,
             "metadata": {"pages": page_count}

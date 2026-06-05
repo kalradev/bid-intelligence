@@ -5,20 +5,55 @@ import { processDepartmentData, filterEMD } from "../utils/deduplication";
 
 const Technical = () => {
   const [data, setData] = useState(null);
+  const [bidManagementTechnical, setBidManagementTechnical] = useState([]);
+  const [technicalEvaluationCriteria, setTechnicalEvaluationCriteria] = useState([]);
   const contentRef = useRef(null);
 
   useEffect(() => {
-    const storedData = localStorage.getItem("analysisData");
-    if (storedData) {
-      const parsed = JSON.parse(storedData);
-      const technicalData = parsed?.data?.departmentalSummaries?.technical;
-      
-      // Process and deduplicate all list-based fields, filter N/A
-      if (technicalData) {
-        setData(processDepartmentData(technicalData));
+    try {
+      const storedData = localStorage.getItem("analysisData");
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        const technicalData = parsed?.data?.departmentalSummaries?.technical;
+        const bm = parsed?.data?.departmentalSummaries?.bidManagement;
+        const sf = bm?.successFactors;
+
+        // Build robust fallback technical data from bidManagement when technical is sparse.
+        const fallbackTechnical = {
+          keyPoints: bm?.keyPoints || {},
+          complianceRequirements: bm?.complianceRequirements || {},
+          riskAreas: bm?.riskAreas || {},
+          actionItems: Array.isArray(bm?.actionItems) ? bm.actionItems : [],
+          criticalRequirements: bm?.successFactors?.Technical || [],
+        };
+
+        const hasTechnicalPayload = technicalData && Object.keys(technicalData || {}).length > 0;
+        const mergedTechnical = hasTechnicalPayload
+          ? { ...fallbackTechnical, ...technicalData }
+          : fallbackTechnical;
+
+        // Process and deduplicate all list-based fields, filter N/A
+        setData(processDepartmentData(mergedTechnical || {}));
+
+        // Success Factors (Technical) and Technical Evaluation Criteria from Bid Management
+        if (sf?.Technical && Array.isArray(sf.Technical)) {
+          setBidManagementTechnical(filterEMD(sf.Technical));
+        } else {
+          setBidManagementTechnical([]);
+        }
+        if (sf?.technicalEvaluationCriteria && Array.isArray(sf.technicalEvaluationCriteria)) {
+          setTechnicalEvaluationCriteria(filterEMD(sf.technicalEvaluationCriteria));
+        } else {
+          setTechnicalEvaluationCriteria([]);
+        }
       } else {
-        setData(null);
+        setData({});
       }
+    } catch (error) {
+      console.error("Error loading technical data:", error);
+      setData({});
+      setBidManagementTechnical([]);
+      setTechnicalEvaluationCriteria([]);
     }
   }, []);
 
@@ -97,6 +132,34 @@ const Technical = () => {
           )}
         </div>
 
+        {/* Success Factors (Technical) - from Bid Management */}
+        {(bidManagementTechnical.length > 0 || technicalEvaluationCriteria.length > 0) && (
+          <>
+            <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
+              Success Factors (Technical)
+            </h3>
+            {bidManagementTechnical.length > 0 && (
+              <ul style={{ listStyle: "none", paddingLeft: 0, marginBottom: "16px" }}>
+                {bidManagementTechnical.map((factor, idx) => (
+                  <li key={idx} style={{ marginBottom: "6px" }}>✔ {factor}</li>
+                ))}
+              </ul>
+            )}
+            {technicalEvaluationCriteria.length > 0 && (
+              <>
+                <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
+                  Technical Evaluation Criteria
+                </h4>
+                <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+                  {technicalEvaluationCriteria.map((item, idx) => (
+                    <li key={idx} style={{ marginBottom: "6px" }}>✔ {item}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </>
+        )}
+
         {/* Key Points */}
         {data.keyPoints && (
           <>
@@ -107,13 +170,14 @@ const Technical = () => {
               // New organized structure with subheadings
               Object.entries(data.keyPoints).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                return filteredItems && filteredItems.length > 0 && (
+                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                return listItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px" }}>
-                      {filteredItems.map((point, idx) => (
+                      {listItems.map((point, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
                       ))}
                     </ul>
@@ -163,7 +227,7 @@ const Technical = () => {
               Object.entries(data.criticalRequirements)
                 .filter(([category]) => category.toLowerCase() !== 'quality')
                 .map(([category, items]) => (
-                  items && items.length > 0 && (
+                  Array.isArray(items) && items.length > 0 && (
                     <div key={category} style={{ marginBottom: "16px" }}>
                       <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                         {category}
@@ -197,13 +261,14 @@ const Technical = () => {
               // New organized structure with subheadings
               Object.entries(data.riskAreas).map(([category, items]) => {
                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                return filteredItems && filteredItems.length > 0 && (
+                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                return listItems.length > 0 && (
                   <div key={category} style={{ marginBottom: "16px" }}>
                     <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                       {category}
                     </h4>
                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                      {filteredItems.map((risk, idx) => (
+                      {listItems.map((risk, idx) => (
                         <li key={idx} style={{ marginBottom: "6px" }}>{risk}</li>
                       ))}
                     </ul>

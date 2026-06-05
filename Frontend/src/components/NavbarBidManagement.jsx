@@ -136,8 +136,8 @@ const NavbarBidManagement = ({ pageTitle = "Bid Management", onDownloadPDF }) =>
             cursor: "pointer",
             transition: "0.3s",
           }}
-          onMouseOver={(e) => (e.target.style.background = "#008f64")}
-          onMouseOut={(e) => (e.target.style.background = "#00a878")}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#008f64")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#00a878")}
         >
           Home
         </button>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
 import { API_BASE_URL } from "../config";
 import { filterEMD, processDepartmentData } from "../utils/deduplication";
@@ -10,6 +11,35 @@ function normalizeProjectName(name) {
     let s = name.trim().replace(/\\[Bb]?\s*$/, "");
     s = s.replace(/\s+(\d{4})\s*$/, "/$1");
     return s.trim() || name;
+}
+
+/** Corrigendum / merged analysis payloads may use strings or objects in list fields; React cannot render raw objects. */
+function formatBidLine(value) {
+    if (value == null) return "";
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+        return String(value);
+    }
+    if (Array.isArray(value)) {
+        return value.map((v) => formatBidLine(v)).filter(Boolean).join("; ");
+    }
+    if (typeof value === "object") {
+        const o = value;
+        const pick =
+            o.text ??
+            o.criterion ??
+            o.description ??
+            o.requirement ??
+            o.point ??
+            o.title ??
+            o.name;
+        if (typeof pick === "string") return pick;
+        try {
+            return JSON.stringify(o);
+        } catch {
+            return String(o);
+        }
+    }
+    return String(value);
 }
 
 const BidManagement = () => {
@@ -88,28 +118,24 @@ const BidManagement = () => {
                 setProjectName(projName);
                 setDocumentId(docId);
 
-                // Process and deduplicate all list-based fields, filter N/A
-                if (bidManagementData) {
-                    try {
-                        const processedData = processDepartmentData(bidManagementData);
-                        setData(processedData);
-                    } catch (processError) {
-                        console.error("Error processing bid management data:", processError);
-                        // Fallback: use raw data if processing fails
-                        setData(bidManagementData);
-                    }
-                } else {
-                    console.warn("No bidManagement data found in analysisData");
-                    setData(null);
+                // Process and deduplicate all list-based fields, filter N/A.
+                // Use empty object fallback so page never goes fully blank.
+                try {
+                    const processedData = processDepartmentData(bidManagementData || {});
+                    setData(processedData);
+                } catch (processError) {
+                    console.error("Error processing bid management data:", processError);
+                    // Fallback: keep raw shape or empty object so UI remains stable
+                    setData(bidManagementData || {});
                 }
 
                 // Checklist is loaded by the effect below when projectName/documentId/data are set (no delayed load here to avoid overwriting user Yes/No)
             } else {
-                setData(null);
+                setData({});
             }
         } catch (error) {
             console.error("Error loading bid management data:", error);
-            setData(null);
+            setData({});
         }
     }, []);
 
@@ -212,6 +238,28 @@ const BidManagement = () => {
             delete next[item];
             return next;
         });
+    };
+
+    // Download all eligibility criteria as a text file (with Yes/No status if available)
+    const handleDownloadEligibilityCriteria = () => {
+        if (!data?.successFactors?.preQualificationCriteria?.length) return;
+        const lines = [
+            "Eligibility Criteria",
+            "===================",
+            "",
+            ...data.successFactors.preQualificationCriteria.map((item, idx) => {
+                const status = eligibilityChecks[item];
+                const statusText = status === true || status === "true" ? "Yes" : status === false || status === "false" ? "No" : "—";
+                return `${idx + 1}. [${statusText}] ${formatBidLine(item)}`;
+            }),
+        ];
+        const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "Eligibility_Criteria.txt";
+        a.click();
+        URL.revokeObjectURL(url);
     };
 
     const handleDownloadPDF = () => {
@@ -329,7 +377,7 @@ const BidManagement = () => {
                                 <ul style={{ paddingLeft: "20px", margin: "0" }}>
                                     {data.successFactors.emdExemption.map((item, idx) => (
                                         <li key={idx} style={{ marginBottom: "8px", color: "#0c4a6e" }}>
-                                            {item}
+                                            {formatBidLine(item)}
                                         </li>
                                     ))}
                                 </ul>
@@ -345,7 +393,7 @@ const BidManagement = () => {
                                 <ul style={{ paddingLeft: "20px", margin: "0" }}>
                                     {data.successFactors.technicalEvaluationCriteria.map((item, idx) => (
                                         <li key={idx} style={{ marginBottom: "8px", color: "#14532d" }}>
-                                            {item}
+                                            {formatBidLine(item)}
                                         </li>
                                     ))}
                                 </ul>
@@ -355,9 +403,38 @@ const BidManagement = () => {
                         {/* Eligibility Criteria with Yes/No Buttons */}
                         {data.successFactors.preQualificationCriteria && Array.isArray(data.successFactors.preQualificationCriteria) && data.successFactors.preQualificationCriteria.length > 0 && (
                             <div style={{ marginBottom: "24px", background: "#fef3c7", padding: "16px", borderRadius: "8px", border: "1px solid #fde68a" }}>
-                                <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", marginBottom: "4px", marginTop: "0" }}>
-                                    Eligibility Criteria
-                                </h4>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "4px" }}>
+                                    <h4 style={{ fontWeight: "700", fontSize: "18px", color: "#92400e", margin: "0" }}>
+                                        Eligibility Criteria
+                                    </h4>
+                                    <button
+                                        type="button"
+                                        onClick={handleDownloadEligibilityCriteria}
+                                        title="Download all eligibility criteria"
+                                        style={{
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            padding: "8px",
+                                            color: "#92400e",
+                                            background: "#fffbeb",
+                                            border: "2px solid #fde68a",
+                                            borderRadius: "8px",
+                                            cursor: "pointer",
+                                            transition: "all 0.2s ease",
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = "#fef3c7";
+                                            e.currentTarget.style.borderColor = "#f59e0b";
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = "#fffbeb";
+                                            e.currentTarget.style.borderColor = "#fde68a";
+                                        }}
+                                    >
+                                        <Download size={20} />
+                                    </button>
+                                </div>
                                 <p style={{ fontSize: "13px", color: "#78350f", marginBottom: "12px", marginTop: "0" }}>
                                     Mark each criterion Yes/No and optionally upload supporting documents.
                                 </p>
@@ -373,17 +450,6 @@ const BidManagement = () => {
                                         const isYes = checkStatus === true || checkStatus === "true";
                                         const isNo = checkStatus === false || checkStatus === "false";
                                         const isUnselected = checkStatus === undefined || checkStatus === null;
-
-                                        // Debug logging (remove in production)
-                                        if (idx === 0) {
-                                            console.log(`🔍 Checklist state for "${item}":`, {
-                                                rawValue: checkStatus,
-                                                isYes,
-                                                isNo,
-                                                isUnselected,
-                                                allChecks: eligibilityChecks
-                                            });
-                                        }
 
                                         return (
                                             <li
@@ -410,7 +476,7 @@ const BidManagement = () => {
                                                         fontWeight: "500",
                                                         minWidth: "300px"
                                                     }}>
-                                                        {item}
+                                                        {formatBidLine(item)}
                                                     </span>
                                                     <div style={{
                                                         display: "flex",
@@ -560,15 +626,16 @@ const BidManagement = () => {
                             .map(([category, items]) => {
                                 // Filter out EMD values from items
                                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                                return filteredItems && filteredItems.length > 0 && (
+                                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                                return listItems.length > 0 && (
                                     <div key={category} style={{ marginBottom: "16px" }}>
                                         <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                                             {category}
                                         </h4>
                                         <ul style={{ listStyle: "none", paddingLeft: 0 }}>
-                                            {filteredItems.map((factor, idx) => (
+                                            {listItems.map((factor, idx) => (
                                                 <li key={idx} style={{ marginBottom: "6px" }}>
-                                                    ✔ {factor}
+                                                    ✔ {formatBidLine(factor)}
                                                 </li>
                                             ))}
                                         </ul>
@@ -584,7 +651,7 @@ const BidManagement = () => {
                             <ul style={{ listStyle: "none", paddingLeft: 0 }}>
                                 {filteredFactors.map((factor, idx) => (
                                     <li key={idx} style={{ marginBottom: "6px" }}>
-                                        ✔ {factor}
+                                        ✔ {formatBidLine(factor)}
                                     </li>
                                 ))}
                             </ul>
@@ -605,14 +672,15 @@ const BidManagement = () => {
                             Object.entries(data.keyPoints).map(([category, items]) => {
                                 // Filter out EMD values from items
                                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                                return filteredItems && filteredItems.length > 0 && (
+                                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                                return listItems.length > 0 && (
                                     <div key={category} style={{ marginBottom: "16px" }}>
                                         <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                                             {category}
                                         </h4>
                                         <ul style={{ paddingLeft: "20px" }}>
-                                            {filteredItems.map((point, idx) => (
-                                                <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                                            {listItems.map((point, idx) => (
+                                                <li key={idx} style={{ marginBottom: "6px" }}>{formatBidLine(point)}</li>
                                             ))}
                                         </ul>
                                     </div>
@@ -625,7 +693,7 @@ const BidManagement = () => {
                                 return filteredPoints.length > 0 ? (
                                     <ul style={{ paddingLeft: "20px" }}>
                                         {filteredPoints.map((point, idx) => (
-                                            <li key={idx} style={{ marginBottom: "6px" }}>{point}</li>
+                                            <li key={idx} style={{ marginBottom: "6px" }}>{formatBidLine(point)}</li>
                                         ))}
                                     </ul>
                                 ) : null;
@@ -635,7 +703,7 @@ const BidManagement = () => {
                 )}
 
                 {/* Critical Dates */}
-                {data.criticalDates && data.criticalDates.length > 0 && (
+                {Array.isArray(data.criticalDates) && data.criticalDates.length > 0 && (
                     <>
                         <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
                             Critical Dates
@@ -643,7 +711,7 @@ const BidManagement = () => {
                         <div style={{ background: "#fef3c7", padding: "15px", borderRadius: "8px" }}>
                             {data.criticalDates.map((item, idx) => (
                                 <p key={idx} style={{ marginBottom: "8px" }}>
-                                    <strong>{item.date}:</strong> {item.description}
+                                    <strong>{formatBidLine(item?.date)}:</strong> {formatBidLine(item?.description)}
                                 </p>
                             ))}
                         </div>
@@ -661,14 +729,15 @@ const BidManagement = () => {
                             Object.entries(data.complianceRequirements).map(([category, items]) => {
                                 // Filter out EMD values from items
                                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                                return filteredItems && filteredItems.length > 0 && (
+                                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                                return listItems.length > 0 && (
                                     <div key={category} style={{ marginBottom: "16px" }}>
                                         <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#4b5563", marginBottom: "8px", marginTop: "12px" }}>
                                             {category}
                                         </h4>
                                         <ul style={{ paddingLeft: "20px" }}>
-                                            {filteredItems.map((req, idx) => (
-                                                <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                                            {listItems.map((req, idx) => (
+                                                <li key={idx} style={{ marginBottom: "6px" }}>{formatBidLine(req)}</li>
                                             ))}
                                         </ul>
                                     </div>
@@ -681,7 +750,7 @@ const BidManagement = () => {
                                 return filteredReqs.length > 0 ? (
                                     <ul style={{ paddingLeft: "20px" }}>
                                         {filteredReqs.map((req, idx) => (
-                                            <li key={idx} style={{ marginBottom: "6px" }}>{req}</li>
+                                            <li key={idx} style={{ marginBottom: "6px" }}>{formatBidLine(req)}</li>
                                         ))}
                                     </ul>
                                 ) : null;
@@ -701,15 +770,16 @@ const BidManagement = () => {
                             Object.entries(data.riskAreas).map(([category, items]) => {
                                 // Filter out EMD values from items
                                 const filteredItems = Array.isArray(items) ? filterEMD(items) : items;
-                                return filteredItems && filteredItems.length > 0 && (
+                                const listItems = Array.isArray(filteredItems) ? filteredItems : [];
+                                return listItems.length > 0 && (
                                     <div key={category} style={{ marginBottom: "16px" }}>
                                         <h4 style={{ fontWeight: "600", fontSize: "16px", color: "#991b1b", marginBottom: "8px", marginTop: "12px" }}>
                                             {category}
                                         </h4>
                                         <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
-                                            {filteredItems.map((risk, idx) => (
+                                            {listItems.map((risk, idx) => (
                                                 <li key={idx} style={{ marginBottom: "6px" }}>
-                                                    {risk}
+                                                    {formatBidLine(risk)}
                                                 </li>
                                             ))}
                                         </ul>
@@ -724,7 +794,7 @@ const BidManagement = () => {
                                     <ul style={{ paddingLeft: "20px", color: "#dc2626" }}>
                                         {filteredRisks.map((risk, idx) => (
                                             <li key={idx} style={{ marginBottom: "6px" }}>
-                                                {risk}
+                                                {formatBidLine(risk)}
                                             </li>
                                         ))}
                                     </ul>
@@ -750,7 +820,7 @@ const BidManagement = () => {
                                 <ul style={{ paddingLeft: "20px", margin: "0", color: "#7f1d1d" }}>
                                     {data.riskFactors.liquidatedDamages.map((item, idx) => (
                                         <li key={idx} style={{ marginBottom: "8px" }}>
-                                            {item}
+                                            {formatBidLine(item)}
                                         </li>
                                     ))}
                                 </ul>
@@ -766,7 +836,7 @@ const BidManagement = () => {
                                 <ul style={{ paddingLeft: "20px", margin: "0", color: "#1e3a8a" }}>
                                     {data.riskFactors.siteSurvey.map((item, idx) => (
                                         <li key={idx} style={{ marginBottom: "8px" }}>
-                                            {item}
+                                            {formatBidLine(item)}
                                         </li>
                                     ))}
                                 </ul>
@@ -782,7 +852,7 @@ const BidManagement = () => {
                                 <ul style={{ paddingLeft: "20px", margin: "0", color: "#78350f" }}>
                                     {data.riskFactors.certifications.map((item, idx) => (
                                         <li key={idx} style={{ marginBottom: "8px" }}>
-                                            {item}
+                                            {formatBidLine(item)}
                                         </li>
                                     ))}
                                 </ul>
@@ -792,14 +862,14 @@ const BidManagement = () => {
                 )}
 
                 {/* Action Items */}
-                {data.actionItems && data.actionItems.length > 0 && (
+                {Array.isArray(data.actionItems) && data.actionItems.length > 0 && (
                     <>
                         <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
                             Action Items
                         </h3>
                         <ul style={{ paddingLeft: "20px" }}>
                             {data.actionItems.map((action, idx) => (
-                                <li key={idx} style={{ marginBottom: "6px" }}>{action}</li>
+                                <li key={idx} style={{ marginBottom: "6px" }}>{formatBidLine(action)}</li>
                             ))}
                         </ul>
                     </>

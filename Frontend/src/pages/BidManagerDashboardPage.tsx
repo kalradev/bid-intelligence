@@ -550,35 +550,50 @@ export default function BidManagerDashboardPage() {
                     {personalProjects.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>No team projects yet. Upload & analyze from the sidebar to create one.</div>
                     ) : (
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
-                            <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
-                            <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>Upload final bid</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {personalProjects.map((p) => (
-                            <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                              <td style={{ padding: "14px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
-                              <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
-                              <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
-                              <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                                  <button onClick={() => openAssignModal(p.project_name)} style={{ padding: "8px 14px", background: "rgba(99, 102, 241, 0.12)", color: "#5a6340", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13 }}>Assign TMs</button>
-                                  <button onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 16px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(255,143,143,0.3)" }}>View result</button>
-                                </div>
-                              </td>
-                              <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "8px 14px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={14} /> Upload final bid</button>
-                              </td>
+                      <div>
+                        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+                          <thead>
+                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
+                              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "34%" }}>Project</th>
+                              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "18%" }}>Tender ID</th>
+                              <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "24%" }}>Client</th>
+                              <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: "#475569", width: "14%" }}>Action</th>
+                              <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap", width: "10%" }}>Upload final bid</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                        </table>
+                        <div style={{ maxHeight: 520, contain: "strict" }}>
+                          {/* Virtualized body */}
+                          {/* eslint-disable-next-line @typescript-eslint/no-var-requires */}
+                          {(() => {
+                            const { VirtualizedSimpleTable } = require("../components/VirtualizedSimpleTable") as typeof import("../components/VirtualizedSimpleTable");
+                            return (
+                              <VirtualizedSimpleTable
+                                header={<></>}
+                                items={personalProjects}
+                                rowHeight={56}
+                                maxHeight={520}
+                                renderRow={(p: any) => (
+                                  <>
+                                    <td style={{ padding: "14px 16px", fontWeight: 500, color: "#0f172a", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.project_name}</td>
+                                    <td style={{ padding: "14px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.tender_id || "—"}</td>
+                                    <td style={{ padding: "14px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.client_name || "—"}</td>
+                                    <td style={{ padding: "14px 16px", textAlign: "right" }}>
+                                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "nowrap" }}>
+                                        <button onClick={() => openAssignModal(p.project_name)} style={{ padding: "8px 14px", background: "rgba(99, 102, 241, 0.12)", color: "#5a6340", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13 }}>Assign TMs</button>
+                                        <button onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 16px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(255,143,143,0.3)" }}>View result</button>
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
+                                      <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "8px 14px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={14} /> Upload final bid</button>
+                                    </td>
+                                  </>
+                                )}
+                              />
+                            );
+                          })()}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </section>

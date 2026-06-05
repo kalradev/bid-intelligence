@@ -16,6 +16,7 @@ from core.sqlalchemy_db import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from services.document_extractor import extract_text
+from services import llm_client
 from services.ai_service import generate_departmental_summaries
 from services.oem_enrichment_service import enrich_products, get_enrichment_stats
 from services.project_service import ProjectService
@@ -114,17 +115,31 @@ async def analyze_rfp(
                                 status_code=403,
                                 detail=f"Technical Managers can only upload corrigendum or reference documents. Allowed types: {', '.join(allowed_types)}."
                             )
-                # ProjectService handles validation, project creation, and incremental analysis
-                result_data = await ProjectService.process_project_document(
-                    project_name=project_name,
-                    tender_id=tender_id,
-                    client_name=client_name,
-                    update_type=update_type,
-                    file_hash=combined_hash,
-                    file_name=", ".join(filenames),
-                    extracted_text=merged_text,
-                    user_id=current_user["id"]
-                )
+                # When multiple PDFs are uploaded, analyze each document separately and merge
+                # so that values present in any document are used (not just the first).
+                if len(files) > 1:
+                    per_file_texts = [(p["filename"], p["text"]) for p in processed_files_data]
+                    result_data = await ProjectService.process_project_documents(
+                        project_name=project_name,
+                        tender_id=tender_id,
+                        client_name=client_name,
+                        update_type=update_type,
+                        file_hash=combined_hash,
+                        file_names=filenames,
+                        per_file_texts=per_file_texts,
+                        user_id=current_user["id"],
+                    )
+                else:
+                    result_data = await ProjectService.process_project_document(
+                        project_name=project_name,
+                        tender_id=tender_id,
+                        client_name=client_name,
+                        update_type=update_type,
+                        file_hash=combined_hash,
+                        file_name=", ".join(filenames),
+                        extracted_text=merged_text,
+                        user_id=current_user["id"],
+                    )
                 
                 # Get the document ID that was just created
                 from core.sqlalchemy_db import get_db_session
@@ -269,13 +284,9 @@ async def analyze_rfp(
         raise HTTPException(status_code=499, detail="Analysis cancelled by user")
     except Exception as e:
         error_str = str(e)
-        # Check for quota errors and provide helpful message
         if "quota" in error_str.lower() or "insufficient_quota" in error_str.lower():
-            logger.error(f"❌ OpenAI quota exceeded: {error_str}")
-            raise HTTPException(
-                status_code=402, 
-                detail="OpenAI API quota exceeded. Please check your billing and plan details at https://platform.openai.com/account/billing"
-            )
+            logger.error(f"❌ LLM quota exceeded ({llm_client.llm_provider_label()}): {error_str}")
+            raise HTTPException(status_code=402, detail=llm_client.llm_quota_error_detail())
         logger.error(f"Error analyzing RFP: {error_str}", exc_info=True)
         if isinstance(e, HTTPException): raise e
         raise HTTPException(status_code=500, detail=str(e))

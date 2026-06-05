@@ -7,8 +7,8 @@ interface Document {
   fileHash: string;
   fileName: string;
   updateType: string;
-  displayName: string;
-  createdAt: string;
+  displayName?: string;
+  createdAt?: string;
 }
 
 interface DocumentFilterProps {
@@ -20,6 +20,13 @@ interface DocumentFilterProps {
 }
 
 export default function DocumentFilter({ projectName, onDocumentChange, currentDocumentId, onDisplayUpdate }: DocumentFilterProps) {
+  const getDisplayName = (doc?: Partial<Document> | null) => {
+    if (doc?.displayName && String(doc.displayName).trim()) return String(doc.displayName);
+    if (doc?.updateType === "CORRIGENDUM") return "Corrigendum";
+    if (doc?.updateType === "REFERENCE_UPDATE") return "Reference Update";
+    return "Base RFP";
+  };
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<{ id: number | null; type: string | null; displayName: string }>({
     id: null,
@@ -64,12 +71,13 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
               // If only one document (just Base RFP, no corrigendum), select it - no "Merged View"
               if (data.documents.length === 1) {
                 const singleDoc = data.documents[0];
+                const name = getDisplayName(singleDoc);
                 setSelectedDocument({
                   id: singleDoc.id,
                   type: singleDoc.updateType,
-                  displayName: singleDoc.displayName
+                  displayName: name
                 });
-                onDisplayUpdate?.(singleDoc.id, singleDoc.displayName);
+                onDisplayUpdate?.(singleDoc.id, name);
                 // Don't call onDocumentChange - analysis is already loaded from upload
               } else if (data.documents.length > 1) {
                 // Multiple documents - default to merged view
@@ -84,12 +92,13 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
               // If currentDocumentId is set, find and select that document
               const currentDoc = data.documents.find((d: Document) => d.id === currentDocumentId);
               if (currentDoc) {
+                const name = getDisplayName(currentDoc);
                 setSelectedDocument({
                   id: currentDoc.id,
                   type: currentDoc.updateType,
-                  displayName: currentDoc.displayName
+                  displayName: name
                 });
-                onDisplayUpdate?.(currentDoc.id, currentDoc.displayName);
+                onDisplayUpdate?.(currentDoc.id, name);
               } else if (data.documents.length > 1) {
                 // If current document not found but multiple exist, default to merged
                 setSelectedDocument({
@@ -138,12 +147,13 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
 
   const handleSelect = (doc: Document | null) => {
     if (doc) {
+      const name = getDisplayName(doc);
       setSelectedDocument({
         id: doc.id,
         type: doc.updateType,
-        displayName: doc.displayName
+        displayName: name
       });
-      onDocumentChange(doc.id, doc.updateType, doc.displayName);
+      onDocumentChange(doc.id, doc.updateType, name);
     } else {
       setSelectedDocument({
         id: null,
@@ -194,11 +204,11 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
       >
         <Filter size={14} />
         <span style={{ maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {selectedDocument.displayName === "Merged View (Latest)" 
+          {(selectedDocument.displayName || "Base RFP") === "Merged View (Latest)" 
             ? "Merged View"
-            : selectedDocument.displayName.length > 18
-            ? selectedDocument.displayName.substring(0, 15) + "..."
-            : selectedDocument.displayName}
+            : String(selectedDocument.displayName || "Base RFP").length > 18
+            ? String(selectedDocument.displayName || "Base RFP").substring(0, 15) + "..."
+            : String(selectedDocument.displayName || "Base RFP")}
         </span>
         <ChevronDown 
           size={14} 
@@ -312,10 +322,10 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   }}
                 >
                   <div style={{ fontWeight: "600", color: "#1f2937", fontSize: "14px" }}>
-                    {icon} {doc.displayName}
+                    {icon} {getDisplayName(doc)}
                   </div>
                   <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>
-                    {new Date(doc.createdAt).toLocaleDateString()}
+                    {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString() : "Recent"}
                   </div>
                 </div>
               );

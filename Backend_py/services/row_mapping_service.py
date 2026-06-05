@@ -3,12 +3,9 @@ import logging
 import asyncio
 import re
 from typing import List, Dict, Any, Optional
-from openai import AsyncOpenAI
-from core.config import settings
+from services import llm_client
 
 logger = logging.getLogger(__name__)
-
-async_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 def validate_product_row(mapped_product: Dict[str, Any], raw_row: List[str]) -> bool:
     if not mapped_product.get("isValid"):
@@ -40,6 +37,9 @@ def validate_product_row(mapped_product: Dict[str, Any], raw_row: List[str]) -> 
 
 async def map_row_to_product(row: List[str], headers: List[str] = None, document_context: str = '') -> Optional[Dict[str, Any]]:
     try:
+        if not llm_client.get_async_chat_client():
+            logger.debug("⏭️ Row mapping skipped - LLM client not configured")
+            return None
         headers = headers or []
         row_data = {}
         for i, h in enumerate(headers):
@@ -91,17 +91,17 @@ Map this row to a structured product object. Extract:
   "isValid": true/false
 }}"""
 
-        response = await async_client.chat.completions.create(
-            model="gpt-4o-mini",
+        content, _ = await llm_client.chat_completion_async(
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
+            model=llm_client.get_model_row_mapping(),
             temperature=0.0,
-            response_format={"type": "json_object"}
+            max_tokens=4096,
+            json_object=True,
         )
-        
-        mapped = json.loads(response.choices[0].message.content)
+        mapped = llm_client.parse_json_from_response_content(content)
         
         if not validate_product_row(mapped, row):
             return None

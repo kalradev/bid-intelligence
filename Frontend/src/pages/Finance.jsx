@@ -6,6 +6,7 @@ import { processDepartmentData, filterEMD } from "../utils/deduplication";
 const Finance = () => {
   const [data, setData] = useState(null);
   const [paymentTerms, setPaymentTerms] = useState(null);
+  const [bidManagementFinancial, setBidManagementFinancial] = useState([]);
   const contentRef = useRef(null);
 
   useEffect(() => {
@@ -14,17 +15,26 @@ const Finance = () => {
       const parsed = JSON.parse(storedData);
       const financeData = parsed?.data?.departmentalSummaries?.finance;
       const commercialData = parsed?.data?.departmentalSummaries?.commercial;
-      
+      const bm = parsed?.data?.departmentalSummaries?.bidManagement;
+      const sf = bm?.successFactors;
+
       // Process and deduplicate all list-based fields, filter N/A
       if (financeData) {
         setData(processDepartmentData(financeData));
       } else {
         setData(null);
       }
-      
+
       // Get payment terms from commercial data
       if (commercialData && commercialData.paymentTerms) {
         setPaymentTerms(commercialData.paymentTerms);
+      }
+
+      // Success Factors (Financial) from Bid Management
+      if (sf?.Financial && Array.isArray(sf.Financial)) {
+        setBidManagementFinancial(filterEMD(sf.Financial));
+      } else {
+        setBidManagementFinancial([]);
       }
     }
   }, []);
@@ -98,8 +108,19 @@ const Finance = () => {
           </>
         )}
 
-
-
+        {/* Success Factors (Financial) - from Bid Management */}
+        {bidManagementFinancial.length > 0 && (
+          <>
+            <h3 style={{ fontWeight: "700", marginTop: "26px", marginBottom: "12px" }}>
+              Success Factors (Financial)
+            </h3>
+            <ul style={{ listStyle: "none", paddingLeft: 0 }}>
+              {bidManagementFinancial.map((factor, idx) => (
+                <li key={idx} style={{ marginBottom: "6px" }}>✔ {factor}</li>
+              ))}
+            </ul>
+          </>
+        )}
 
 
 

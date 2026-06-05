@@ -389,13 +389,45 @@ export default function UploadPage() {
             return;
         }
 
+        const token = localStorage.getItem("token");
+        if (!token) {
+            toast.error("Please login to analyze documents");
+            return;
+        }
+
+        // Resolve real project status before validation (avoids BASE_RFP + existing project mismatch).
+        let submitUpdateType = updateType;
+        const nameTrim = projectName.trim();
+        if (nameTrim) {
+            try {
+                const statusRes = await fetch(
+                    `${API_BASE_URL}/api/rfp/project-status/${encodeURIComponent(nameTrim)}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (statusRes.ok) {
+                    const data = await statusRes.json();
+                    if (data.exists) {
+                        setProjectExists(true);
+                        const base = !!data.project?.hasBaseRfp;
+                        setHasBaseRfp(base);
+                        if (base && submitUpdateType === "BASE_RFP") {
+                            submitUpdateType = "CORRIGENDUM";
+                            setUpdateType("CORRIGENDUM");
+                        }
+                    }
+                }
+            } catch {
+                /* Backend coerces BASE_RFP → CORRIGENDUM for existing projects if this fails */
+            }
+        }
+
         // Check quota only for NEW projects (not for updating existing ones)
         if (projectExists === false && teamQuota && teamQuota.appliesToTeam && teamQuota.teamProjectsLeft === 0) {
             toast.error(`Your team has reached the limit of ${teamQuota.teamProjectsLimit} projects. Please contact your Bid Manager to delete old projects or increase quota.`);
             return;
         }
 
-        if (updateType === "BASE_RFP" && (!tenderId || !clientName)) {
+        if (submitUpdateType === "BASE_RFP" && (!tenderId || !clientName)) {
             toast.error("Tender ID and Client Name are mandatory for a new Base RFP!");
             return;
         }
@@ -458,19 +490,12 @@ export default function UploadPage() {
         }, 4000);
 
         try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                toast.error("Please login to analyze documents");
-                setIsAnalyzing(false);
-                return;
-            }
-
             const formData = new FormData();
             uploadedFiles.forEach(file => formData.append("files", file));
             formData.append("project_name", projectName);
             formData.append("tender_id", tenderId);
             formData.append("client_name", clientName);
-            formData.append("update_type", updateType);
+            formData.append("update_type", submitUpdateType);
 
             const response = await fetch(`${API_BASE_URL}/api/rfp/analyze`, {
                 method: "POST",
@@ -503,6 +528,8 @@ export default function UploadPage() {
             setProgressPercent(100);
             setAnalysisStage("Analysis complete!");
             toast.success(`Analysis complete! (${formatTime(totalTime)})`, { duration: 3000 });
+            // Scroll to top so user sees "Assign users" and top of page (was stuck at bottom)
+            window.scrollTo({ top: 0, behavior: "smooth" });
             const userStr = localStorage.getItem("user");
             const role = (userStr ? (JSON.parse(userStr).role || "") : "").toString().toLowerCase();
             if (projectName && (role === "bid_manager" || role === "bid_admin")) {

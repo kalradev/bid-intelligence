@@ -1,5 +1,5 @@
 import { CheckCircle, Globe, Package } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config";
 import { fetchProjectAnalysis, updateAnalysisData } from "../utils/documentAnalysis";
@@ -13,6 +13,8 @@ export default function ProductMappingPage() {
   /** Selected OEM per product index (string key). Empty string = none/custom. */
   const [oemSelections, setOemSelections] = useState<Record<string, string>>({});
   const [savingSelections, setSavingSelections] = useState(false);
+  const typingSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [visibleRows, setVisibleRows] = useState(25);
 
   // Get project name and fetch fresh data from API
   useEffect(() => {
@@ -164,12 +166,61 @@ export default function ProductMappingPage() {
 
   const handleSelectedOemInput = useCallback((productIndex: number, value: string) => {
     const key = String(productIndex);
-    setOemSelections((prev) => {
-      const next = { ...prev, [key]: value };
-      saveOemSelections(next);
-      return next;
-    });
+    setOemSelections((prev) => ({ ...prev, [key]: value }));
+    if (typingSaveTimerRef.current) clearTimeout(typingSaveTimerRef.current);
+    typingSaveTimerRef.current = setTimeout(() => {
+      setOemSelections((latest) => {
+        saveOemSelections(latest);
+        return latest;
+      });
+    }, 450);
   }, [saveOemSelections]);
+
+  useEffect(() => {
+    setVisibleRows(25);
+  }, [analysisData?.data?.departmentalSummaries?.productMapping?.miiProductStatus?.length]);
+
+  useEffect(() => {
+    return () => {
+      if (typingSaveTimerRef.current) clearTimeout(typingSaveTimerRef.current);
+    };
+  }, []);
+
+  const productMapping = analysisData?.data?.departmentalSummaries?.productMapping || {};
+  const technicalSummary = analysisData?.data?.departmentalSummaries?.technical || {};
+  const mappedProducts = Array.isArray(productMapping.miiProductStatus) ? productMapping.miiProductStatus : [];
+  const fallbackProductsFromTechnical = useMemo(() => {
+    const specs = Array.isArray(technicalSummary?.keySpecifications)
+      ? technicalSummary.keySpecifications
+      : [];
+    return specs
+      .map((spec: any) => {
+        const productName = (spec?.productName || "").toString().trim();
+        if (!productName) return null;
+        const specification = (spec?.specification || "N/A").toString().trim();
+        return {
+          productName,
+          category: "Extracted",
+          oem: "N/A",
+          model: specification || "N/A",
+          miiStatus: "Unmapped",
+          oemRecommendations: [],
+        };
+      })
+      .filter(Boolean);
+  }, [technicalSummary]);
+  const miiProductStatus = mappedProducts.length > 0 ? mappedProducts : fallbackProductsFromTechnical;
+  const totalItems = parseInt(productMapping.totalItems) || miiProductStatus.length || 0;
+  const totalOEMsCount = productMapping.totalOEMs?.count || 0;
+  const indianOEMs = productMapping.totalOEMs?.indian || 0;
+  const globalOEMs = productMapping.totalOEMs?.global || 0;
+  const productsMapped = parseInt(productMapping.productsMapped) || miiProductStatus.length || 0;
+  const miiMapped = parseInt(productMapping.makeInIndiaMapping?.mapped) || 0;
+  const miiUnmapped = parseInt(productMapping.makeInIndiaMapping?.unmapped) || 0;
+  const visibleProductRows = useMemo(
+    () => miiProductStatus.slice(0, visibleRows),
+    [miiProductStatus, visibleRows]
+  );
 
   if (isLoading) {
     return (
@@ -211,17 +262,6 @@ export default function ProductMappingPage() {
       </div>
     );
   }
-
-  const productMapping = analysisData?.data?.departmentalSummaries?.productMapping || {};
-
-  const totalItems = parseInt(productMapping.totalItems) || 0;
-  const totalOEMsCount = productMapping.totalOEMs?.count || 0;
-  const indianOEMs = productMapping.totalOEMs?.indian || 0;
-  const globalOEMs = productMapping.totalOEMs?.global || 0;
-  const productsMapped = parseInt(productMapping.productsMapped) || 0;
-  const miiMapped = parseInt(productMapping.makeInIndiaMapping?.mapped) || 0;
-  const miiUnmapped = parseInt(productMapping.makeInIndiaMapping?.unmapped) || 0;
-  const miiProductStatus = productMapping.miiProductStatus || [];
 
   // ✅ Calculate MII compliance percentage - CORRECT calculation
   // Percentage = (Indian OEM products / Total products) * 100
@@ -271,6 +311,50 @@ export default function ProductMappingPage() {
       </svg>
     </span>
   );
+
+  const isUnspecifiedOem = (oem: any) => {
+    const text = String(oem || "").trim().toLowerCase();
+    return !text || text === "unspecified" || text === "unspecified oem" || text === "n/a" || text === "na";
+  };
+
+  const buildLocalFallbackRecommendations = (item: any) => {
+    const category = String(item?.category || "").toLowerCase();
+    const name = String(item?.productName || "").toLowerCase();
+    const modelBase = String(item?.model || item?.productName || "Standard").trim();
+    const specText = String(item?.specifications || "").trim();
+
+    let pool = [
+      "Dell", "HPE", "Lenovo", "Cisco", "IBM", "Oracle", "Wipro", "HCL Technologies",
+    ];
+    if (category.includes("server") || name.includes("server")) {
+      pool = ["Dell", "HPE", "Lenovo", "IBM", "Wipro", "HCL Technologies", "Supermicro", "Fujitsu"];
+    } else if (category.includes("network") || name.includes("switch") || name.includes("firewall")) {
+      pool = ["Cisco", "Juniper", "HPE Aruba", "Fortinet", "Palo Alto", "Wipro", "HCL Technologies", "Arista"];
+    } else if (category.includes("storage") || name.includes("storage")) {
+      pool = ["NetApp", "Dell EMC", "HPE", "IBM", "Pure Storage", "Hitachi Vantara", "Wipro", "HCL Technologies"];
+    } else if (category.includes("security")) {
+      pool = ["Fortinet", "Palo Alto", "Cisco", "Check Point", "Sophos", "Wipro", "HCL Technologies", "IBM"];
+    }
+
+    const seed = `${name}|${category}|${modelBase}`;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+    const start = pool.length > 0 ? hash % pool.length : 0;
+    const selected = [pool[start], pool[(start + 3) % pool.length], pool[(start + 5) % pool.length]]
+      .filter((v, i, arr) => !!v && arr.indexOf(v) === i);
+
+    return selected.map((oem, i) => ({
+      oem,
+      model: i === 0
+        ? modelBase
+        : (specText ? `${oem} ${String(item?.productName || "Standard").trim()}` : `${oem} ${String(item?.productName || "Standard").trim()}`),
+      miiStatus: oem.toLowerCase().includes("wipro") || oem.toLowerCase().includes("hcl") ? "Indian OEM" : "Global OEM",
+      matchScore: i === 0 ? 95 : 90 - i,
+      priceRange: i === 0 ? "Mid-Range" : "Budget",
+      availability: "Readily Available",
+      reasoning: "Fallback recommendation generated from extracted tender data",
+    }));
+  };
 
   return (
     <>
@@ -445,9 +529,15 @@ export default function ProductMappingPage() {
 
                 <tbody>
                   {miiProductStatus.length > 0 ? (
-                    miiProductStatus.map((item: any, index: number) => {
+                    visibleProductRows.map((item: any, index: number) => {
                       // Check if we have AI-generated recommendations
-                      const recommendations = item.oemRecommendations || [];
+                      const recommendationsRaw = Array.isArray(item.oemRecommendations) ? item.oemRecommendations : [];
+                      const recommendationsFiltered = recommendationsRaw.filter(
+                        (rec: any) => !isUnspecifiedOem(rec?.oem)
+                      );
+                      const recommendations = recommendationsFiltered.length > 0
+                        ? recommendationsFiltered
+                        : buildLocalFallbackRecommendations(item);
                       const hasRecommendations = recommendations.length > 0;
                       
                       // Format OEM - show "Unspecified" as "N/A" for better UX
@@ -476,30 +566,30 @@ export default function ProductMappingPage() {
                           <td style={{ padding: 10 }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                {recommendations.map((rec: any, i: number) => {
+                                {recommendations.slice(0, 4).map((rec: any, i: number) => {
                                   const selected = (oemSelections[String(index)] || "").trim() === (rec.oem || "").trim();
                                   return (
-                                    <div 
-                                      key={i} 
-                                      style={{ 
+                                    <div
+                                      key={i}
+                                      style={{
                                         padding: "6px 8px",
                                         background: i === 0 ? "rgba(59, 130, 246, 0.08)" : "rgba(107, 114, 128, 0.05)",
                                         borderRadius: "6px",
                                         borderLeft: `3px solid ${rec.miiStatus === "Indian OEM" ? "#10b981" : "#3b82f6"}`,
                                         fontSize: "13px",
                                         display: "flex",
-                                        alignItems: "flex-start",
-                                        gap: "8px"
+                                        alignItems: "center",
+                                        gap: "8px",
                                       }}
                                     >
-                                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flexShrink: 0, marginTop: 2 }}>
+                                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", marginTop: 1 }}>
                                         <input
                                           type="checkbox"
                                           checked={selected}
                                           onChange={() => handleSelectOem(index, rec.oem || "")}
                                           style={{ width: 18, height: 18, cursor: "pointer" }}
                                         />
-                                        <span style={{ fontWeight: 600, color: "#111827", marginBottom: "2px" }}>
+                                        <span style={{ fontWeight: 600, color: "#111827" }}>
                                           {i + 1}. {rec.oem}
                                           {i === 0 && (
                                             <span style={{
@@ -516,18 +606,6 @@ export default function ProductMappingPage() {
                                           )}
                                         </span>
                                       </label>
-                                      <div style={{ 
-                                        fontSize: "11px", 
-                                        color: "#6b7280",
-                                        display: "flex",
-                                        gap: "8px",
-                                        alignItems: "center",
-                                        flex: 1
-                                      }}>
-                                        <span>{rec.priceRange || "Mid-Range"}</span>
-                                        <span>•</span>
-                                        <span>Match: {rec.matchScore || 90}%</span>
-                                      </div>
                                     </div>
                                   );
                                 })}
@@ -543,32 +621,30 @@ export default function ProductMappingPage() {
                           <td style={{ padding: 10 }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                {recommendations.map((rec: any, i: number) => (
-                                  <div 
-                                    key={i} 
-                                    style={{ 
+                                {recommendations.slice(0, 4).map((rec: any, i: number) => (
+                                  <div
+                                    key={i}
+                                    style={{
                                       padding: "6px 8px",
                                       background: i === 0 ? "rgba(59, 130, 246, 0.05)" : "rgba(243, 244, 246, 0.8)",
                                       borderRadius: "6px",
                                       fontSize: "13px"
                                     }}
                                   >
-                                    <div style={{ 
-                                      fontWeight: 500, 
-                                      color: "#374151",
-                                      marginBottom: "2px"
-                                    }}>
+                                    <div style={{ fontWeight: 500, color: "#374151", marginBottom: "2px" }}>
                                       {rec.model}
                                     </div>
                                     {rec.reasoning && (
-                                      <div style={{ 
-                                        fontSize: "10px", 
-                                        color: "#6b7280",
-                                        fontStyle: "italic",
-                                        lineHeight: 1.3
-                                      }}>
-                                        {rec.reasoning.length > 60 
-                                          ? rec.reasoning.substring(0, 60) + "..." 
+                                      <div
+                                        style={{
+                                          fontSize: "10px",
+                                          color: "#6b7280",
+                                          fontStyle: "italic",
+                                          lineHeight: 1.3
+                                        }}
+                                      >
+                                        {rec.reasoning.length > 60
+                                          ? rec.reasoning.substring(0, 60) + "..."
                                           : rec.reasoning}
                                       </div>
                                     )}
@@ -589,7 +665,7 @@ export default function ProductMappingPage() {
                           <td style={{ padding: 10 }}>
                             {hasRecommendations ? (
                               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                                {recommendations.map((rec: any, i: number) => {
+                                {recommendations.slice(0, 4).map((rec: any, i: number) => {
                                   const recMii = rec.miiStatus || "Unmapped";
                                   const isIndian = recMii === "Indian OEM" || recMii === "MII-Compliant" || recMii === "MII Compliant" || recMii === "Mapped";
                                   return (
@@ -680,6 +756,24 @@ export default function ProductMappingPage() {
                   )}
                 </tbody>
               </table>
+              {miiProductStatus.length > visibleRows && (
+                <div style={{ display: "flex", justifyContent: "center", marginTop: 16 }}>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleRows((prev) => prev + 25)}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: 8,
+                      border: "1px solid #cbd5e1",
+                      background: "#f8fafc",
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Show more ({miiProductStatus.length - visibleRows} remaining)
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>

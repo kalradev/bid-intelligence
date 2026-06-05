@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
 import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
@@ -1625,22 +1626,22 @@ export default function BidAdminDashboardPage() {
                               {bmProjects.length === 0 ? (
                                 <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
                               ) : (
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "auto" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "fixed" }}>
                                   <thead>
                                     <tr style={{ borderBottom: "2px solid #EAEFEF", background: "#f8fafc" }}>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>Upload final bid</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "34%" }}>Project</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "18%" }}>Tender ID</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "24%" }}>Client</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", width: "14%" }}>Action</th>
+                                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap", width: "10%" }}>Upload final bid</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {bmProjects.map((p) => (
                                       <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
+                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.project_name}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.tender_id || "—"}</td>
+                                        <td style={{ padding: "12px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.client_name || "—"}</td>
                                         <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
                                           <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
                                             <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>View result</button>
@@ -2247,64 +2248,63 @@ export default function BidAdminDashboardPage() {
                               <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
                             </tr>
                           </thead>
-                          <tbody>
-                            {(() => {
-                              const bmById: Record<number, string> = {};
-                              bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
-                              const teamSearchLower = (teamSearch || "").toLowerCase();
-                              const filtered = teamSearchLower
-                                ? projectsForFilter.filter((p) =>
-                                    (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
-                                    (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
-                                    (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
-                                    (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
-                                    (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
-                                  )
-                                : projectsForFilter;
-                              return filtered.map((p) => (
-                                <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                  <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: 14, color: "#0f172a" }}>
-                                    {p.project_name}
-                                    {p.user_id === currentUserId && (
-                                      <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.tender_id ?? "—"}</td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.client_name ?? "—"}</td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
-                                  <td style={{ padding: "14px 16px" }}>
-                                    {(p.assigned_users || []).length === 0 ? (
-                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
-                                    ) : (
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {(p.assigned_users || []).map((u) => (
-                                          <span key={u.id} style={{ fontSize: 12, padding: "4px 8px", background: "#f1f5f9", borderRadius: 6, color: "#475569" }}>{u.fullName}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                      title="Archive project"
-                                      style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
-                                    >
-                                      <Archive size={14} />
-                                      Archive
-                                    </button>
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                    <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
-                                  </td>
-                                </tr>
-                              ));
-                            })()}
-                          </tbody>
                         </table>
+                        {(() => {
+                          const bmById: Record<number, string> = {};
+                          bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
+                          const teamSearchLower = (teamSearch || "").toLowerCase();
+                          const filtered = teamSearchLower
+                            ? projectsForFilter.filter((p) =>
+                                (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
+                                (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
+                                (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
+                                (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
+                                (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
+                              )
+                            : projectsForFilter;
+                          const rowHeight = 86;
+                          const listHeight = Math.min(520, Math.max(rowHeight, filtered.length * rowHeight));
+                          return (
+                            <div style={{ minWidth: 640, height: listHeight, contain: "strict" }}>
+                              <List
+                                height={listHeight}
+                                itemCount={filtered.length}
+                                itemSize={rowHeight}
+                                width={"100%"}
+                                overscanCount={6}
+                              >
+                                {({ index, style }: ListChildComponentProps) => {
+                                  const p = filtered[index];
+                                  return (
+                                    <div style={{ ...style, display: "grid", gridTemplateColumns: "1.8fr 1.1fr 1.2fr 1.2fr 1.6fr 0.9fr 0.9fr 1.1fr", alignItems: "center", borderBottom: "1px solid #EAEFEF", padding: "0 8px", background: "#fff" }}>
+                                      <div style={{ padding: "0 8px", fontWeight: 600, fontSize: 14, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.project_name}>
+                                        {p.project_name}
+                                        {p.user_id === currentUserId && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>}
+                                      </div>
+                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tender_id ?? "—"}</div>
+                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.client_name ?? "—"}</div>
+                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</div>
+                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                        {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
+                                      </div>
+                                      <div style={{ padding: "0 8px", textAlign: "right" }}>
+                                        <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} title="Archive project" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                          <Archive size={14} /> Archive
+                                        </button>
+                                      </div>
+                                      <div style={{ padding: "0 8px", textAlign: "right" }}>
+                                        <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
+                                      </div>
+                                      <div style={{ padding: "0 8px", textAlign: "center" }}>
+                                        <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
+                                      </div>
+                                    </div>
+                                  );
+                                }}
+                              </List>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -2354,48 +2354,44 @@ export default function BidAdminDashboardPage() {
                                 <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
                               </tr>
                             </thead>
-                            <tbody>
-                              {filtered.map((p) => (
-                                <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                  <td style={{ padding: "14px 16px", fontWeight: 600, fontSize: 14, color: "#0f172a" }}>
-                                    {p.project_name}
-                                    <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
-                                  </td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.tender_id ?? "—"}</td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{p.client_name ?? "—"}</td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
-                                  <td style={{ padding: "14px 16px" }}>
-                                    {(p.assigned_users || []).length === 0 ? (
-                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
-                                    ) : (
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {(p.assigned_users || []).map((u) => (
-                                          <span key={u.id} style={{ fontSize: 12, padding: "4px 8px", background: "#f1f5f9", borderRadius: 6, color: "#475569" }}>{u.fullName}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    <button
-                                      type="button"
-                                      onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                      title="Archive project"
-                                      style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
-                                    >
-                                      <Archive size={14} />
-                                      Archive
-                                    </button>
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                    <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
                           </table>
+                          <div style={{ minWidth: 640, height: Math.min(520, Math.max(86, filtered.length * 86)), contain: "strict" }}>
+                            <List
+                              height={Math.min(520, Math.max(86, filtered.length * 86))}
+                              itemCount={filtered.length}
+                              itemSize={86}
+                              width={"100%"}
+                              overscanCount={6}
+                            >
+                              {({ index, style }: ListChildComponentProps) => {
+                                const p = filtered[index];
+                                return (
+                                  <div style={{ ...style, display: "grid", gridTemplateColumns: "1.8fr 1.1fr 1.2fr 1.2fr 1.6fr 0.9fr 0.9fr 1.1fr", alignItems: "center", borderBottom: "1px solid #EAEFEF", padding: "0 8px", background: "#fff" }}>
+                                    <div style={{ padding: "0 8px", fontWeight: 600, fontSize: 14, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.project_name}>
+                                      {p.project_name} <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
+                                    </div>
+                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tender_id ?? "—"}</div>
+                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.client_name ?? "—"}</div>
+                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</div>
+                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                      {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
+                                    </div>
+                                    <div style={{ padding: "0 8px", textAlign: "right" }}>
+                                      <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} title="Archive project" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                        <Archive size={14} /> Archive
+                                      </button>
+                                    </div>
+                                    <div style={{ padding: "0 8px", textAlign: "right" }}>
+                                      <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
+                                    </div>
+                                    <div style={{ padding: "0 8px", textAlign: "center" }}>
+                                      <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
+                                    </div>
+                                  </div>
+                                );
+                              }}
+                            </List>
+                          </div>
                         </div>
                       );
                     })()}
