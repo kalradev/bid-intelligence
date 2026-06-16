@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { API_BASE_URL } from "../config";
 import { getAuthToken } from "../utils/authStorage";
-import { UserCircle, Shield, KeyRound, ArrowLeft } from "lucide-react";
+import { UserCircle, KeyRound, ArrowLeft } from "lucide-react";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 
 export default function AccountPage() {
@@ -162,7 +162,7 @@ export default function AccountPage() {
       <div style={{ position: "relative", zIndex: 1, maxWidth: 640, margin: "0 auto", padding: 24, paddingTop: NAVBAR_HEIGHT + 24 }}>
         <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 20, padding: 28, marginBottom: 24, boxShadow: "0 20px 50px rgba(0,0,0,0.06)", border: "1px solid rgba(226,232,240,0.8)" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 26, fontWeight: 800, color: "#1e293b" }}>Account & security</h1>
-          <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>Manage your profile, security, and password.</p>
+          <p style={{ margin: 0, color: "#64748b", fontSize: 14 }}>Manage your profile and password.</p>
         </div>
 
         {/* Profile */}
@@ -187,19 +187,6 @@ export default function AccountPage() {
               <div style={{ fontSize: 15, fontWeight: 500, color: "#1e293b", textTransform: "capitalize" }}>{(user?.role ?? "—").replace("_", " ")}</div>
             </div>
           </div>
-        </section>
-
-        {/* Two-step verification */}
-        <section id="two-step" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(111,190,178,0.2) 0%, rgba(52,144,139,0.15) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Shield size={24} color="#34908B" />
-            </div>
-            <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Two-step verification</h2>
-          </div>
-          <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
-            Add an extra layer of security by requiring a second step when signing in. This feature is coming soon.
-          </p>
         </section>
 
         {/* Change password */}

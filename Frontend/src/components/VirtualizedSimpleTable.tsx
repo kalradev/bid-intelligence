@@ -1,41 +1,45 @@
-import React, { memo, useMemo } from "react";
-import type { CSSProperties } from "react";
-import { AutoSizer } from "react-virtualized-auto-sizer";
-import { FixedSizeList } from "react-window";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { FixedSizeList, type ListChildComponentProps } from "react-window";
 
 type RowRenderer<T> = (item: T, index: number) => React.ReactNode;
 
-type VirtualRowProps = {
-  index: number;
-  style: CSSProperties;
+type ItemData<T> = {
+  items: T[];
+  renderRow: RowRenderer<T>;
 };
 
+type VirtualRowProps<T> = ListChildComponentProps<ItemData<T>>;
+
+function VirtualizedRowInner<T>({ index, style, data }: VirtualRowProps<T>) {
+  const item = data.items[index];
+  return (
+    <tr
+      style={{
+        ...style,
+        borderBottom: "1px solid #D4F0EB",
+        boxSizing: "border-box",
+        width: "100%",
+      }}
+    >
+      {data.renderRow(item, index)}
+    </tr>
+  );
+}
+
+const VirtualizedRow = memo(VirtualizedRowInner) as typeof VirtualizedRowInner;
+
 interface VirtualizedSimpleTableProps<T> {
-  /** Column headers (already styled content) */
   header: React.ReactNode;
-  /** Optional column group for fixed layout alignment */
   colgroup?: React.ReactNode;
-  /** Data items */
   items: T[];
-  /** Row height in pixels (fixed for performance) */
   rowHeight?: number;
-  /** Max viewport height for the scroll container */
   maxHeight?: number;
-  /** Render a single row (<tr>...</tr>) */
   renderRow: RowRenderer<T>;
-  /** Optional aria-label for a11y */
   ariaLabel?: string;
-  /** Optional className for outer container */
   className?: string;
-  /** Optional style overrides */
   style?: CSSProperties;
 }
 
-/**
- * VirtualizedSimpleTable
- * Renders a fixed header table with a virtualized tbody.
- * Keep tableLayout fixed on the consumer table for stable column widths.
- */
 export function VirtualizedSimpleTable<T>({
   header,
   colgroup,
@@ -47,30 +51,43 @@ export function VirtualizedSimpleTable<T>({
   className,
   style,
 }: VirtualizedSimpleTableProps<T>) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+
   const itemCount = items.length;
-  const viewportHeight = itemCount === 0 ? rowHeight * 2 : Math.min(maxHeight, Math.max(rowHeight * 3, Math.min(itemCount * rowHeight, maxHeight)));
+  const viewportHeight =
+    itemCount === 0
+      ? rowHeight * 2
+      : Math.min(maxHeight, Math.max(rowHeight * 3, Math.min(itemCount * rowHeight, maxHeight)));
+
+  const itemData = useMemo<ItemData<T>>(() => ({ items, renderRow }), [items, renderRow]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      const next = el.clientWidth;
+      if (next > 0) setWidth(next);
+    };
+
+    updateWidth();
+    const ro = new ResizeObserver(updateWidth);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const containerStyle: CSSProperties = useMemo(
     () => ({
       position: "relative",
       maxHeight,
       height: viewportHeight,
-      overflow: "hidden",
-      willChange: "transform",
-      contain: "strict",
+      overflow: "auto",
+      width: "100%",
       ...style,
     }),
-    [itemCount, maxHeight, rowHeight, style, viewportHeight]
+    [maxHeight, style, viewportHeight]
   );
-
-  const Row = memo(({ index, style: rowStyle }: VirtualRowProps) => {
-    const item = items[index];
-    return (
-      <tr style={{ ...rowStyle, borderBottom: "1px solid #D4F0EB" }}>
-        {renderRow(item, index)}
-      </tr>
-    );
-  });
-  Row.displayName = "VirtualizedRow";
 
   return (
     <div aria-label={ariaLabel} className={className}>
@@ -78,31 +95,35 @@ export function VirtualizedSimpleTable<T>({
         {colgroup}
         {header}
       </table>
-      <div style={containerStyle}>
-        <AutoSizer
-          renderProp={({ width, height }) => {
-            if (width == null || height == null) return null;
-            return (
-              <table style={{ width, borderCollapse: "collapse", tableLayout: "fixed" }}>
-                {colgroup}
-                <tbody>
-                  <FixedSizeList
-                    height={height}
-                    width={width}
-                    itemCount={itemCount}
-                    itemSize={rowHeight}
-                    overscanCount={4}
-                    innerElementType="tbody"
-                  >
-                    {Row}
-                  </FixedSizeList>
-                </tbody>
-              </table>
-            );
-          }}
-        />
+      <div ref={scrollRef} style={containerStyle}>
+        {width > 0 && itemCount > 0 ? (
+          <table style={{ width, borderCollapse: "collapse", tableLayout: "fixed" }}>
+            {colgroup}
+            <tbody>
+              <FixedSizeList
+                height={viewportHeight}
+                width={width}
+                itemCount={itemCount}
+                itemSize={rowHeight}
+                itemData={itemData}
+                overscanCount={10}
+                innerElementType="tbody"
+              >
+                {VirtualizedRow}
+              </FixedSizeList>
+            </tbody>
+          </table>
+        ) : itemCount > 0 ? (
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", visibility: "hidden", position: "absolute", pointerEvents: "none" }} aria-hidden>
+            {colgroup}
+            <tbody>
+              {items.slice(0, 1).map((item, index) => (
+                <tr key={index}>{renderRow(item, index)}</tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
       </div>
     </div>
   );
 }
-

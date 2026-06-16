@@ -476,11 +476,6 @@ export default function UploadPage() {
             }
         }
 
-        // Check quota only for NEW projects (not for updating existing ones)
-        if (projectExists === false && teamQuota && teamQuota.appliesToTeam && teamQuota.teamProjectsLeft === 0) {
-            toast.error(`Your team has reached the limit of ${teamQuota.teamProjectsLimit} projects. Please contact your Bid Manager to delete old projects or increase quota.`);
-            return;
-        }
 
         if (submitUpdateType === "BASE_RFP" && (!tenderId || !clientName)) {
             toast.error("Tender ID and Client Name are mandatory for a new Base RFP!");
@@ -829,12 +824,6 @@ export default function UploadPage() {
                         <h3 style={{ margin: 0, fontSize: "18px", color: "#3d4a2c", fontWeight: "700" }}>
                             {isExistingMode ? "Existing Project Selection" : "Define New Project"}
                         </h3>
-
-                        {!isExistingMode && teamQuota && teamQuota.appliesToTeam && (
-                            <div style={{ padding: "12px 16px", borderRadius: "12px", background: teamQuota.teamProjectsLeft === 0 ? "rgba(239, 68, 68, 0.1)" : "rgba(79, 70, 229, 0.08)", border: `1px solid ${teamQuota.teamProjectsLeft === 0 ? "rgba(239, 68, 68, 0.3)" : "rgba(79, 70, 229, 0.2)"}`, fontSize: "14px", color: "#374151" }}>
-                                <strong>Team quota:</strong> {teamQuota.teamProjectsUsed} / {teamQuota.teamProjectsLimit} used — <strong>{teamQuota.teamProjectsLeft} left</strong>
-                            </div>
-                        )}
 
                         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

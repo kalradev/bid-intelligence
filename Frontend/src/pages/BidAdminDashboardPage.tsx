@@ -1,14 +1,14 @@
 import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, Eye, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Star, UserCircle, Users, UserPlus, X } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState, type CSSProperties } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
+import { AdminProjectsTable } from "../components/AdminProjectsTable";
+import { DashboardProjectsTable } from "../components/DashboardProjectsTable";
 import { API_BASE_URL } from "../config";
 import { getAuthToken } from "../utils/authStorage";
-import { VirtualizedSimpleTable } from "../components/VirtualizedSimpleTable";
 
 interface TeamMember {
   id: number;
@@ -94,7 +94,7 @@ const TABLE_TD_MANAGER: CSSProperties = { padding: "13px 16px", fontSize: 15, co
 const TABLE_TD_TM: CSSProperties = { padding: "13px 16px", fontSize: 15, color: "#64748b", ...cellEllipsis };
 const TABLE_TD_VMIDDLE: CSSProperties = { padding: "13px 16px", verticalAlign: "middle" };
 
-function ProjectActionButtons({
+const ProjectActionButtons = memo(function ProjectActionButtons({
   onView,
   onAssign,
   onArchive,
@@ -125,7 +125,7 @@ function ProjectActionButtons({
       </button>
     </div>
   );
-}
+});
 
 interface ProjectItem {
   id: number;
@@ -145,6 +145,76 @@ interface FlattenedMember {
   teamName: string;
 }
 
+type MemberTableRowProps = {
+  member: FlattenedMember;
+  memberProjects: ProjectItem[];
+  onViewProject: (name: string) => void;
+  onShowAllProjects: (member: FlattenedMember, projects: ProjectItem[]) => void;
+};
+
+const MemberTableRow = memo(function MemberTableRow({
+  member,
+  memberProjects,
+  onViewProject,
+  onShowAllProjects,
+}: MemberTableRowProps) {
+  const isBidAdmin = member.role === "Bid Admin";
+  const visibleProjects = memberProjects.slice(0, MEMBER_PROJECTS_PREVIEW);
+  const hiddenCount = memberProjects.length - MEMBER_PROJECTS_PREVIEW;
+
+  return (
+    <tr className={isBidAdmin ? "member-table-row member-table-row--admin" : "member-table-row"}>
+      <td style={{ padding: "14px 16px" }}>
+        <div className={isBidAdmin ? "member-name member-name--admin" : "member-name"}>
+          {isBidAdmin && (
+            <span className="member-admin-badge">
+              <Star size={14} color="#fff" fill="#fff" />
+            </span>
+          )}
+          {member.fullName}
+        </div>
+        <div className={isBidAdmin ? "member-email member-email--admin" : "member-email"}>
+          <Mail size={11} /> {member.email || "—"}
+        </div>
+      </td>
+      <td style={{ padding: "14px 16px" }}>
+        <span className={`member-role-pill${isBidAdmin ? " member-role-pill--admin" : member.role === "Bid Manager" ? " member-role-pill--bm" : " member-role-pill--tm"}`}>
+          {member.role}
+        </span>
+      </td>
+      <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{member.teamName}</td>
+      <td style={{ padding: "14px 16px" }}>
+        {memberProjects.length === 0 ? (
+          <span style={{ fontSize: 13, color: "#94a3b8" }}>No projects</span>
+        ) : (
+          <div className="member-projects-cell">
+            {visibleProjects.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="member-project-tag"
+                onClick={() => onViewProject(p.project_name)}
+                title={p.project_name}
+              >
+                {p.project_name}
+              </button>
+            ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                className="member-project-more"
+                onClick={() => onShowAllProjects(member, memberProjects)}
+              >
+                +{hiddenCount} more
+              </button>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+});
+
 export default function BidAdminDashboardPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -157,7 +227,8 @@ export default function BidAdminDashboardPage() {
   const [personalProjectsLoading, setPersonalProjectsLoading] = useState(false);
   const [allProjects, setAllProjects] = useState<ProjectItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
-  const [expandedMemberProjectIds, setExpandedMemberProjectIds] = useState<Set<number>>(new Set());
+  const [memberProjectsModal, setMemberProjectsModal] = useState<{ member: FlattenedMember; projects: ProjectItem[] } | null>(null);
+  const membersScrollRef = useRef<HTMLDivElement>(null);
   const [archivedProjects, setArchivedProjects] = useState<ProjectItem[]>([]);
   const [archivedProjectsLoading, setArchivedProjectsLoading] = useState(false);
   const [teamSearch, setTeamSearch] = useState("");
@@ -171,7 +242,6 @@ export default function BidAdminDashboardPage() {
   const [expandedBmIdForProjects, setExpandedBmIdForProjects] = useState<number | null>(null);
   const [showGrandTotalProjects, setShowGrandTotalProjects] = useState(false);
   const [expandedBmIdForPeople, setExpandedBmIdForPeople] = useState<number | null>(null);
-  const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number; baseLimit?: number; purchasedQuota?: number } | null>(null);
   type TeamsViewFilter = "bid_manager" | "technical_manager" | "project" | "admin";
   const [teamsViewFilter, setTeamsViewFilter] = useState<TeamsViewFilter>("bid_manager");
   const [tmAssignments, setTmAssignments] = useState<Array<{ id: number; fullName: string; email: string; role: string; assignedProjects: Array<{ id: number; project_name: string; tender_id?: string; client_name?: string }> }>>([]);
@@ -194,7 +264,8 @@ export default function BidAdminDashboardPage() {
   const SIDEBAR_WIDTH = 228;
 
   const handleViewChange = (nextMode: ViewMode) => {
-    if (nextMode !== viewMode) setViewMode(nextMode);
+    if (nextMode === viewMode) return;
+    setViewMode(nextMode);
   };
 
   useEffect(() => {
@@ -249,16 +320,6 @@ export default function BidAdminDashboardPage() {
         if (dashRes.ok) {
           const dashData = await dashRes.json();
           if (dashData.success && dashData.bidManagers) setBidManagers(dashData.bidManagers);
-          if (dashData.success && dashData.orgQuota) {
-            const oq = dashData.orgQuota;
-            setOrgQuota({
-              teamProjectsUsed: oq.teamProjectsUsed ?? 0,
-              teamProjectsLimit: oq.teamProjectsLimit ?? 0,
-              teamProjectsLeft: oq.teamProjectsLeft ?? 0,
-              baseLimit: oq.baseLimit,
-              purchasedQuota: oq.purchasedQuota ?? 0,
-            });
-          }
         } else {
           toast.error("Failed to load dashboard data");
         }
@@ -307,41 +368,87 @@ export default function BidAdminDashboardPage() {
     setTeamPage(1);
   }, [teamSearch]);
 
-  const flattenedMembers: FlattenedMember[] = bidManagers.flatMap((bm) => {
-    const bmEntry: FlattenedMember = {
-      id: bm.id,
-      fullName: bm.fullName,
-      email: bm.email,
-      role: "Bid Manager",
-      teamName: bm.fullName,
-    };
-    const tms: FlattenedMember[] = (bm.technicalManagers || []).map((tm) => ({
-      id: tm.id,
-      fullName: tm.fullName,
-      email: tm.email,
-      role: "Technical Manager" as const,
-      teamName: bm.fullName,
-    }));
-    return [bmEntry, ...tms];
-  });
+  const flattenedMembers = useMemo<FlattenedMember[]>(
+    () =>
+      bidManagers.flatMap((bm) => {
+        const bmEntry: FlattenedMember = {
+          id: bm.id,
+          fullName: bm.fullName,
+          email: bm.email,
+          role: "Bid Manager",
+          teamName: bm.fullName,
+        };
+        const tms: FlattenedMember[] = (bm.technicalManagers || []).map((tm) => ({
+          id: tm.id,
+          fullName: tm.fullName,
+          email: tm.email,
+          role: "Technical Manager" as const,
+          teamName: bm.fullName,
+        }));
+        return [bmEntry, ...tms];
+      }),
+    [bidManagers]
+  );
 
-  const allMembersList: FlattenedMember[] =
-    currentUserId != null
-      ? [
-          { id: currentUserId, fullName: userDisplayName, email: currentUserEmail || "", role: "Bid Admin", teamName: "—" },
-          ...flattenedMembers,
-        ]
-      : flattenedMembers;
+  const allMembersList = useMemo<FlattenedMember[]>(
+    () =>
+      currentUserId != null
+        ? [
+            { id: currentUserId, fullName: userDisplayName, email: currentUserEmail || "", role: "Bid Admin", teamName: "—" },
+            ...flattenedMembers,
+          ]
+        : flattenedMembers,
+    [currentUserId, currentUserEmail, flattenedMembers, userDisplayName]
+  );
+
+  const projectsByUserId = useMemo(() => {
+    const map = new Map<number, ProjectItem[]>();
+    for (const p of allProjects) {
+      if (p.user_id == null) continue;
+      const list = map.get(p.user_id);
+      if (list) list.push(p);
+      else map.set(p.user_id, [p]);
+    }
+    return map;
+  }, [allProjects]);
 
   const handleViewResult = (projectName: string) => {
     navigate(`/project-results/${encodeURIComponent(projectName)}`);
   };
+
+  const handleViewProject = useCallback((projectName: string) => {
+    navigate(`/project-results/${encodeURIComponent(projectName)}`);
+  }, [navigate]);
+
+  const handleShowAllMemberProjects = useCallback((member: FlattenedMember, projects: ProjectItem[]) => {
+    setMemberProjectsModal({ member, projects });
+  }, []);
+
+  const memberRowsData = useMemo(
+    () =>
+      allMembersList.map((member) => ({
+        member,
+        memberProjects: projectsByUserId.get(member.id) ?? [],
+      })),
+    [allMembersList, projectsByUserId]
+  );
 
   const openFinalBidModal = (projectId: number, projectName: string) => {
     setFinalBidModal({ projectId, projectName });
     setFinalBidFile(null);
     setFinalBidDescription("");
   };
+
+  const handleArchiveProject = useCallback((projectId: number) => {
+    setArchiveConfirmProjectId(projectId);
+    setArchiveConfirmStep(0);
+  }, []);
+
+  const handleUploadProject = useCallback((projectId: number, projectName: string) => {
+    setFinalBidModal({ projectId, projectName });
+    setFinalBidFile(null);
+    setFinalBidDescription("");
+  }, []);
 
   const submitFinalBidUpload = async () => {
     if (!finalBidModal || !finalBidFile) return;
@@ -376,7 +483,7 @@ export default function BidAdminDashboardPage() {
     }
   };
 
-  const openAssignModalForAdmin = async (projectName: string) => {
+  const openAssignModalForAdmin = useCallback(async (projectName: string) => {
     setAssignModalProject(projectName);
     setAssignModalAssignedIds([]);
     const token = getAuthToken();
@@ -398,7 +505,7 @@ export default function BidAdminDashboardPage() {
       console.error(e);
       toast.error("Failed to load assignments");
     }
-  };
+  }, []);
 
   const saveAssignmentsForAdmin = async () => {
     if (!assignModalProject) return;
@@ -444,13 +551,6 @@ export default function BidAdminDashboardPage() {
       setPersonalProjects((prev) => prev.filter((p) => p.id !== projectId));
       setAllProjects((prev) => prev.filter((p) => p.id !== projectId));
       setProjectsForFilter((prev) => prev.filter((p) => p.id !== projectId));
-      if (data.orgQuota) {
-        setOrgQuota({
-          teamProjectsUsed: data.orgQuota.teamProjectsUsed ?? 0,
-          teamProjectsLimit: data.orgQuota.teamProjectsLimit ?? 0,
-          teamProjectsLeft: data.orgQuota.teamProjectsLeft ?? 0,
-        });
-      }
       if (viewMode === "archived") {
         const archRes = await fetch(`${API_BASE_URL}/api/rfp/projects/archived`, { headers: { Authorization: `Bearer ${token}` } });
         if (archRes.ok) {
@@ -478,38 +578,11 @@ export default function BidAdminDashboardPage() {
         toast.error(data.detail || "Failed to unarchive project");
         return;
       }
-      toast.success("Project unarchived; quota left decreased by 1");
+      toast.success("Project unarchived");
       setArchivedProjects((prev) => prev.filter((p) => p.id !== projectId));
-      // Optimistic: decrease Quota left by 1 (18 -> 17) immediately
-      setOrgQuota((prev) => {
-        if (!prev) return prev;
-        const newLeft = Math.max(0, (prev.teamProjectsLeft ?? 0) - 1);
-        const newUsed = (prev.teamProjectsUsed ?? 0) + 1;
-        return { ...prev, teamProjectsLeft: newLeft, teamProjectsUsed: newUsed };
-      });
-      // Then apply server values from unarchive response
-      if (data.orgQuota) {
-        setOrgQuota((prev) => ({
-          ...(prev ?? {}),
-          teamProjectsUsed: data.orgQuota.teamProjectsUsed ?? prev?.teamProjectsUsed ?? 0,
-          teamProjectsLimit: data.orgQuota.teamProjectsLimit ?? prev?.teamProjectsLimit ?? 0,
-          teamProjectsLeft: data.orgQuota.teamProjectsLeft ?? prev?.teamProjectsLeft ?? 0,
-        }));
-      }
-      // Refetch dashboard so "Quota left" and team cards stay in sync with server
       const dashRes = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard?t=${Date.now()}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const dashData = await dashRes.json();
       if (dashData.success && dashData.bidManagers) setBidManagers(dashData.bidManagers);
-      if (dashData.success && dashData.orgQuota) {
-        const oq = dashData.orgQuota;
-        setOrgQuota((prev) => ({
-          teamProjectsUsed: oq.teamProjectsUsed ?? 0,
-          teamProjectsLimit: oq.teamProjectsLimit ?? 0,
-          teamProjectsLeft: oq.teamProjectsLeft ?? 0,
-          baseLimit: oq.baseLimit ?? prev?.baseLimit,
-          purchasedQuota: prev?.purchasedQuota ?? oq.purchasedQuota ?? 0,
-        }));
-      }
       const projRes = await fetch(`${API_BASE_URL}/api/rfp/projects`, { headers: { Authorization: `Bearer ${token}` } });
       if (projRes.ok) {
         const projData = await projRes.json();
@@ -531,16 +604,6 @@ export default function BidAdminDashboardPage() {
       const r = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
       const d = await r.json();
       if (d.success && d.bidManagers) setBidManagers(d.bidManagers);
-      if (d.success && d.orgQuota) {
-        const oq = d.orgQuota;
-        setOrgQuota({
-          teamProjectsUsed: oq.teamProjectsUsed ?? 0,
-          teamProjectsLimit: oq.teamProjectsLimit ?? 0,
-          teamProjectsLeft: oq.teamProjectsLeft ?? 0,
-          baseLimit: oq.baseLimit,
-          purchasedQuota: oq.purchasedQuota ?? 0,
-        });
-      }
     } catch {
       // ignore
     }
@@ -601,16 +664,73 @@ export default function BidAdminDashboardPage() {
     }
   };
 
-  const totalProjects = bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0);
-  const totalPeople = bidManagers.reduce((s, b) => s + 1 + (b.technicalManagers?.length || 0), 0);
-  const adminProjects = currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : [];
-  const totalProjectsWithAdmin = totalProjects + adminProjects.length;
-  const totalQuotaLeft = orgQuota?.teamProjectsLeft ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLeft ?? 0), 0);
-  const totalQuotaLimit = orgQuota?.teamProjectsLimit ?? bidManagers.reduce((s, b) => s + (b.teamProjectsLimit ?? 0), 0);
-  const quotaLeftPercent = totalQuotaLimit > 0 ? (totalQuotaLeft / totalQuotaLimit) * 100 : 100;
-  const isQuotaLow = totalQuotaLeft === 0 || quotaLeftPercent < 50;
+  const totalProjects = useMemo(() => bidManagers.reduce((s, b) => s + b.teamProjectsUsed, 0), [bidManagers]);
+  const totalPeople = useMemo(
+    () => bidManagers.reduce((s, b) => s + 1 + (b.technicalManagers?.length || 0), 0),
+    [bidManagers]
+  );
+  const adminProjects = useMemo(
+    () => (currentUserId != null ? personalProjects.filter((p) => p.user_id === currentUserId) : []),
+    [currentUserId, personalProjects]
+  );
+
+  const bmById = useMemo(() => {
+    const map: Record<number, string> = {};
+    bidManagers.forEach((bm) => {
+      map[bm.id] = bm.fullName;
+    });
+    return map;
+  }, [bidManagers]);
 
   const teamSearchLower = teamSearch.trim().toLowerCase();
+
+  const filteredDashboardProjects = useMemo(() => {
+    if (!teamSearchLower) return projectsForFilter;
+    return projectsForFilter.filter(
+      (p) =>
+        (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
+        (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
+        (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
+        (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
+        (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
+    );
+  }, [projectsForFilter, teamSearchLower, bmById]);
+
+  const filteredDashboardAdminProjects = useMemo(() => {
+    const adminList = currentUserId != null ? projectsForFilter.filter((p) => p.user_id === currentUserId) : [];
+    if (!teamSearchLower) return adminList;
+    return adminList.filter(
+      (p) =>
+        (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
+        (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
+        (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
+        (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
+        (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
+    );
+  }, [projectsForFilter, currentUserId, teamSearchLower, bmById]);
+
+  useEffect(() => {
+    if (viewMode !== "members") return;
+    const el = membersScrollRef.current;
+    if (!el) return;
+
+    let timeoutId = 0;
+    const onScroll = () => {
+      document.body.classList.add("bid-admin-scrolling");
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => document.body.classList.remove("bid-admin-scrolling"), 180);
+    };
+
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.clearTimeout(timeoutId);
+      document.body.classList.remove("bid-admin-scrolling");
+    };
+  }, [viewMode, allMembersList.length]);
+
+  const totalProjectsWithAdmin = totalProjects + adminProjects.length;
+
   const filteredTeams = teamSearchLower
     ? bidManagers.filter(
       (bm) =>
@@ -646,6 +766,16 @@ export default function BidAdminDashboardPage() {
 
   return (
     <div className="universal-page-wrapper" style={{ minHeight: "100vh" }}>
+      <div className={`bid-admin-ambient${viewMode === "teams" ? "" : " bid-admin-ambient--static"}`} aria-hidden="true">
+        <div className="bid-admin-ambient__mesh" />
+        <div className="bid-admin-ambient__wave" />
+        <div className="bid-admin-ambient__orb bid-admin-ambient__orb--1" />
+        <div className="bid-admin-ambient__orb bid-admin-ambient__orb--2" />
+        <div className="bid-admin-ambient__orb bid-admin-ambient__orb--3" />
+        <div className="bid-admin-ambient__orb bid-admin-ambient__orb--4" />
+        <div className="bid-admin-ambient__dots" />
+      </div>
+
       {/* Top header - CoachPro style: Welcome left, Search/Bell/User right */}
       <header
         className="dashboard-top-header"
@@ -668,7 +798,6 @@ export default function BidAdminDashboardPage() {
           <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
         </div>
         <div className="dashboard-top-header__brand">
-          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
           <span className="dashboard-top-header__title">Bid Intelligence</span>
         </div>
         <div className="dashboard-top-header__end">
@@ -685,7 +814,7 @@ export default function BidAdminDashboardPage() {
           bottom: 0,
           width: SIDEBAR_WIDTH,
           zIndex: 110,
-          background: "rgba(232,247,244,0.95)",
+          background: "rgba(232,247,244,0.78)",
           backdropFilter: "blur(20px)",
           borderRight: "1px solid rgba(111,190,178,0.2)",
           boxShadow: "4px 0 24px rgba(0,0,0,0.04)",
@@ -817,21 +946,6 @@ export default function BidAdminDashboardPage() {
             <Users size={18} style={{ flexShrink: 0 }} />
             <span>Manage Teams</span>
           </button>
-          <button
-            type="button"
-            className="sidebar-nav-toggle"
-            onClick={() => navigate("/team-quota")}
-            style={{
-              ...navButtonBase,
-              background: "rgba(165,233,221,0.4)",
-              color: "#1e4a47",
-              border: "1px solid rgba(111,190,178,0.3)",
-            }}
-            title="View total quota usage"
-          >
-            <FolderKanban size={18} style={{ flexShrink: 0 }} />
-            <span>Team Quota</span>
-          </button>
         </nav>
         <div style={{ padding: "10px 10px", borderTop: "1px solid rgba(111,190,178,0.2)", display: "flex", flexDirection: "column", gap: 6 }}>
           <button
@@ -844,7 +958,7 @@ export default function BidAdminDashboardPage() {
               color: "#1e4a47",
               border: "1px solid rgba(111,190,178,0.3)",
             }}
-            title="Account & security – Profile, two-step verification, change password"
+            title="Account & security – Profile and change password"
           >
             <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#6FBEB2", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               {(userDisplayName || "A").charAt(0).toUpperCase()}
@@ -865,49 +979,6 @@ export default function BidAdminDashboardPage() {
           </button>
         </div>
       </aside>
-
-      <div className="dashboard-bg-wrap" style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        <div className="dashboard-bg-base" style={{
-          position: "absolute",
-          inset: 0,
-          background: "linear-gradient(160deg, rgba(232,247,244,0.85) 0%, rgba(232,247,244,0.8) 50%, rgba(165,233,221,0.4) 100%)",
-          animation: "dashboardBgPulse 8s ease-in-out infinite"
-        }} />
-        <div className="dashboard-bg-move" style={{
-          position: "absolute",
-          inset: -100,
-          background: "linear-gradient(120deg, transparent 0%, rgba(165,233,221,0.2) 25%, rgba(111,190,178,0.15) 50%, rgba(232,247,244,0.2) 75%, transparent 100%)",
-          backgroundSize: "200% 200%",
-          animation: "dashboardBgMove 15s linear infinite"
-        }} />
-        <div className="dashboard-bg-shimmer" style={{
-          position: "absolute",
-          inset: -80,
-          background: "radial-gradient(ellipse 70% 60% at 30% 30%, rgba(165,233,221,0.28) 0%, transparent 55%), radial-gradient(ellipse 50% 70% at 70% 70%, rgba(111,190,178,0.2) 0%, transparent 55%)",
-          animation: "dashboardBgShimmer 14s ease-in-out infinite"
-        }} />
-        <div className="background-shape dashboard-float-1" style={{
-          top: "8%", left: "12%", width: 380, height: 380,
-          background: "rgba(165,233,221,0.45)", borderRadius: "50%", filter: "blur(50px)",
-        }} />
-        <div className="background-shape dashboard-float-2" style={{
-          top: "55%", right: "5%", width: 320, height: 320,
-          background: "rgba(111,190,178,0.35)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(45px)",
-        }} />
-        <div className="background-shape dashboard-float-3" style={{
-          bottom: "10%", left: "20%", width: 280, height: 280,
-          background: "rgba(232,247,244,0.6)", borderRadius: "50%", filter: "blur(40px)",
-        }} />
-        <div className="background-shape dashboard-float-4" style={{
-          top: "30%", right: "20%", width: 220, height: 220,
-          background: "rgba(52,144,139,0.12)", borderRadius: "50%", filter: "blur(38px)",
-        }} />
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "rgba(255, 255, 255, 0.12)",
-          backdropFilter: "blur(1px)"
-        }} />
-      </div>
 
       {(loading && bidManagers.length === 0) && (
         <div
@@ -935,16 +1006,13 @@ export default function BidAdminDashboardPage() {
         </div>
       )}
 
-      <main style={{ position: "relative", zIndex: 1, marginLeft: SIDEBAR_WIDTH, padding: `${NAVBAR_HEIGHT + 28}px 28px 48px` }}>
-        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-          {/* Page title - CoachPro style; Dashboard view: title left, Quota left right */}
-          <div style={{
-            marginBottom: 28,
-            textAlign: "left",
-            ...(viewMode === "teams" && !loading && (bidManagers.length > 0 || currentUserId != null)
-              ? { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 20, flexWrap: "wrap" }
-              : {}),
-          }}>
+      <main
+        className={viewMode === "members" ? "bid-admin-main--members" : undefined}
+        style={{ position: "relative", zIndex: 1, marginLeft: SIDEBAR_WIDTH, padding: `${NAVBAR_HEIGHT + 28}px 28px 48px` }}
+      >
+        <div className="bid-admin-content">
+          {/* Page title */}
+          <div style={{ marginBottom: 28, textAlign: "left", flexShrink: 0 }}>
             <div>
               <h1 style={{ margin: "0 0 6px", fontSize: 26, fontWeight: 800, color: "#1e293b", letterSpacing: "-0.02em", lineHeight: 1.2 }}>
                 {viewMode === "teams" ? "Dashboard" : viewMode === "personal" ? "Admin projects" : viewMode === "members" ? "All members" : viewMode === "create_user" ? "Create User" : "Archived"}
@@ -958,49 +1026,14 @@ export default function BidAdminDashboardPage() {
                       ? "See every Bid Manager and Technical Manager, their team, and which projects they are working on."
                       : viewMode === "create_user"
                         ? "Add a new Bid Manager or Technical Manager. Choose the type below and fill in the details."
-                        : "Archived projects are hidden from main lists. Unarchive to restore and add 1 to org quota."}
+                        : "Archived projects are hidden from main lists. Unarchive to restore them."}
               </p>
             </div>
-            {viewMode === "teams" && !loading && (bidManagers.length > 0 || currentUserId != null) && (
-              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={() => navigate("/team-quota")}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "12px 20px",
-                  background: isQuotaLow ? "rgba(180,120,100,0.2)" : "rgba(111,190,178,0.35)",
-                  border: isQuotaLow ? "1px solid rgba(150,90,70,0.3)" : "1px solid rgba(111,190,178,0.5)",
-                  borderRadius: 12,
-                  cursor: "pointer",
-                  fontWeight: 700,
-                  fontSize: 15,
-                  color: isQuotaLow ? "#2c6b66" : "#1e4a47",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-                  transition: "all 0.2s",
-                  outline: "none",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-1px)";
-                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.06)";
-                }}
-                title="View team quota details"
-              >
-                <span style={{ opacity: 0.9 }}>Quota left</span>
-                <span style={{ fontSize: 18, fontWeight: 800 }}>{totalQuotaLeft}</span>
-              </button>
-              </div>
-            )}
           </div>
 
-          {viewMode === "teams" && loading && bidManagers.length === 0 ? null : viewMode === "create_user" ? (
+          {viewMode === "teams" && loading && bidManagers.length === 0 ? null : (
+            <>
+            {viewMode === "create_user" && (
             <section style={{ maxWidth: 520, margin: "0 auto" }}>
               <div style={{
                 background: "#fff",
@@ -1102,69 +1135,41 @@ export default function BidAdminDashboardPage() {
                 </form>
               </div>
             </section>
-          ) : viewMode === "personal" ? (
-            <section>
+            )}
+            {viewMode === "personal" && (
+            <section className="bid-admin-view-section">
               <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
                   <FolderOpen size={18} color="#34908B" />
                 </span>
                 Admin projects ({adminProjects.length})
               </h2>
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                {personalProjectsLoading ? null : adminProjects.length === 0 ? (
-                      <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
-                        No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.
-                      </div>
-                    ) : (
-                      <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
-                        <colgroup>{PROJECT_TABLE_COLS}</colgroup>
-                        <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
-                            <th style={{ ...TABLE_TH }}>Project</th>
-                            <th style={{ ...TABLE_TH }}>Tender ID</th>
-                            <th style={{ ...TABLE_TH }}>Client</th>
-                            <th style={{ ...TABLE_TH, textAlign: "right", whiteSpace: "nowrap" }}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {adminProjects.map((p) => (
-                            <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
-                              <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
-                              <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
-                              <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
-                              <td style={{ ...TABLE_TD_ACTIONS }}>
-                                <ProjectActionButtons
-                                  onView={() => handleViewResult(p.project_name)}
-                                  onAssign={() => openAssignModalForAdmin(p.project_name)}
-                                  onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                  onUpload={() => openFinalBidModal(p.id, p.project_name)}
-                                  showAssign
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      </div>
-                    )}
-                  </div>
-                </section>
-          ) : viewMode === "members" ? (
-            <section>
-              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+              <AdminProjectsTable
+                projects={adminProjects}
+                loading={personalProjectsLoading}
+                onView={handleViewProject}
+                onAssign={openAssignModalForAdmin}
+                onArchive={handleArchiveProject}
+                onUpload={handleUploadProject}
+              />
+            </section>
+            )}
+            {viewMode === "members" && (
+            <section className="bid-admin-view-section members-view-section">
+              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                 <span style={{ width: 36, height: 36, borderRadius: 10, background: "#E8F8F5", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(111,190,178,0.4)" }}>
                   <UserCircle size={18} color="#6FBEB2" />
                 </span>
                 All members ({allMembersList.length})
               </h2>
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+              <div className="members-list-card" style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                 {membersLoading ? null : allMembersList.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No Bid Managers or Technical Managers yet. Create them from this dashboard (Add Bid Manager).
                       </div>
                     ) : (
-                      <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
+                      <div className="members-table-scroll" ref={membersScrollRef}>
+                      <table>
                         <thead>
                           <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Member</th>
@@ -1174,133 +1179,24 @@ export default function BidAdminDashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {allMembersList.map((m) => {
-                            const memberProjects = allProjects.filter((p) => p.user_id === m.id);
-                            return (
-                              <tr key={m.role === "Bid Admin" ? `admin-${m.id}` : m.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
-                                <td style={{ padding: "14px 16px" }}>
-                                  <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{m.fullName}</div>
-                                  <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
-                                    <Mail size={11} /> {m.email || "—"}
-                                  </div>
-                                </td>
-                                <td style={{ padding: "14px 16px" }}>
-                                  <span
-                                    style={{
-                                      display: "inline-block",
-                                      padding: "4px 10px",
-                                      borderRadius: 8,
-                                      fontSize: 12,
-                                      fontWeight: 600,
-                                      background: m.role === "Bid Admin" ? "rgba(52, 144, 139, 0.2)" : m.role === "Bid Manager" ? "rgba(111,190,178,0.2)" : "rgba(165,233,221,0.3)",
-                                      color: m.role === "Bid Admin" ? "#1e4a47" : "#1e4a47",
-                                      border: m.role === "Bid Admin" ? "1px solid rgba(52, 144, 139, 0.5)" : m.role === "Bid Manager" ? "1px solid rgba(111,190,178,0.4)" : "1px solid rgba(165,233,221,0.5)",
-                                    }}
-                                  >
-                                    {m.role}
-                                  </span>
-                                </td>
-                                <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{m.teamName}</td>
-                                <td style={{ padding: "14px 16px" }}>
-                                  {memberProjects.length === 0 ? (
-                                    <span style={{ fontSize: 13, color: "#94a3b8" }}>No projects</span>
-                                  ) : (() => {
-                                    const isExpanded = expandedMemberProjectIds.has(m.id);
-                                    const visibleProjects = isExpanded
-                                      ? memberProjects
-                                      : memberProjects.slice(0, MEMBER_PROJECTS_PREVIEW);
-                                    const hiddenCount = memberProjects.length - MEMBER_PROJECTS_PREVIEW;
-                                    const projectBtnStyle: CSSProperties = {
-                                      padding: "6px 12px",
-                                      background: "#6FBEB2",
-                                      color: "#fff",
-                                      border: "none",
-                                      borderRadius: 6,
-                                      fontWeight: 600,
-                                      fontSize: 12,
-                                      cursor: "pointer",
-                                      boxShadow: "0 2px 8px rgba(111,190,178,0.25)",
-                                      transition: "transform 0.2s, box-shadow 0.2s",
-                                      maxWidth: 180,
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                    };
-                                    return (
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                                        {visibleProjects.map((p) => (
-                                          <button
-                                            key={p.id}
-                                            type="button"
-                                            onClick={() => handleViewResult(p.project_name)}
-                                            title={p.project_name}
-                                            style={projectBtnStyle}
-                                            onMouseEnter={(e) => {
-                                              e.currentTarget.style.transform = "translateY(-1px)";
-                                              e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.35)";
-                                            }}
-                                            onMouseLeave={(e) => {
-                                              e.currentTarget.style.transform = "translateY(0)";
-                                              e.currentTarget.style.boxShadow = "0 2px 8px rgba(111,190,178,0.25)";
-                                            }}
-                                          >
-                                            {p.project_name}
-                                          </button>
-                                        ))}
-                                        {hiddenCount > 0 && !isExpanded && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setExpandedMemberProjectIds((prev) => new Set(prev).add(m.id))}
-                                            style={{
-                                              padding: "6px 12px",
-                                              background: "rgba(165,233,221,0.35)",
-                                              color: "#1e4a47",
-                                              border: "1px solid rgba(111,190,178,0.45)",
-                                              borderRadius: 6,
-                                              fontWeight: 700,
-                                              fontSize: 12,
-                                              cursor: "pointer",
-                                            }}
-                                          >
-                                            +{hiddenCount} more
-                                          </button>
-                                        )}
-                                        {isExpanded && memberProjects.length > MEMBER_PROJECTS_PREVIEW && (
-                                          <button
-                                            type="button"
-                                            onClick={() => setExpandedMemberProjectIds((prev) => {
-                                              const next = new Set(prev);
-                                              next.delete(m.id);
-                                              return next;
-                                            })}
-                                            style={{
-                                              padding: "6px 12px",
-                                              background: "#fff",
-                                              color: "#34908B",
-                                              border: "1px solid #D4F0EB",
-                                              borderRadius: 6,
-                                              fontWeight: 600,
-                                              fontSize: 12,
-                                              cursor: "pointer",
-                                            }}
-                                          >
-                                            Show less
-                                          </button>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {memberRowsData.map(({ member, memberProjects }) => (
+                            <MemberTableRow
+                              key={member.role === "Bid Admin" ? `admin-${member.id}` : member.id}
+                              member={member}
+                              memberProjects={memberProjects}
+                              onViewProject={handleViewProject}
+                              onShowAllProjects={handleShowAllMemberProjects}
+                            />
+                          ))}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </div>
                 </section>
-          ) : viewMode === "archived" ? (
-            <section>
+            )}
+            {viewMode === "archived" && (
+            <section className="bid-admin-view-section">
               <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
                   <Archive size={18} color="#34908B" />
@@ -1361,11 +1257,13 @@ export default function BidAdminDashboardPage() {
                 )}
               </div>
             </section>
-          ) : (
+            )}
+            {viewMode === "teams" && (
+            <div className="bid-admin-view-section">
             <>
               {/* Metric cards - CoachPro style */}
               {(bidManagers.length > 0 || currentUserId != null) && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20, marginBottom: 28 }}>
+                <div className="bid-admin-stats-grid">
                   <button
                     type="button"
                     onClick={() => setActiveToggle(null)}
@@ -1911,48 +1809,22 @@ export default function BidAdminDashboardPage() {
                           <X size={20} />
                         </button>
                       </div>
-                      {personalProjectsLoading ? null : adminProjects.length === 0 ? (
-                        <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.</div>
-                      ) : (
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
-                            <colgroup>{PROJECT_TABLE_COLS}</colgroup>
-                            <thead>
-                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
-                                <th style={{ ...TABLE_TH }}>Project</th>
-                                <th style={{ ...TABLE_TH }}>Tender ID</th>
-                                <th style={{ ...TABLE_TH }}>Client</th>
-                                <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {adminProjects.map((p) => (
-                                <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
-                                  <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
-                                  <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
-                                  <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
-                                  <td style={{ ...TABLE_TD_ACTIONS }}>
-                                    <ProjectActionButtons
-                                      onView={() => handleViewResult(p.project_name)}
-                                      onAssign={() => openAssignModalForAdmin(p.project_name)}
-                                      onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                      onUpload={() => openFinalBidModal(p.id, p.project_name)}
-                                      showAssign
-                                    />
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      <AdminProjectsTable
+                        projects={adminProjects}
+                        loading={personalProjectsLoading}
+                        maxHeight="360px"
+                        onView={handleViewProject}
+                        onAssign={openAssignModalForAdmin}
+                        onArchive={handleArchiveProject}
+                        onUpload={handleUploadProject}
+                      />
                     </div>
                   )}
                 </div>
               )}
 
-              <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: 24, display: "flex", flexDirection: "column", height: 520, minHeight: 520, width: "100%", minWidth: "100%", flexShrink: 0 }}>
-                <div style={{ padding: "18px 22px", borderBottom: "1px solid #D4F0EB", background: "#f8fafc", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between", flexShrink: 0 }}>
+              <section className="bid-admin-teams-table-card">
+                <div className="bid-admin-teams-table-card__header">
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
                     <span style={{ width: 36, height: 36, borderRadius: 10, background: "#E8F8F5", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "2px solid #34908B" }}>
                       <FolderKanban size={18} color="#34908B" />
@@ -2003,16 +1875,20 @@ export default function BidAdminDashboardPage() {
                   </div>
                 </div>
 
-                <div style={{ height: 460, minHeight: 460, width: "100%", flexShrink: 0, overflowX: "auto", overflowY: "scroll", background: "#fff" }}>
-                {teamsViewFilter === "bid_manager" && (bidManagers.length === 0 ? (
-                  <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
+                <div
+                  className={`bid-admin-teams-table-card__body${teamsViewFilter === "project" || teamsViewFilter === "admin" ? " bid-admin-teams-table-card__body--virtual" : ""}`}
+                >
+                {teamsViewFilter === "bid_manager" && (
+                  <div className="dashboard-teams-tab-pane">
+                {bidManagers.length === 0 ? (
+                  <div className="dashboard-teams-tab-pane__empty">
                     <UserCircle size={40} style={{ margin: "0 auto 16px", display: "block", opacity: 0.5 }} />
                     No Bid Managers yet. Create them from this dashboard (Add Bid Manager).
                   </div>
                 ) : (
                   <>
-                    <div style={{ overflowX: "auto" }} className="admin-dashboard-table">
-                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 720 }}>
+                    <div className="admin-dashboard-table dashboard-teams-tab-pane__table">
+                      <table>
                         <colgroup>{BM_TEAM_TABLE_COLS}</colgroup>
                         <thead>
                           <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
@@ -2024,7 +1900,6 @@ export default function BidAdminDashboardPage() {
                         </thead>
                         <tbody>
                           {paginatedTeams.map((bm) => {
-                            const pct = Math.min(100, (bm.teamProjectsUsed / bm.teamProjectsLimit) * 100);
                             const initial = (bm.fullName || "?").charAt(0).toUpperCase();
                             const peopleCount = 1 + (bm.technicalManagers?.length || 0);
                             const isExpanded = expandedTeamId === bm.id;
@@ -2066,22 +1941,9 @@ export default function BidAdminDashboardPage() {
                                     </div>
                                   </td>
                                   <td style={{ ...TABLE_TD_VMIDDLE }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                      <div style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 3, background: "#D4F0EB", overflow: "hidden" }}>
-                                        <div
-                                          style={{
-                                            height: "100%",
-                                            width: `${pct}%`,
-                                            borderRadius: 3,
-                                            background: bm.teamProjectsLeft === 0 ? "linear-gradient(90deg, #b8956b, #a08050)" : "linear-gradient(90deg, #6FBEB2, #34908B)",
-                                          }}
-                                        />
-                                      </div>
-                                      <span style={{ fontSize: 13, fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>
-                                        {bm.teamProjectsUsed}/{bm.teamProjectsLimit}
-                                      </span>
-                                    </div>
-                                    <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{bm.teamProjectsLeft} left</div>
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: "#475569" }}>
+                                      {bm.teamProjectsUsed} {bm.teamProjectsUsed === 1 ? "project" : "projects"}
+                                    </span>
                                   </td>
                                   <td style={{ ...TABLE_TD_VMIDDLE, textAlign: "center" }}>
                                     <button
@@ -2219,23 +2081,25 @@ export default function BidAdminDashboardPage() {
                       </div>
                     )}
                   </>
-                ))}
+                )}
+                  </div>
+                )}
 
                 {teamsViewFilter === "technical_manager" && (
-                  <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
+                  <div className="dashboard-teams-tab-pane">
                     {tmAssignmentsLoading ? (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
-                        <span style={{ fontSize: 14 }}>Loading…</span>
+                      <div className="dashboard-teams-tab-pane__empty">
+                        <div className="admin-projects-panel__spinner" />
+                        Loading…
                       </div>
                     ) : tmAssignments.length === 0 ? (
-                      <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
+                      <div className="dashboard-teams-tab-pane__empty">
                         <UserCircle size={40} style={{ margin: "0 auto 16px", display: "block", opacity: 0.5 }} />
                         No Technical Managers found.
                       </div>
                     ) : (
-                      <div style={{ overflowX: "auto" }} className="admin-dashboard-table">
-                        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                      <div className="admin-dashboard-table dashboard-teams-tab-pane__table">
+                        <table>
                           <colgroup>{TM_TABLE_COLS}</colgroup>
                           <thead>
                             <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
@@ -2296,163 +2160,72 @@ export default function BidAdminDashboardPage() {
                 )}
 
                 {teamsViewFilter === "project" && (
-                  <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
-                    {projectsForFilterLoading ? (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
-                        <span style={{ fontSize: 14 }}>Loading…</span>
-                      </div>
-                    ) : projectsForFilter.length === 0 ? (
-                      <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
-                        <FolderKanban size={40} style={{ margin: "0 auto 16px", display: "block", opacity: 0.5 }} />
-                        No projects found.
-                      </div>
-                    ) : (
-                      <div style={{ overflowX: "auto" }}>
-                        {(() => {
-                          const bmById: Record<number, string> = {};
-                          bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
-                          const teamSearchLower = (teamSearch || "").toLowerCase();
-                          const filtered = teamSearchLower
-                            ? projectsForFilter.filter((p) =>
-                                (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
-                                (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
-                                (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
-                                (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
-                                (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
-                              )
-                            : projectsForFilter;
-                          return (
-                            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 940 }}>
-                              <colgroup>{PROJECT_FILTER_TABLE_COLS}</colgroup>
-                              <thead>
-                                <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
-                                  <th style={{ ...TABLE_TH }}>Project</th>
-                                  <th style={{ ...TABLE_TH }}>Tender ID</th>
-                                  <th style={{ ...TABLE_TH }}>Client</th>
-                                  <th style={{ ...TABLE_TH }}>Bid Manager</th>
-                                  <th style={{ ...TABLE_TH }}>Technical Manager(s)</th>
-                                  <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {filtered.map((p) => (
-                                  <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
-                                    <td style={{ ...TABLE_TD_STRONG }} title={p.project_name}>
-                                      {p.project_name}
-                                      {p.user_id === currentUserId && <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>}
-                                    </td>
-                                    <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id ?? "—"}</td>
-                                    <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name ?? "—"}</td>
-                                    <td style={{ ...TABLE_TD_MANAGER }} title={p.user_id ? (bmById[p.user_id] ?? "—") : "—"}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
-                                    <td style={{ ...TABLE_TD_TM }} title={(p.assigned_users || []).map((u) => u.fullName).join(", ") || "None"}>
-                                      {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
-                                    </td>
-                                    <td style={{ ...TABLE_TD_ACTIONS }}>
-                                      <ProjectActionButtons
-                                        onView={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
-                                        onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                        onUpload={() => openFinalBidModal(p.id, p.project_name)}
-                                      />
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          );
-                        })()}
-                      </div>
-                    )}
+                  <div className="dashboard-teams-tab-pane">
+                    <DashboardProjectsTable
+                      projects={filteredDashboardProjects}
+                      loading={projectsForFilterLoading}
+                      bmById={bmById}
+                      currentUserId={currentUserId}
+                      showAdminBadge="auto"
+                      onView={handleViewProject}
+                      onArchive={handleArchiveProject}
+                      onUpload={handleUploadProject}
+                    />
                   </div>
                 )}
 
                 {teamsViewFilter === "admin" && (
-                  <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
-                    {projectsForFilterLoading ? (
-                      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
-                        <span style={{ fontSize: 14 }}>Loading…</span>
-                      </div>
-                    ) : (() => {
-                      const adminProjectsList = currentUserId != null ? projectsForFilter.filter((p) => p.user_id === currentUserId) : [];
-                      const bmById: Record<number, string> = {};
-                      bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
-                      const teamSearchLower = (teamSearch || "").toLowerCase();
-                      const filtered = teamSearchLower
-                        ? adminProjectsList.filter((p) =>
-                            (p.project_name || "").toLowerCase().includes(teamSearchLower) ||
-                            (p.tender_id || "").toLowerCase().includes(teamSearchLower) ||
-                            (p.client_name || "").toLowerCase().includes(teamSearchLower) ||
-                            (bmById[p.user_id!] || "").toLowerCase().includes(teamSearchLower) ||
-                            (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
-                          )
-                        : adminProjectsList;
-                      if (filtered.length === 0) {
-                        return (
-                          <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
-                            <FolderKanban size={40} style={{ margin: "0 auto 16px", display: "block", opacity: 0.5 }} />
-                            No admin projects. Projects you create (e.g. from Upload & Analyze) appear here.
-                          </div>
-                        );
-                      }
-                      return (
-                        <div style={{ overflowX: "auto", minWidth: 940 }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 940 }}>
-                            <colgroup>{PROJECT_FILTER_TABLE_COLS}</colgroup>
-                            <thead>
-                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
-                                <th style={{ ...TABLE_TH }}>Project</th>
-                                <th style={{ ...TABLE_TH }}>Tender ID</th>
-                                <th style={{ ...TABLE_TH }}>Client</th>
-                                <th style={{ ...TABLE_TH }}>Bid Manager</th>
-                                <th style={{ ...TABLE_TH }}>Technical Manager(s)</th>
-                                <th style={{ ...TABLE_TH, textAlign: "center" }}>Actions</th>
-                              </tr>
-                            </thead>
-                          </table>
-                          <div style={{ contain: "strict" }}>
-                            <VirtualizedSimpleTable
-                              colgroup={PROJECT_FILTER_TABLE_COLS}
-                              header={<></>}
-                              items={filtered}
-                              rowHeight={64}
-                              maxHeight={520}
-                              ariaLabel="Admin projects"
-                              renderRow={(p) => (
-                                <>
-                                  <td style={{ ...TABLE_TD_STRONG }} title={p.project_name}>
-                                    {p.project_name} <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
-                                  </td>
-                                  <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id ?? "—"}</td>
-                                  <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name ?? "—"}</td>
-                                  <td style={{ ...TABLE_TD_MANAGER }} title={p.user_id ? (bmById[p.user_id] ?? "—") : "—"}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
-                                  <td style={{ ...TABLE_TD_TM }} title={(p.assigned_users || []).map((u) => u.fullName).join(", ") || "None"}>
-                                    {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
-                                  </td>
-                                  <td style={{ ...TABLE_TD_ACTIONS }}>
-                                    <ProjectActionButtons
-                                      onView={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
-                                      onAssign={() => openAssignModalForAdmin(p.project_name)}
-                                      onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
-                                      onUpload={() => openFinalBidModal(p.id, p.project_name)}
-                                      showAssign
-                                    />
-                                  </td>
-                                </>
-                              )}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })()}
+                  <div className="dashboard-teams-tab-pane">
+                    <DashboardProjectsTable
+                      projects={filteredDashboardAdminProjects}
+                      loading={projectsForFilterLoading}
+                      bmById={bmById}
+                      currentUserId={currentUserId}
+                      showAdminBadge="off"
+                      showAssign
+                      emptyMessage="No admin projects. Projects you create (e.g. from Upload & Analyze) appear here."
+                      onView={handleViewProject}
+                      onAssign={openAssignModalForAdmin}
+                      onArchive={handleArchiveProject}
+                      onUpload={handleUploadProject}
+                    />
                   </div>
                 )}
                 </div>
               </section>
             </>
+            </div>
+            )}
+            </>
           )}
         </div>
       </main>
+
+      {memberProjectsModal && createPortal(
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }} onClick={() => setMemberProjectsModal(null)}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 24, maxWidth: 480, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>
+              {memberProjectsModal.member.fullName} – projects
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: 14, color: "#64748b" }}>
+              {memberProjectsModal.projects.length} projects
+            </p>
+            <ul className="member-projects-modal-list">
+              {memberProjectsModal.projects.map((p) => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => { setMemberProjectsModal(null); handleViewProject(p.project_name); }}>
+                    {p.project_name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setMemberProjectsModal(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: "pointer" }}>Close</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {createUserSuccessPopup && createPortal(
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9998, padding: 24 }} onClick={() => setCreateUserSuccessPopup(null)}>
@@ -2488,8 +2261,7 @@ export default function BidAdminDashboardPage() {
             {archiveConfirmStep === 0 ? (
               <>
                 <h3 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#1e293b" }}>⚠️ Archive Project</h3>
-                <p style={{ margin: "0 0 8px", fontSize: 14, color: "#475569" }}>Are you sure you want to move this project to Archived?</p>
-                <p style={{ margin: "0 0 20px", fontSize: 13, color: "#b45309", fontWeight: 600 }}>⚠️ Warning: Unarchiving this project will consume 1 quota.</p>
+                <p style={{ margin: "0 0 20px", fontSize: 14, color: "#475569" }}>Are you sure you want to move this project to Archived?</p>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button type="button" onClick={() => setArchiveConfirmProjectId(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
                   <button type="button" onClick={() => setArchiveConfirmStep(1)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", cursor: "pointer" }}>Archive Project</button>
@@ -2569,44 +2341,6 @@ export default function BidAdminDashboardPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes dashboardBgPulse {
-          0%, 100% { opacity: 1; filter: brightness(1); }
-          50% { opacity: 0.82; filter: brightness(1.08); }
-        }
-        @keyframes dashboardBgMove {
-          0% { background-position: 0% 50%; }
-          100% { background-position: 200% 50%; }
-        }
-        @keyframes dashboardBgShimmer {
-          0%, 100% { opacity: 0.7; transform: scale(1) translate(0, 0); }
-          50% { opacity: 1; transform: scale(1.12) translate(6%, -4%); }
-        }
-        @keyframes dashboardFloat1 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(45px, -35px) scale(1.08); }
-          66% { transform: translate(-30px, 40px) scale(0.95); }
-        }
-        @keyframes dashboardFloat2 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          50% { transform: translate(-50px, -25px) scale(1.1); }
-        }
-        @keyframes dashboardFloat3 {
-          0%, 100% { transform: translate(0, 0); }
-          50% { transform: translate(35px, -45px); }
-        }
-        @keyframes dashboardFloat4 {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(-40px, 30px) scale(1.05); }
-          66% { transform: translate(25px, -20px) scale(0.98); }
-        }
-        .dashboard-bg-wrap .background-shape {
-          position: absolute;
-          will-change: transform;
-        }
-        .dashboard-bg-wrap .dashboard-float-1 { animation: dashboardFloat1 22s ease-in-out infinite; }
-        .dashboard-bg-wrap .dashboard-float-2 { animation: dashboardFloat2 26s ease-in-out infinite reverse; }
-        .dashboard-bg-wrap .dashboard-float-3 { animation: dashboardFloat3 20s ease-in-out infinite 3s; }
-        .dashboard-bg-wrap .dashboard-float-4 { animation: dashboardFloat4 24s ease-in-out infinite 1s reverse; }
         .header-profile-btn:focus,
         .header-profile-btn:focus-visible { outline: none !important; box-shadow: none !important; }
         .people-toggle-btn:hover {

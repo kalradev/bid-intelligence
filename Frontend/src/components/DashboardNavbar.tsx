@@ -9,26 +9,34 @@ export const NAVBAR_HEIGHT = 88;
 export default function DashboardNavbar() {
   const navigate = useNavigate();
   const [userDisplayName, setUserDisplayName] = useState<string>("");
+  const [hideProfileButton, setHideProfileButton] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
     if (u) {
       try {
         const parsed = JSON.parse(u);
+        const role = (parsed.role || "").toLowerCase();
+        if (role === "bid_admin") {
+          setHideProfileButton(true);
+          setUserDisplayName("");
+          return;
+        }
+        setHideProfileButton(false);
         if (parsed.fullName && typeof parsed.fullName === "string") {
           setUserDisplayName(parsed.fullName);
         } else if (parsed.role) {
-          const role = (parsed.role || "").toLowerCase();
-          if (role === "bid_admin") setUserDisplayName("Bid Admin");
-          else if (role === "bid_manager") setUserDisplayName("Bid Manager");
+          if (role === "bid_manager") setUserDisplayName("Bid Manager");
           else if (role === "technical_manager") setUserDisplayName("Technical Manager");
           else setUserDisplayName("User");
         }
       } catch {
         setUserDisplayName("");
+        setHideProfileButton(false);
       }
     } else {
       setUserDisplayName("");
+      setHideProfileButton(false);
     }
   }, []);
 
@@ -75,7 +83,7 @@ export default function DashboardNavbar() {
         <span className="dashboard-top-header__title">Bid Intelligence</span>
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        {userDisplayName ? (
+        {userDisplayName && !hideProfileButton ? (
           <button
             type="button"
             onClick={() => navigate("/account")}

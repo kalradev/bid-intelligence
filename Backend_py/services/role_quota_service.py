@@ -195,13 +195,7 @@ def get_team_quota(current_user: dict, db: Optional[Session] = None) -> Dict[str
 
 
 def can_create_project(current_user: dict, db: Optional[Session] = None) -> Tuple[bool, str]:
-    """
-    Returns (allowed, error_message). Checks org-wide quota.
-    """
-    limit = get_org_quota_limit(db=db)
-    used = get_org_project_count(db=db)
-    if used >= limit:
-        return False, f"The organization has reached the limit of {limit} projects. Please recharge quota to add more projects."
+    """Project creation is unlimited (org quota enforcement disabled)."""
     return True, ""
 
 

@@ -18,13 +18,9 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-    const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
     const COLS = 12;
     const ROWS = 8;
-
-    const handleGridCellEnter = (index: number) => setHoveredIndex(index);
-    const handleGridCellLeave = () => setHoveredIndex(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -111,13 +107,12 @@ export default function LoginPage() {
             {/* Light reflection overlay - login page only */}
             <div className="auth-light-reflection" aria-hidden="true" />
 
-            {/* Interactive grid: current cell highlights immediately, no fade */}
-            <div className="auth-interactive-grid" aria-hidden="true" onMouseLeave={handleGridCellLeave}>
+            {/* Static decorative grid (no hover interaction) */}
+            <div className="auth-interactive-grid" aria-hidden="true">
                 {Array.from({ length: COLS * ROWS }, (_, i) => (
                     <div
                         key={i}
-                        className={`auth-grid-cell auth-grid-variant-${i % 8}${hoveredIndex === i ? " auth-grid-comet-active" : ""}`}
-                        onMouseEnter={() => handleGridCellEnter(i)}
+                        className={`auth-grid-cell auth-grid-variant-${i % 8}`}
                     />
                 ))}
             </div>
