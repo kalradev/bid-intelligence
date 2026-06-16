@@ -112,7 +112,7 @@ class ProjectModel:
         try:
             projects = db.query(Project).filter(
                 Project.id.in_(project_ids)
-            ).order_by(Project.project_name).all()
+            ).order_by(Project.created_at.desc()).all()
             return [{
                 "id": p.id,
                 "project_name": p.project_name,
@@ -141,7 +141,7 @@ class ProjectModel:
         try:
             projects = db.query(Project).filter(
                 Project.user_id.in_(user_ids)
-            ).order_by(Project.project_name).all()
+            ).order_by(Project.created_at.desc()).all()
             return [{
                 "id": p.id,
                 "project_name": p.project_name,

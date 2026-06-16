@@ -1,6 +1,7 @@
 import { Copy, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { parseBidDeadlines } from "../utils/deadlineUtils";
 
 export default function SmartRfpPage() {
   const navigate = useNavigate();
@@ -35,6 +36,12 @@ export default function SmartRfpPage() {
   }
 
   const projectOverview = analysisData?.data?.departmentalSummaries?.projectOverview || {};
+  const bidManagement = analysisData?.data?.departmentalSummaries?.bidManagement || {};
+  const { submissionDeadline, bidOpeningDate } = parseBidDeadlines(
+    bidManagement.keyDeadlines,
+    projectOverview.lastSubmissionDate,
+    projectOverview.bidOpeningDate
+  );
 
   // Helper function to calculate days remaining until deadline
   const calculateDaysRemaining = (dateString: string) => {
@@ -69,7 +76,7 @@ export default function SmartRfpPage() {
     }
   };
 
-  const daysRemaining = calculateDaysRemaining(projectOverview.lastSubmissionDate);
+  const daysRemaining = calculateDaysRemaining(submissionDeadline || projectOverview.lastSubmissionDate || "");
 
   // Filter out EMD if it's "N/A" or not present
   const projectDetails = [
@@ -102,9 +109,15 @@ export default function SmartRfpPage() {
       value: projectOverview.completionPeriod || "N/A",
     },
     {
-      label: "Last Date of Submission",
-      value: projectOverview.lastSubmissionDate || "N/A",
+      label: "Bid Submission Deadline",
+      value: submissionDeadline || projectOverview.lastSubmissionDate || "N/A",
       color: "#DC2626",
+      showCountdown: true,
+    },
+    {
+      label: "Bid Opening Date",
+      value: bidOpeningDate || "N/A",
+      color: "#7C3AED",
     },
   ];
 
@@ -147,48 +160,9 @@ export default function SmartRfpPage() {
         }}
       >
         {/* NAVBAR */}
-        <header
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            width: "100%",
-            background: "linear-gradient(135deg, #001f3f 0%, #003d7a 100%)",
-            boxShadow: "0 4px 20px rgba(0, 31, 63, 0.3)",
-            zIndex: 100,
-            padding: "14px 24px",
-            display: "flex",
-            alignItems: "center",
-            boxSizing: "border-box",
-          }}
-        >
-          <h1
-            style={{
-              flex: 1,
-              textAlign: "center",
-              margin: 0,
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#ffffff",
-            }}
-          >
-            Smart RFP Analysis
-          </h1>
-
-          <button
-            onClick={() => navigate("/insights")}
-            style={{
-              background: "#06b6d4",
-              color: "#ffffff",
-              padding: "10px 20px",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 600,
-              cursor: "pointer",
-              marginLeft: "auto",
-            }}
-          >
+        <header className="department-navbar">
+          <h1 className="department-navbar-title department-navbar-title-center">Smart RFP Analysis</h1>
+          <button className="department-navbar-btn" onClick={() => navigate("/insights")}>
             Home
           </button>
         </header>
@@ -305,8 +279,8 @@ export default function SmartRfpPage() {
                         )}
                       </div>
 
-                      {/* Countdown Badge for Last Date of Submission */}
-                      {item.label === "Last Date of Submission" && daysRemaining && (
+                      {/* Countdown Badge for submission deadline */}
+                      {item.showCountdown && daysRemaining && (
                         <div
                           style={{
                             display: "inline-flex",

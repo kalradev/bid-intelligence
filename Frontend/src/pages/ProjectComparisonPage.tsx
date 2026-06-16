@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 interface ComparisonResultItem {
   id: number;
@@ -31,7 +32,7 @@ export default function ProjectComparisonPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) {
       navigate("/login");
       return;
@@ -106,8 +107,8 @@ export default function ProjectComparisonPage() {
                 style={{
                   padding: "10px 16px",
                   borderRadius: 8,
-                  border: selectedId === r.id ? "2px solid #FF8F8F" : "1px solid #e2e8f0",
-                  background: selectedId === r.id ? "rgba(255,143,143,0.1)" : "#fff",
+                  border: selectedId === r.id ? "2px solid #6FBEB2" : "1px solid #e2e8f0",
+                  background: selectedId === r.id ? "rgba(111,190,178,0.1)" : "#fff",
                   cursor: "pointer",
                   fontWeight: 600,
                   fontSize: 13,
@@ -132,7 +133,7 @@ export default function ProjectComparisonPage() {
                 ) : (
                   <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 12 }}>
                     {selected.comparison_output?.differences?.map((d, i) => (
-                      <li key={i} style={{ borderLeft: "3px solid #FF8F8F", paddingLeft: 12, fontSize: 13 }}>
+                      <li key={i} style={{ borderLeft: "3px solid #6FBEB2", paddingLeft: 12, fontSize: 13 }}>
                         <strong style={{ color: "#475569" }}>{d.section}</strong> — {d.field}
                         {d.tool_value && (
                           <div style={{ marginTop: 4, color: "#64748b" }}>

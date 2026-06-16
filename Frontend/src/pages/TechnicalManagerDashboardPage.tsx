@@ -6,6 +6,7 @@ import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 interface ProjectItem {
   id: number;
@@ -49,7 +50,7 @@ export default function TechnicalManagerDashboardPage() {
   }, [navigate]);
 
   const fetchProjects = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     setLoading(true);
     try {
@@ -88,7 +89,7 @@ export default function TechnicalManagerDashboardPage() {
 
   const submitFinalBidUpload = async () => {
     if (!finalBidModal || !finalBidFile) return;
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) {
       toast.error("Please log in again");
       return;
@@ -132,7 +133,7 @@ export default function TechnicalManagerDashboardPage() {
     fontWeight: 600,
     fontSize: 14,
     background: "transparent",
-    color: "#2d3319",
+    color: "#1e4a47",
     transition: "all 0.2s",
   } as const;
 
@@ -158,11 +159,11 @@ export default function TechnicalManagerDashboardPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
+          <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="header-brand-center">
           <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-          <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+          <span className="dashboard-top-header__title">Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
@@ -173,31 +174,31 @@ export default function TechnicalManagerDashboardPage() {
               alignItems: "center",
               gap: 10,
               padding: "8px 16px 8px 8px",
-              background: "rgba(255,179,179,0.5)",
-              border: "1px solid rgba(255,143,143,0.4)",
+              background: "rgba(165,233,221,0.5)",
+              border: "1px solid rgba(111,190,178,0.4)",
               borderRadius: 14,
               cursor: "pointer",
               outline: "none",
               transition: "all 0.3s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#FFB3B3";
+              e.currentTarget.style.background = "#A5E9DD";
               e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(255,143,143,0.25)";
+              e.currentTarget.style.boxShadow = "0 6px 20px rgba(111,190,178,0.25)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
+              e.currentTarget.style.background = "rgba(165,233,221,0.5)";
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "none";
             }}
             title="Account & security"
           >
-            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(255,143,143,0.3)" }}>
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#6FBEB2", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(111,190,178,0.3)" }}>
               {(userDisplayName || "T").charAt(0).toUpperCase()}
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1e4a47" }}>{userDisplayName}</span>
           </button>
-          <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
+          <img src={cacheLogo} alt="Cache" className="header-cache-logo" style={{ marginLeft: 8 }} />
         </div>
       </header>
 
@@ -218,7 +219,7 @@ export default function TechnicalManagerDashboardPage() {
         }}
       >
         <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, background: "#FF8F8F", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, background: "#6FBEB2", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
@@ -227,11 +228,11 @@ export default function TechnicalManagerDashboardPage() {
             onClick={() => setShowByBidManager(false)}
             style={{
               ...navButtonBase,
-              background: !showByBidManager ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: !showByBidManager ? "#fff" : "#2d3319",
+              background: !showByBidManager ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: !showByBidManager ? "#fff" : "#1e4a47",
               fontWeight: !showByBidManager ? 700 : 600,
-              boxShadow: !showByBidManager ? "0 4px 12px rgba(255,143,143,0.3)" : "none",
-              border: !showByBidManager ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: !showByBidManager ? "0 4px 12px rgba(111,190,178,0.3)" : "none",
+              border: !showByBidManager ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Assigned projects"
           >
@@ -244,11 +245,11 @@ export default function TechnicalManagerDashboardPage() {
             onClick={() => setShowByBidManager(true)}
             style={{
               ...navButtonBase,
-              background: showByBidManager ? "#FFB3B3" : "rgba(255,179,179,0.3)",
-              color: showByBidManager ? "#fff" : "#2d3319",
+              background: showByBidManager ? "#A5E9DD" : "rgba(165,233,221,0.3)",
+              color: showByBidManager ? "#fff" : "#1e4a47",
               fontWeight: showByBidManager ? 700 : 600,
-              boxShadow: showByBidManager ? "0 4px 12px rgba(255,143,143,0.3)" : "none",
-              border: showByBidManager ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: showByBidManager ? "0 4px 12px rgba(111,190,178,0.3)" : "none",
+              border: showByBidManager ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="See how many projects you're on and which Bid Manager assigned each"
           >
@@ -258,22 +259,22 @@ export default function TechnicalManagerDashboardPage() {
               <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.9 }}>{projects.length} projects</span>
             )}
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, background: "#FF8F8F", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(111,190,178,0.5) 50%, transparent 100%)", margin: "12px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, background: "#6FBEB2", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
           <button
             type="button"
             className="sidebar-nav-toggle"
             onClick={() => navigate("/upload")}
-            style={{ ...navButtonBase, background: "rgba(255,179,179,0.4)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.3)" }}
+            style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }}
             title="Upload corrigendum or reference"
           >
             <FileUp size={20} style={{ flexShrink: 0 }} />
             <span>Upload Corrigendum / Reference</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(111,190,178,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
           <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#6b5344" }} title="Logout">
             <LogOut size={20} style={{ flexShrink: 0 }} />
             <span>Logout</span>
@@ -282,7 +283,7 @@ export default function TechnicalManagerDashboardPage() {
       </aside>
 
       <div style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(250,243,225,0.5) 0%, rgba(234,239,239,0.4) 50%, rgba(255,179,179,0.3) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(232,248,245,0.5) 0%, rgba(234,239,239,0.4) 50%, rgba(165,233,221,0.3) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
         <div style={{ position: "absolute", inset: 0, background: "rgba(255, 255, 255, 0.35)", backdropFilter: "blur(2px)" }} />
       </div>
 
@@ -308,13 +309,13 @@ export default function TechnicalManagerDashboardPage() {
                 alignItems: "center",
                 gap: 8,
                 padding: "10px 18px",
-                background: "linear-gradient(135deg, rgba(255,143,143,0.15) 0%, rgba(255,179,179,0.1) 100%)",
-                border: "1px solid rgba(255,143,143,0.3)",
+                background: "linear-gradient(135deg, rgba(111,190,178,0.15) 0%, rgba(165,233,221,0.1) 100%)",
+                border: "1px solid rgba(111,190,178,0.3)",
                 borderRadius: 12,
                 cursor: loading ? "wait" : "pointer",
                 fontWeight: 600,
                 fontSize: 14,
-                color: "#2d3319",
+                color: "#1e4a47",
                 boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
               }}
             >
@@ -325,7 +326,7 @@ export default function TechnicalManagerDashboardPage() {
 
           {loading ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: 80 }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
+              <div style={{ width: 52, height: 52, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite" }} />
               <span style={{ color: "#64748b", fontSize: 15, fontWeight: 500 }}>Loading your assigned projects…</span>
             </div>
           ) : projects.length === 0 ? (
@@ -339,8 +340,8 @@ export default function TechnicalManagerDashboardPage() {
                 boxShadow: "0 8px 32px rgba(139,92,246,0.08), 0 2px 8px rgba(0,0,0,0.04)",
               }}
             >
-              <div style={{ width: 72, height: 72, borderRadius: 20, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20, borderLeft: "4px solid #5a6340" }}>
-                <FolderOpen size={36} color="#5a6340" />
+              <div style={{ width: 72, height: 72, borderRadius: 20, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 20, borderLeft: "4px solid #34908B" }}>
+                <FolderOpen size={36} color="#34908B" />
               </div>
               <p style={{ margin: 0, color: "#1e293b", fontSize: 18, fontWeight: 700 }}>No projects assigned yet</p>
               <p style={{ margin: "8px 0 0", color: "#64748b", fontSize: 15, maxWidth: 420, marginLeft: "auto", marginRight: "auto" }}>
@@ -376,8 +377,8 @@ export default function TechnicalManagerDashboardPage() {
                           overflow: "hidden",
                         }}
                       >
-                        <div style={{ padding: "18px 24px", background: "linear-gradient(135deg, rgba(234,239,239,0.8) 0%, rgba(255,143,143,0.1) 100%)", borderBottom: "1px solid #EAEFEF", display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(145deg, #FF8F8F 0%, #E87878 100%)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,120,120,0.3)" }}>
+                        <div style={{ padding: "18px 24px", background: "linear-gradient(135deg, rgba(234,239,239,0.8) 0%, rgba(111,190,178,0.1) 100%)", borderBottom: "1px solid #D4F0EB", display: "flex", alignItems: "center", gap: 12 }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(145deg, #6FBEB2 0%, #34908B 100%)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(52,144,139,0.3)" }}>
                             <Users size={22} color="#fff" />
                           </div>
                           <div>
@@ -397,7 +398,7 @@ export default function TechnicalManagerDashboardPage() {
                                 marginTop: 8,
                                 background: "#f8fafc",
                                 borderRadius: 12,
-                                border: "1px solid #EAEFEF",
+                                border: "1px solid #D4F0EB",
                               }}
                             >
                               <div>
@@ -429,7 +430,7 @@ export default function TechnicalManagerDashboardPage() {
                                 onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                                 style={{
                                   padding: "8px 16px",
-                                  background: "#FF8F8F",
+                                  background: "#6FBEB2",
                                   color: "#fff",
                                   border: "none",
                                   borderRadius: 10,
@@ -439,7 +440,7 @@ export default function TechnicalManagerDashboardPage() {
                                   display: "inline-flex",
                                   alignItems: "center",
                                   gap: 6,
-                                  boxShadow: "0 4px 12px rgba(255,143,143,0.35)",
+                                  boxShadow: "0 4px 12px rgba(111,190,178,0.35)",
                                 }}
                               >
                                 View result <ArrowRight size={14} />
@@ -464,9 +465,9 @@ export default function TechnicalManagerDashboardPage() {
                   overflow: "hidden",
                 }}
               >
-                <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAEFEF", display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "#EAEFEF", borderLeft: "4px solid #5a6340", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <FolderOpen size={20} color="#5a6340" />
+                <div style={{ padding: "20px 24px", borderBottom: "1px solid #D4F0EB", display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "#D4F0EB", borderLeft: "4px solid #34908B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <FolderOpen size={20} color="#34908B" />
                   </div>
                   <div>
                     <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Your projects ({projects.length})</h2>
@@ -475,7 +476,7 @@ export default function TechnicalManagerDashboardPage() {
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ background: "#f8fafc", borderBottom: "2px solid #EAEFEF" }}>
+                    <tr style={{ background: "#f8fafc", borderBottom: "2px solid #D4F0EB" }}>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
                       <th style={{ padding: "16px 24px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
@@ -488,7 +489,7 @@ export default function TechnicalManagerDashboardPage() {
                       <tr
                         key={p.id}
                         style={{
-                          borderBottom: "1px solid #EAEFEF",
+                          borderBottom: "1px solid #D4F0EB",
                           transition: "background 0.15s ease",
                         }}
                         onMouseEnter={(e) => {
@@ -507,7 +508,7 @@ export default function TechnicalManagerDashboardPage() {
                             onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
                               style={{
                                 padding: "10px 18px",
-                                background: "#FF8F8F",
+                                background: "#6FBEB2",
                                 color: "#fff",
                                 border: "none",
                                 borderRadius: 10,
@@ -565,7 +566,7 @@ export default function TechnicalManagerDashboardPage() {
             <textarea value={finalBidDescription} onChange={(e) => setFinalBidDescription(e.target.value)} placeholder="e.g. Final commercial bid, signed version, annex A..." rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 16, resize: "vertical", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => !finalBidUploading && setFinalBidModal(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
+              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
             </div>
           </div>
         </div>

@@ -3,15 +3,15 @@
   line-height: 1.5;
   font-weight: 400;
 
-  /* Theme: calm palette (EAEFEF, FAF3E1, FF8F8F, FFB3B3) */
-  --theme-bg: #FAF3E1;
-  --theme-bg-alt: #EAEFEF;
-  --theme-accent: #FF8F8F;
-  --theme-accent-light: #FFB3B3;
-  --theme-text-on-accent: #2d3319;
+  /* Theme: teal palette (E8F8F5, A5E9DD, 6FBEB2, 34908B) */
+  --theme-bg: #E8F8F5;
+  --theme-bg-alt: #A5E9DD;
+  --theme-accent: #6FBEB2;
+  --theme-accent-light: #A5E9DD;
+  --theme-text-on-accent: #1e4a47;
 
   color: #111;
-  background-color: #FAF3E1 !important;
+  background-color: #E8F8F5 !important;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -33,7 +33,7 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background: linear-gradient(160deg, #FAF3E1 0%, #EAEFEF 40%, #FFB3B3 100%);
+  background: linear-gradient(160deg, #E8F8F5 0%, #A5E9DD 40%, rgba(111, 190, 178, 0.35) 100%);
   position: relative;
   overflow-x: hidden;
 }

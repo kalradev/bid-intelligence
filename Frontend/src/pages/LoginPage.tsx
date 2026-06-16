@@ -1,11 +1,12 @@
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 // Logo imports
 import bidIntelligenceLogo from '../assets/bid-intelligence-logo.svg';
 import cacheLogo from '../assets/Cache-Logo.png';
 import womenOwnedLogo from '../assets/women-owned-logo.png';
 import { API_BASE_URL } from '../config';
+import { setAuthSession } from '../utils/authStorage';
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -17,9 +18,7 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
-    const [cardTilt, setCardTilt] = useState({ x: 0, y: 0 });
     const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-    const cardRef = useRef<HTMLDivElement>(null);
 
     const COLS = 12;
     const ROWS = 8;
@@ -27,30 +26,21 @@ export default function LoginPage() {
     const handleGridCellEnter = (index: number) => setHoveredIndex(index);
     const handleGridCellLeave = () => setHoveredIndex(null);
 
-    const handleCardMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!cardRef.current) return;
-        const rect = cardRef.current.getBoundingClientRect();
-        const x = (e.clientX - rect.left) / rect.width - 0.5;
-        const y = (e.clientY - rect.top) / rect.height - 0.5;
-        setCardTilt({ x: y * 8, y: -x * 8 });
-    };
-    const handleCardMouseLeave = () => setCardTilt({ x: 0, y: 0 });
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         setError("");
 
         try {
+            const email = formData.email.trim();
+            const password = formData.password.trim();
+
             const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    email: formData.email,
-                    password: formData.password,
-                }),
+                body: JSON.stringify({ email, password }),
             });
 
             // Check if response is JSON
@@ -65,8 +55,7 @@ export default function LoginPage() {
             if (response.ok && data.success) {
                 // Store token if provided
                 if (data.token) {
-                    localStorage.setItem('token', data.token);
-                    localStorage.setItem('user', JSON.stringify(data.user));
+                    setAuthSession(data.token, data.user);
                 }
                 // BM/TM created by admin must change password before accessing the app
                 if (data.user?.mustChangePassword) {
@@ -82,7 +71,8 @@ export default function LoginPage() {
 
             // Provide more specific error messages
             if (error.message && error.message.includes('fetch')) {
-                setError(`Cannot connect to server. Please make sure the backend is running on ${API_BASE_URL}`);
+                const apiHint = API_BASE_URL || `${window.location.origin} (via dev proxy)`;
+                setError(`Cannot connect to server. Please make sure the backend is running — API: ${apiHint}`);
             } else if (error.message) {
                 setError(error.message);
             } else {
@@ -104,7 +94,7 @@ export default function LoginPage() {
         <div className="auth-page-wrapper">
             {/* Women Owned Logo - Top Left */}
             <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
+                <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
             </div>
             {/* Cache Logo - Top Right */}
             <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>
@@ -134,15 +124,7 @@ export default function LoginPage() {
 
             {/* Login Form Container */}
             <div className="auth-container">
-                <div
-                    ref={cardRef}
-                    className={`auth-card ${isLoading ? "auth-card-loading" : ""}`}
-                    onMouseMove={handleCardMouseMove}
-                    onMouseLeave={handleCardMouseLeave}
-                    style={{
-                        transform: `perspective(1200px) rotateX(${cardTilt.x}deg) rotateY(${cardTilt.y}deg) ${cardTilt.x !== 0 || cardTilt.y !== 0 ? "translateY(-6px)" : ""}`,
-                    }}
-                >
+                <div className={`auth-card auth-card--no-hover ${isLoading ? "auth-card-loading" : ""}`}>
                     {/* Loading overlay */}
                     {isLoading && (
                         <div className="auth-loading-overlay">
@@ -159,7 +141,7 @@ export default function LoginPage() {
                         <div className="auth-icon-wrapper auth-logo-only">
                             <img src={bidIntelligenceLogo} alt="Bid Intelligence" style={{ width: 72, height: 72 }} />
                         </div>
-                        <h1 className="auth-title auth-title-shine">
+                        <h1 className="auth-title">
                             Welcome
                         </h1>
                         <p className="auth-subtitle">
@@ -221,7 +203,7 @@ export default function LoginPage() {
                                         padding: '4px',
                                         transition: 'color 0.2s ease'
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.color = '#E87878'}
+                                    onMouseEnter={(e) => e.currentTarget.style.color = '#6FBEB2'}
                                     onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
                                     aria-label={showPassword ? "Hide password" : "Show password"}
                                 >

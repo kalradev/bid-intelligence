@@ -6,6 +6,7 @@ import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 interface TeamMember {
   id: number;
@@ -70,7 +71,7 @@ export default function BidManagerDashboardPage() {
   }, [navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     const fetchData = async () => {
       setLoading(true);
@@ -100,7 +101,7 @@ export default function BidManagerDashboardPage() {
 
   useEffect(() => {
     if (currentUserId == null) return;
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     const fetchPersonalProjects = async () => {
       setPersonalProjectsLoading(true);
@@ -136,7 +137,7 @@ export default function BidManagerDashboardPage() {
 
   const submitFinalBidUpload = async () => {
     if (!finalBidModal || !finalBidFile) return;
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) {
       toast.error("Please log in again");
       return;
@@ -170,7 +171,7 @@ export default function BidManagerDashboardPage() {
   const openAssignModal = async (projectName: string) => {
     setAssignModalProject(projectName);
     setAssignModalAssignedIds([]);
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     try {
       const [assignRes, usersRes] = await Promise.all([
@@ -195,7 +196,7 @@ export default function BidManagerDashboardPage() {
     if (!assignModalProject) return;
     setAssignSaving(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       if (!token) return;
       const userIds = assignModalAssignedIds.map((id) => Number(id));
       const res = await fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(assignModalProject)}`, {
@@ -272,11 +273,11 @@ export default function BidManagerDashboardPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
+          <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="header-brand-center">
           <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-          <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+          <span className="dashboard-top-header__title">Bid Intelligence</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button
@@ -288,8 +289,8 @@ export default function BidManagerDashboardPage() {
               alignItems: "center",
               gap: 10,
               padding: "8px 16px 8px 8px",
-              background: "rgba(255,179,179,0.3)",
-              border: "1px solid rgba(255,143,143,0.3)",
+              background: "rgba(165,233,221,0.3)",
+              border: "1px solid rgba(111,190,178,0.3)",
               borderRadius: 14,
               cursor: "pointer",
               outline: "none",
@@ -301,18 +302,18 @@ export default function BidManagerDashboardPage() {
               e.currentTarget.style.boxShadow = "0 6px 20px rgba(79,172,254,0.3)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,179,179,0.3)";
+              e.currentTarget.style.background = "rgba(165,233,221,0.3)";
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "none";
             }}
             title="Account"
           >
-            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(255,143,143,0.3)" }}>
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#6FBEB2", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(111,190,178,0.3)" }}>
               {(userDisplayName || "B").charAt(0).toUpperCase()}
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1e4a47" }}>{userDisplayName}</span>
           </button>
-          <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
+          <img src={cacheLogo} alt="Cache" className="header-cache-logo" style={{ marginLeft: 8 }} />
         </div>
       </header>
 
@@ -326,7 +327,7 @@ export default function BidManagerDashboardPage() {
           zIndex: 110,
           background: "rgba(234,239,239,0.95)",
           backdropFilter: "blur(20px)",
-          borderRight: "1px solid rgba(255,143,143,0.2)",
+          borderRight: "1px solid rgba(111,190,178,0.2)",
           boxShadow: "4px 0 24px rgba(0,0,0,0.06)",
           display: "flex",
           flexDirection: "column",
@@ -334,7 +335,7 @@ export default function BidManagerDashboardPage() {
         }}
       >
         <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#34908B", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
@@ -343,11 +344,11 @@ export default function BidManagerDashboardPage() {
             onClick={() => setViewMode("dashboard")}
             style={{
               ...navButtonBase,
-              background: viewMode === "dashboard" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "dashboard" ? "#fff" : "#2d3319",
+              background: viewMode === "dashboard" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "dashboard" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "dashboard" ? 700 : 600,
-              boxShadow: viewMode === "dashboard" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "dashboard" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "dashboard" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "dashboard" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Dashboard"
           >
@@ -360,31 +361,31 @@ export default function BidManagerDashboardPage() {
             onClick={() => setViewMode("personal")}
             style={{
               ...navButtonBase,
-              background: viewMode === "personal" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "personal" ? "#fff" : "#2d3319",
+              background: viewMode === "personal" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "personal" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "personal" ? 700 : 600,
-              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "personal" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "personal" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="All projects"
           >
             <FolderOpen size={20} style={{ flexShrink: 0 }} />
             <span>All projects</span>
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.4) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(111,190,178,0.4) 50%, transparent 100%)", margin: "12px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#34908B", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
-          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload")} style={{ ...navButtonBase, background: "rgba(255,179,179,0.4)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.3)" }} title="Upload & Analyze">
+          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Upload & Analyze">
             <FileUp size={20} style={{ flexShrink: 0 }} />
             <span>Upload & Analyze</span>
           </button>
-          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/team")} style={{ ...navButtonBase, background: "rgba(255,179,179,0.4)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.3)" }} title="Manage Teams">
+          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/team")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Manage Teams">
             <Users size={20} style={{ flexShrink: 0 }} />
             <span>Manage Teams</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(111,190,178,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
           <button type="button" onClick={handleLogout} style={{ ...navButtonBase, color: "#6b5344" }} title="Logout">
             <LogOut size={20} style={{ flexShrink: 0 }} />
             <span>Logout</span>
@@ -393,7 +394,7 @@ export default function BidManagerDashboardPage() {
       </aside>
 
       <div style={{ position: "fixed", inset: 0, top: NAVBAR_HEIGHT, left: SIDEBAR_WIDTH, right: 0, bottom: 0, zIndex: 0, overflow: "hidden" }}>
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(250,243,225,0.5) 0%, rgba(234,239,239,0.4) 50%, rgba(255,179,179,0.3) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(232,248,245,0.5) 0%, rgba(234,239,239,0.4) 50%, rgba(165,233,221,0.3) 100%)", animation: "pulse 8s ease-in-out infinite" }} />
         <div style={{ position: "absolute", inset: 0, background: "rgba(255, 255, 255, 0.3)", backdropFilter: "blur(2px)" }} />
       </div>
 
@@ -415,7 +416,7 @@ export default function BidManagerDashboardPage() {
                       alignItems: "center",
                       gap: 10,
                       padding: "12px 20px",
-                      background: isQuotaLow ? "rgba(184,115,51,0.2)" : "rgba(255,143,143,0.2)",
+                      background: isQuotaLow ? "rgba(184,115,51,0.2)" : "rgba(111,190,178,0.2)",
                       border: isQuotaLow ? "1px solid rgba(239,68,68,0.35)" : "1px solid rgba(34,197,94,0.35)",
                       borderRadius: 12,
                       cursor: "pointer",
@@ -437,33 +438,33 @@ export default function BidManagerDashboardPage() {
 
               {loading ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite" }} />
                   <span style={{ color: "#64748b", fontSize: 15 }}>Loading dashboard…</span>
                 </div>
               ) : (
                 <>
                   <div className="bm-dashboard-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24, marginBottom: 32, minWidth: 0 }}>
-                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "2px solid #E87878", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,120,120,0.15)", flexShrink: 0 }}>
-                        <FolderKanban size={26} color="#E87878" />
+                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#E8F8F5", border: "2px solid #34908B", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(52,144,139,0.15)", flexShrink: 0 }}>
+                        <FolderKanban size={26} color="#34908B" />
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{quota?.appliesToTeam ? `${teamQuotaUsed}/${teamQuotaLimit}` : "—"}</div>
                         <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginTop: 2 }}>Team projects</div>
                       </div>
                     </div>
-                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(250,243,225,0.8)", flexShrink: 0 }}>
-                        <UserCircle size={26} color="#FF8F8F" />
+                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#E8F8F5", border: "1px solid rgba(111,190,178,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,248,245,0.8)", flexShrink: 0 }}>
+                        <UserCircle size={26} color="#6FBEB2" />
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{peopleCount}</div>
                         <div style={{ fontSize: 13, color: "#64748b", fontWeight: 600, marginTop: 2 }}>People</div>
                       </div>
                     </div>
-                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#EAEFEF", borderLeft: "4px solid #5a6340", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(90,99,64,0.12)", flexShrink: 0 }}>
-                        <FolderOpen size={26} color="#5a6340" />
+                    <div style={{ padding: "22px 20px", background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 14, background: "#D4F0EB", borderLeft: "4px solid #34908B", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(90,99,64,0.12)", flexShrink: 0 }}>
+                        <FolderOpen size={26} color="#34908B" />
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{personalProjects.length}</div>
@@ -472,10 +473,10 @@ export default function BidManagerDashboardPage() {
                     </div>
                   </div>
 
-                  <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
-                    <div style={{ padding: "20px 24px", borderBottom: "1px solid #EAEFEF", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+                  <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+                    <div style={{ padding: "20px 24px", borderBottom: "1px solid #D4F0EB", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                       <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(145deg, #FF8F8F 0%, #E87878 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(232,120,120,0.3)" }}>
+                        <span style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(145deg, #6FBEB2 0%, #34908B 100%)", display: "inline-flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(52,144,139,0.3)" }}>
                           <Users size={18} color="#fff" />
                         </span>
                         Your team
@@ -488,14 +489,14 @@ export default function BidManagerDashboardPage() {
                           alignItems: "center",
                           gap: 8,
                           padding: "10px 16px",
-                          background: "#FF8F8F",
+                          background: "#6FBEB2",
                           color: "#fff",
                           border: "none",
                           borderRadius: 10,
                           fontWeight: 600,
                           fontSize: 13,
                           cursor: "pointer",
-                          boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
+                          boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
                         }}
                       >
                         Manage Teams <ArrowRight size={14} />
@@ -507,15 +508,15 @@ export default function BidManagerDashboardPage() {
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                           {team.map((tm) => (
-                            <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #EAEFEF" }}>
-                              <UserCircle size={20} color="#5a6340" />
+                            <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#f8fafc", borderRadius: 10, border: "1px solid #D4F0EB" }}>
+                              <UserCircle size={20} color="#34908B" />
                               <div style={{ flex: 1 }}>
                                 <div style={{ fontSize: 14, fontWeight: 600, color: "#0f172a" }}>{tm.fullName}</div>
                                 <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                                   <Mail size={11} /> {tm.email}
                                 </div>
                               </div>
-                              <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: "rgba(255,143,143,0.2)", color: "#2d3319", border: "1px solid rgba(255,143,143,0.35)" }}>Technical Manager</span>
+                              <span style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, background: "rgba(111,190,178,0.2)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.35)" }}>Technical Manager</span>
                             </div>
                           ))}
                         </div>
@@ -535,25 +536,25 @@ export default function BidManagerDashboardPage() {
               </div>
               {personalProjectsLoading ? (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: 60 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
+                  <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite" }} />
                   <span style={{ color: "#64748b", fontSize: 15 }}>Loading your projects…</span>
                 </div>
               ) : (
                 <section>
                   <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #5a6340" }}>
-                      <FolderOpen size={18} color="#5a6340" />
+                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
+                      <FolderOpen size={18} color="#34908B" />
                     </span>
                     All projects ({personalProjects.length})
                   </h2>
-                  <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+                  <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                     {personalProjects.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>No team projects yet. Upload & analyze from the sidebar to create one.</div>
                     ) : (
                       <div>
                         <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
                           <thead>
-                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
+                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
                               <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "34%" }}>Project</th>
                               <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "18%" }}>Tender ID</th>
                               <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "24%" }}>Client</th>
@@ -580,8 +581,8 @@ export default function BidManagerDashboardPage() {
                                     <td style={{ padding: "14px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.client_name || "—"}</td>
                                     <td style={{ padding: "14px 16px", textAlign: "right" }}>
                                       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "nowrap" }}>
-                                        <button onClick={() => openAssignModal(p.project_name)} style={{ padding: "8px 14px", background: "rgba(99, 102, 241, 0.12)", color: "#5a6340", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13 }}>Assign TMs</button>
-                                        <button onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 16px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(255,143,143,0.3)" }}>View result</button>
+                                        <button onClick={() => openAssignModal(p.project_name)} style={{ padding: "8px 14px", background: "rgba(99, 102, 241, 0.12)", color: "#34908B", border: "1px solid rgba(99, 102, 241, 0.4)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13 }}>Assign TMs</button>
+                                        <button onClick={() => handleViewResult(p.project_name)} style={{ padding: "8px 16px", background: "#6FBEB2", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 4px 12px rgba(111,190,178,0.3)" }}>View result</button>
                                       </div>
                                     </td>
                                     <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
@@ -615,7 +616,7 @@ export default function BidManagerDashboardPage() {
             <textarea value={finalBidDescription} onChange={(e) => setFinalBidDescription(e.target.value)} placeholder="e.g. Final commercial bid, signed version, annex A..." rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 16, resize: "vertical", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => !finalBidUploading && setFinalBidModal(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
+              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
             </div>
           </div>
         </div>
@@ -670,7 +671,7 @@ export default function BidManagerDashboardPage() {
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                   {assignableUsers.map((m) => (
-                    <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.15)" : "transparent", border: `1px solid ${assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.4)" : "#EAEFEF"}` }}>
+                    <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: assignModalAssignedIds.includes(m.id) ? "rgba(111,190,178,0.15)" : "transparent", border: `1px solid ${assignModalAssignedIds.includes(m.id) ? "rgba(111,190,178,0.4)" : "#D4F0EB"}` }}>
                       <input
                         type="checkbox"
                         checked={assignModalAssignedIds.includes(m.id)}
@@ -683,7 +684,7 @@ export default function BidManagerDashboardPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button onClick={() => { setAssignModalProject(null); setShowAddTMInModal(false); setAddTMForm({ fullName: "", email: "", password: "" }); }} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-                  <button disabled={assignSaving} onClick={saveAssignments} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}>{assignSaving ? "Saving…" : "Save"}</button>
+                  <button disabled={assignSaving} onClick={saveAssignments} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}>{assignSaving ? "Saving…" : "Save"}</button>
                 </div>
               </>
             ) : (

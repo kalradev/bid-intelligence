@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { LockKeyhole } from "lucide-react";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 export default function ChangePasswordRequiredPage() {
   const navigate = useNavigate();
@@ -22,7 +23,7 @@ export default function ChangePasswordRequiredPage() {
       toast.error("New password and confirmation do not match");
       return;
     }
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     const userStr = localStorage.getItem("user");
     if (!token || !userStr) {
       toast.error("Session expired. Please log in again.");
@@ -58,12 +59,12 @@ export default function ChangePasswordRequiredPage() {
   return createPortal(
     <div style={{ position: "fixed", inset: 0, zIndex: 99999, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(8px)", padding: 24 }}>
       {/* Non-dismissible: no close button, backdrop click does nothing */}
-      <div style={{ background: "#fff", borderRadius: 20, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", border: "2px solid rgba(255,143,143,0.5)" }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, background: "rgba(255,143,143,0.15)", border: "1px solid rgba(255,143,143,0.4)", color: "#b91c1c", fontSize: 14, fontWeight: 600 }}>
+      <div style={{ background: "#fff", borderRadius: 20, padding: 32, maxWidth: 420, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.25)", border: "2px solid rgba(111,190,178,0.5)" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ marginBottom: 16, padding: "12px 16px", borderRadius: 10, background: "rgba(111,190,178,0.15)", border: "1px solid rgba(111,190,178,0.4)", color: "#b91c1c", fontSize: 14, fontWeight: 600 }}>
           You must change your password before you can use the app. This step cannot be skipped.
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(255,143,143,0.2)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,143,143,0.4)" }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(111,190,178,0.2)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(111,190,178,0.4)" }}>
             <LockKeyhole size={26} color="#c73e3e" />
           </div>
           <div>
@@ -118,11 +119,11 @@ export default function ChangePasswordRequiredPage() {
               borderRadius: 12,
               fontWeight: 700,
               fontSize: 15,
-              background: loading ? "#94a3b8" : "#FF8F8F",
+              background: loading ? "#94a3b8" : "#6FBEB2",
               color: "#fff",
               border: "none",
               cursor: loading ? "wait" : "pointer",
-              boxShadow: "0 4px 14px rgba(255,143,143,0.35)",
+              boxShadow: "0 4px 14px rgba(111,190,178,0.35)",
             }}
           >
             {loading ? "Updating…" : "Set new password and continue"}

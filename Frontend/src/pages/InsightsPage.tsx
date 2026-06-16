@@ -135,7 +135,7 @@ export default function InsightsPage() {
           title="Go to Dashboard"
         >
           <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-          <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+          <span className="dashboard-top-header__title" style={{ fontSize: 24, fontWeight: 800 }}>Bid Intelligence</span>
         </button>
         <div style={{ minWidth: 200, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
           {projectName && (
@@ -154,9 +154,9 @@ export default function InsightsPage() {
               alignItems: "center",
               gap: 8,
               padding: "10px 18px",
-              background: "rgba(255,179,179,0.5)",
-              color: "#2d3319",
-              border: "1px solid rgba(255,143,143,0.4)",
+              background: "rgba(165,233,221,0.5)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.4)",
               borderRadius: 12,
               fontSize: 14,
               fontWeight: 600,
@@ -164,11 +164,11 @@ export default function InsightsPage() {
               transition: "all 0.2s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#FFB3B3";
-              e.currentTarget.style.boxShadow = "0 2px 8px rgba(255,143,143,0.25)";
+              e.currentTarget.style.background = "#A5E9DD";
+              e.currentTarget.style.boxShadow = "0 2px 8px rgba(111,190,178,0.25)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
+              e.currentTarget.style.background = "rgba(165,233,221,0.5)";
               e.currentTarget.style.boxShadow = "none";
             }}
           >
@@ -178,23 +178,23 @@ export default function InsightsPage() {
             onClick={() => { window.scrollTo({ top: 0, behavior: "instant" }); navigate("/upload"); }}
             style={{
               padding: "10px 22px",
-              background: "#FF8F8F",
+              background: "#6FBEB2",
               color: "#fff",
               border: "none",
               borderRadius: 12,
               fontWeight: 600,
               fontSize: 15,
               cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
+              boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
               transition: "all 0.2s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#E87878";
-              e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.4)";
+              e.currentTarget.style.background = "#34908B";
+              e.currentTarget.style.boxShadow = "0 6px 16px rgba(111,190,178,0.4)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "#FF8F8F";
-              e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.3)";
+              e.currentTarget.style.background = "#6FBEB2";
+              e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.3)";
             }}
           >
             Analysis
@@ -220,8 +220,8 @@ export default function InsightsPage() {
         <div className="w-full max-w-screen-xl mx-auto px-4 lg:px-8 py-16">
           {/* ===== HEADER ===== */}
           <div className="text-center mb-16">
-            <div className="inline-block mb-4 px-4 py-2 rounded-full" style={{ background: 'rgba(255,179,179,0.45)', border: '1px solid rgba(255,143,143,0.4)' }}>
-              <span className="font-semibold text-sm" style={{ color: '#5a6340' }}>
+            <div className="inline-block mb-4 px-4 py-2 rounded-full" style={{ background: 'rgba(165,233,221,0.45)', border: '1px solid rgba(111,190,178,0.4)' }}>
+              <span className="font-semibold text-sm" style={{ color: '#34908B' }}>
                 AI-Powered Bid Intelligence
               </span>
             </div>
@@ -243,12 +243,12 @@ export default function InsightsPage() {
                 alignItems: "center",
                 gap: "8px",
                 padding: "8px 16px",
-                background: "rgba(255,179,179,0.35)",
-                border: "1px solid rgba(255,143,143,0.4)",
+                background: "rgba(165,233,221,0.35)",
+                border: "1px solid rgba(111,190,178,0.4)",
                 borderRadius: "20px",
                 fontSize: "14px",
                 fontWeight: "600",
-                color: "#2d3319",
+                color: "#1e4a47",
                 marginTop: "16px"
               }}>
                 <span>📄</span>

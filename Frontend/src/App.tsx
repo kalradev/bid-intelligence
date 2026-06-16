@@ -26,20 +26,15 @@ import DocumentViewer from "./pages/DocumentViewer";
 
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { getAuthToken, getAuthUser } from "./utils/authStorage";
 
 export default function App() {
   const location = useLocation();
   const currentPath = location.pathname.replace(/\/$/, "") || "/";
 
   // Force BM/TM to change password before accessing any other page
-  const token = localStorage.getItem("token");
-  let user: { mustChangePassword?: boolean } | null = null;
-  try {
-    const userStr = localStorage.getItem("user");
-    if (userStr) user = JSON.parse(userStr);
-  } catch {
-    // ignore
-  }
+  const token = getAuthToken();
+  const user = getAuthUser<{ mustChangePassword?: boolean }>();
   const mustChangePaths = ["/", "/login", "/change-password"];
   if (token && user?.mustChangePassword && !mustChangePaths.includes(currentPath)) {
     return <Navigate to="/change-password" replace />;

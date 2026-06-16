@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useNavigate, useParams } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 interface TeamMember {
   id: number;
@@ -68,7 +69,7 @@ export default function TeamProjectsPage() {
   }, [navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token || !bidManagerId) return;
 
     const bmId = parseInt(bidManagerId, 10);
@@ -155,8 +156,8 @@ export default function TeamProjectsPage() {
           <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 18, padding: 0, boxShadow: "0 8px 24px rgba(15,23,42,0.08)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
             <div style={{ padding: "24px 28px", borderBottom: "1px solid #e2e8f0", background: "linear-gradient(135deg, rgba(238,242,255,0.6) 0%, rgba(224,231,255,0.4) 100%)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 8 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 14, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(250,243,225,0.8)" }}>
-                  <UserCircle size={26} color="#FF8F8F" />
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: "#E8F8F5", border: "1px solid rgba(111,190,178,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,248,245,0.8)" }}>
+                  <UserCircle size={26} color="#6FBEB2" />
                 </div>
                 <div>
                   <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: "#0f172a", letterSpacing: "-0.02em" }}>
@@ -239,23 +240,23 @@ export default function TeamProjectsPage() {
             gap: 8,
             marginTop: 32,
             padding: "12px 20px",
-            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
-            border: "1px solid rgba(13,148,136,0.4)",
+            background: "linear-gradient(135deg, #34908B 0%, #6FBEB2 100%)",
+            border: "1px solid rgba(52,144,139,0.4)",
             borderRadius: 12,
             cursor: "pointer",
             fontWeight: 600,
             fontSize: 14,
             color: "#fff",
-            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+            boxShadow: "0 4px 12px rgba(52,144,139,0.3)",
             transition: "all 0.2s ease",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(52,144,139,0.4)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(52,144,139,0.3)";
           }}
         >
           <ArrowLeft size={20} /> Back to Dashboard

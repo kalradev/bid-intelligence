@@ -349,6 +349,29 @@ async def list_projects(current_user: dict = Depends(get_current_user), db: Sess
             else:
                 for p in projects:
                     p["assigned_by_full_name"] = None
+        if projects:
+            from models.sqlalchemy_models import ProjectDocument
+            project_ids = [p["id"] for p in projects if p.get("id")]
+            last_doc_by_project: Dict[int, datetime] = {}
+            if project_ids:
+                rows = (
+                    db.query(ProjectDocument.project_id, func.max(ProjectDocument.created_at).label("last_at"))
+                    .filter(ProjectDocument.project_id.in_(project_ids))
+                    .group_by(ProjectDocument.project_id)
+                    .all()
+                )
+                last_doc_by_project = {row.project_id: row.last_at for row in rows if row.last_at}
+            for p in projects:
+                created_at = p.get("created_at")
+                last_doc_at = last_doc_by_project.get(p["id"])
+                if last_doc_at and created_at:
+                    p["last_analysis_at"] = max(last_doc_at, created_at)
+                else:
+                    p["last_analysis_at"] = last_doc_at or created_at
+            projects.sort(
+                key=lambda p: p.get("last_analysis_at") or datetime.min,
+                reverse=True,
+            )
         quota = get_team_quota(current_user, db=db)
         return {"success": True, "projects": projects, "teamQuota": quota}
     except Exception as e:

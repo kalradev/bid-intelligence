@@ -6,7 +6,7 @@ Sure — here is the **full README.md in one copy-paste block** (no explanation 
 # 📌 Bid-Intelligence.ai — RFP Analysis & Bid Management Platform
 
 Bid-Intelligence.ai is an AI-powered platform that automates the extraction, analysis, and cost estimation of **RFP (Request for Proposal) documents**.  
-Users upload bid documents, and the system processes them through AI providers (OpenAI / Gemini) to generate summaries, departmental insights, and bid-management support.
+Users upload bid documents, and the system processes them through the **OpenAI API** to generate summaries, departmental insights, and bid-management support.
 
 ---
 
@@ -42,7 +42,7 @@ See `DEPLOYMENT.md` for complete instructions.
 
 ## 🏛 System Architecture Overview
 
-The platform is built with a **React Frontend**, **Express.js Backend**, and **external AI & cloud services**.
+The platform is built with a **React (Vite) frontend**, a **Python FastAPI backend** (`Backend_py`), and **OpenAI** for LLM features.
 
 ---
 
@@ -74,14 +74,13 @@ User → React SPA → Upload RFP → Fetch AI-generated results → Navigate be
 
 | Component | Purpose |
 |----------|---------|
-| Express API Server | Core backend |
-| uploadMiddleware | Handles PDF / DOCX uploads |
-| rfpRoutes | Routing for RFP operations |
-| rfpController | Business logic for RFP processing |
-| documentExtractor Service | Converts documents to raw text |
-| openaiService | Sends extracted text to OpenAI for AI analysis |
-| errorHandler | Handles backend errors & failed requests |
-| .env | Stores API keys and configuration |
+| FastAPI (`main.py`) | ASGI API server, CORS, static frontend (optional) |
+| `api/rfp_routes.py` | RFP upload, analyze, projects, documents |
+| `services/document_extractor.py` | PDF/DOCX/Excel/image → text |
+| `services/ai_service.py` | Chunking, prompts, OpenAI calls, merge |
+| `services/llm_client.py` | OpenAI / Azure OpenAI client |
+| PostgreSQL (SQLAlchemy) | Users, projects, analysis persistence |
+| `.env` | `OPENAI_API_KEY`, DB, JWT, etc. |
 
 Backend Processing Flow:
 ```
@@ -140,11 +139,11 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 
 ## 🔥 API Endpoints
 
-| Method | Endpoint          | Description                                   |
-| ------ | ----------------- | --------------------------------------------- |
-| POST   | `/api/rfp/upload` | Upload & trigger RFP processing               |
-| GET    | `/api/rfp/:id`    | Fetch AI-generated results for a specific RFP |
-| GET    | `/api/health`     | System health check                           |
+| Method | Endpoint              | Description                          |
+| ------ | --------------------- | ------------------------------------ |
+| POST   | `/api/rfp/analyze`    | Upload files & run RFP analysis      |
+| GET    | `/health`             | Health + DB connectivity             |
+| POST   | `/api/auth/login`     | JWT authentication                   |
 
 ---
 
@@ -164,9 +163,9 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 
 | Layer      | Technologies              |
 | ---------- | ------------------------- |
-| Frontend   | React, Vite, Context API  |
-| Backend    | Node.js, Express.js       |
-| AI         | OpenAI API                |
+| Frontend   | React, Vite, TypeScript   |
+| Backend    | Python, FastAPI, Uvicorn  |
+| AI         | OpenAI API (required)     |
 | Storage    | AWS S3 or local           |
 | Database   | PostgreSQL / MongoDB      |
 | Deployment | GitHub Actions / Heroku / Railway / Render / AWS |
@@ -176,7 +175,7 @@ For complete, up‑to‑date setup instructions (backend, frontend, AI keys, opt
 
 ## 🛡 Error Handling & Resilience
 
-* Centralized Express error handler
+* FastAPI exception handlers and HTTP error responses
 * File type validation and size limits
 * Retry logic for OpenAI rate limits (optional)
 * Environment-based configuration

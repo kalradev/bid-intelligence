@@ -95,7 +95,7 @@ export default function SignupPage() {
         <div className="auth-page-wrapper">
             {/* Women Owned Logo - Top Left */}
             <div style={{ position: 'fixed', top: '8px', left: '32px', zIndex: 100 }}>
-                <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
+                <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
             </div>
             {/* Cache Logo - Top Right */}
             <div style={{ position: 'fixed', top: '8px', right: '32px', zIndex: 100 }}>

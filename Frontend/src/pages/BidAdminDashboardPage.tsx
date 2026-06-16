@@ -1,13 +1,14 @@
-import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Star, UserCircle, Users, UserPlus, X } from "lucide-react";
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, Eye, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Star, UserCircle, Users, UserPlus, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { FixedSizeList as List, type ListChildComponentProps } from "react-window";
 import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
+import { VirtualizedSimpleTable } from "../components/VirtualizedSimpleTable";
 
 interface TeamMember {
   id: number;
@@ -25,6 +26,105 @@ interface BidManagerCard {
   teamProjectsUsed: number;
   teamProjectsLimit: number;
   teamProjectsLeft: number;
+}
+
+const COMPACT_BTN: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
+  height: 32,
+  padding: "0 9px",
+  borderRadius: 6,
+  fontWeight: 600,
+  cursor: "pointer",
+  fontSize: 13,
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+};
+
+const PROJECT_TABLE_COLS = (
+  <>
+    <col style={{ width: "26%" }} />
+    <col style={{ width: "16%" }} />
+    <col style={{ width: "36%" }} />
+    <col style={{ width: "22%" }} />
+  </>
+);
+
+const PROJECT_FILTER_TABLE_COLS = (
+  <>
+    <col style={{ width: "22%" }} />
+    <col style={{ width: "12%" }} />
+    <col style={{ width: "20%" }} />
+    <col style={{ width: "14%" }} />
+    <col style={{ width: "16%" }} />
+    <col style={{ width: "16%" }} />
+  </>
+);
+
+const TM_TABLE_COLS = (
+  <>
+    <col style={{ width: "18%" }} />
+    <col style={{ width: "26%" }} />
+    <col style={{ width: "16%" }} />
+    <col style={{ width: "28%" }} />
+    <col style={{ width: "12%" }} />
+  </>
+);
+
+const BM_TEAM_TABLE_COLS = (
+  <>
+    <col style={{ width: "38%" }} />
+    <col style={{ width: "22%" }} />
+    <col style={{ width: "18%" }} />
+    <col style={{ width: "22%" }} />
+  </>
+);
+
+const MEMBER_PROJECTS_PREVIEW = 4;
+
+const cellEllipsis: CSSProperties = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+const TABLE_TH: CSSProperties = { padding: "13px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 14 };
+const TABLE_TD_NAME: CSSProperties = { padding: "13px 16px", fontWeight: 500, color: "#0f172a", fontSize: 15, ...cellEllipsis };
+const TABLE_TD_MUTED: CSSProperties = { padding: "13px 16px", color: "#64748b", fontSize: 15, ...cellEllipsis };
+const TABLE_TD_ACTIONS: CSSProperties = { padding: "11px 14px", textAlign: "right", verticalAlign: "middle" };
+const TABLE_TD_STRONG: CSSProperties = { padding: "13px 16px", fontWeight: 600, color: "#0f172a", fontSize: 15, ...cellEllipsis };
+const TABLE_TD_MANAGER: CSSProperties = { padding: "13px 16px", fontSize: 15, color: "#475569", ...cellEllipsis };
+const TABLE_TD_TM: CSSProperties = { padding: "13px 16px", fontSize: 15, color: "#64748b", ...cellEllipsis };
+const TABLE_TD_VMIDDLE: CSSProperties = { padding: "13px 16px", verticalAlign: "middle" };
+
+function ProjectActionButtons({
+  onView,
+  onAssign,
+  onArchive,
+  onUpload,
+  showAssign = false,
+}: {
+  onView: () => void;
+  onAssign?: () => void;
+  onArchive: () => void;
+  onUpload: () => void;
+  showAssign?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 5, flexWrap: "nowrap" }}>
+      <button type="button" onClick={onView} title="View result" style={{ ...COMPACT_BTN, width: 32, padding: 0, background: "#6FBEB2", color: "#fff", border: "none" }}>
+        <Eye size={14} />
+      </button>
+      {showAssign && onAssign && (
+        <button type="button" onClick={onAssign} title="Assign managers" style={{ ...COMPACT_BTN, background: "rgba(79,70,229,0.12)", color: "#4f46e5", border: "1px solid rgba(79,70,229,0.25)" }}>
+          <UserPlus size={14} />
+        </button>
+      )}
+      <button type="button" onClick={onArchive} title="Archive project" style={{ ...COMPACT_BTN, background: "#f8fafc", color: "#64748b", border: "1px solid #cbd5e1" }}>
+        <Archive size={14} />
+      </button>
+      <button type="button" onClick={onUpload} title="Upload final bid" style={{ ...COMPACT_BTN, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.25)" }}>
+        <FileUp size={14} /> Upload
+      </button>
+    </div>
+  );
 }
 
 interface ProjectItem {
@@ -57,6 +157,7 @@ export default function BidAdminDashboardPage() {
   const [personalProjectsLoading, setPersonalProjectsLoading] = useState(false);
   const [allProjects, setAllProjects] = useState<ProjectItem[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [expandedMemberProjectIds, setExpandedMemberProjectIds] = useState<Set<number>>(new Set());
   const [archivedProjects, setArchivedProjects] = useState<ProjectItem[]>([]);
   const [archivedProjectsLoading, setArchivedProjectsLoading] = useState(false);
   const [teamSearch, setTeamSearch] = useState("");
@@ -70,8 +171,6 @@ export default function BidAdminDashboardPage() {
   const [expandedBmIdForProjects, setExpandedBmIdForProjects] = useState<number | null>(null);
   const [showGrandTotalProjects, setShowGrandTotalProjects] = useState(false);
   const [expandedBmIdForPeople, setExpandedBmIdForPeople] = useState<number | null>(null);
-  const [isViewTransitioning, setIsViewTransitioning] = useState(false);
-  const [pendingViewMode, setPendingViewMode] = useState<ViewMode | null>(null);
   const [orgQuota, setOrgQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number; baseLimit?: number; purchasedQuota?: number } | null>(null);
   type TeamsViewFilter = "bid_manager" | "technical_manager" | "project" | "admin";
   const [teamsViewFilter, setTeamsViewFilter] = useState<TeamsViewFilter>("bid_manager");
@@ -92,38 +191,11 @@ export default function BidAdminDashboardPage() {
   const [finalBidDescription, setFinalBidDescription] = useState("");
   const [finalBidUploading, setFinalBidUploading] = useState(false);
   const TEAMS_PER_PAGE = 8;
-  const SIDEBAR_WIDTH = 240;
+  const SIDEBAR_WIDTH = 228;
 
   const handleViewChange = (nextMode: ViewMode) => {
-    if (nextMode === viewMode) return;
-    setPendingViewMode(nextMode);
-    setIsViewTransitioning(true);
-    setTimeout(() => {
-      setViewMode(nextMode);
-    }, 350);
+    if (nextMode !== viewMode) setViewMode(nextMode);
   };
-
-  // Hide blur overlay only when the switched-to view's data has finished loading
-  useEffect(() => {
-    if (!isViewTransitioning || pendingViewMode === null) return;
-    if (viewMode !== pendingViewMode) return;
-    const dataReady =
-      pendingViewMode === "teams"
-        ? !loading
-        : pendingViewMode === "personal"
-          ? !personalProjectsLoading
-          : pendingViewMode === "members"
-            ? !membersLoading
-            : pendingViewMode === "archived"
-              ? !archivedProjectsLoading
-              : pendingViewMode === "create_user"
-                ? true
-                : true;
-    if (dataReady) {
-      setIsViewTransitioning(false);
-      setPendingViewMode(null);
-    }
-  }, [isViewTransitioning, pendingViewMode, viewMode, loading, personalProjectsLoading, membersLoading, archivedProjectsLoading]);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
@@ -149,156 +221,91 @@ export default function BidAdminDashboardPage() {
   }, [navigate]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
 
-    const fetchData = async () => {
+    let cancelled = false;
+
+    const loadAllDashboardData = async () => {
       setLoading(true);
+      setPersonalProjectsLoading(true);
+      setMembersLoading(true);
+      setArchivedProjectsLoading(true);
+      setTmAssignmentsLoading(true);
+      setProjectsForFilterLoading(true);
+
+      const headers = { Authorization: `Bearer ${token}` };
+
       try {
-        const dashRes = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-        if (!dashRes.ok) {
+        const [dashRes, projRes, archRes, tmRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers, cache: "no-store" }),
+          fetch(`${API_BASE_URL}/api/rfp/projects`, { headers }),
+          fetch(`${API_BASE_URL}/api/rfp/projects/archived`, { headers }),
+          fetch(`${API_BASE_URL}/api/rfp/team-member-assignments`, { headers }),
+        ]);
+
+        if (cancelled) return;
+
+        if (dashRes.ok) {
+          const dashData = await dashRes.json();
+          if (dashData.success && dashData.bidManagers) setBidManagers(dashData.bidManagers);
+          if (dashData.success && dashData.orgQuota) {
+            const oq = dashData.orgQuota;
+            setOrgQuota({
+              teamProjectsUsed: oq.teamProjectsUsed ?? 0,
+              teamProjectsLimit: oq.teamProjectsLimit ?? 0,
+              teamProjectsLeft: oq.teamProjectsLeft ?? 0,
+              baseLimit: oq.baseLimit,
+              purchasedQuota: oq.purchasedQuota ?? 0,
+            });
+          }
+        } else {
           toast.error("Failed to load dashboard data");
-          return;
         }
-        const dashData = await dashRes.json();
-        if (dashData.success && dashData.bidManagers) {
-          setBidManagers(dashData.bidManagers);
+
+        if (projRes.ok) {
+          const data = await projRes.json();
+          const projects: ProjectItem[] = data.success && Array.isArray(data.projects) ? data.projects : [];
+          setPersonalProjects(projects);
+          setAllProjects(projects);
+          setProjectsForFilter(projects);
         }
-        if (dashData.success && dashData.orgQuota) {
-          const oq = dashData.orgQuota;
-          setOrgQuota({
-            teamProjectsUsed: oq.teamProjectsUsed ?? 0,
-            teamProjectsLimit: oq.teamProjectsLimit ?? 0,
-            teamProjectsLeft: oq.teamProjectsLeft ?? 0,
-            baseLimit: oq.baseLimit,
-            purchasedQuota: oq.purchasedQuota ?? 0,
-          });
+
+        if (archRes.ok) {
+          const data = await archRes.json();
+          setArchivedProjects(data.success && Array.isArray(data.projects) ? data.projects : []);
+        }
+
+        if (tmRes.ok) {
+          const d = await tmRes.json();
+          setTmAssignments(d.success && Array.isArray(d.teamMembers) ? d.teamMembers : []);
+        } else {
+          setTmAssignments([]);
         }
       } catch (e) {
         console.error(e);
-        toast.error("Failed to load dashboard");
+        if (!cancelled) toast.error("Failed to load dashboard");
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setPersonalProjectsLoading(false);
+          setMembersLoading(false);
+          setArchivedProjectsLoading(false);
+          setTmAssignmentsLoading(false);
+          setProjectsForFilterLoading(false);
+        }
       }
     };
 
-    fetchData();
+    loadAllDashboardData();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     setTeamPage(1);
   }, [teamSearch]);
-
-  useEffect(() => {
-    if (currentUserId == null) return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    const fetchPersonalProjects = async () => {
-      setPersonalProjectsLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/rfp/projects`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) {
-          if (viewMode === "personal") toast.error("Failed to load your projects");
-          return;
-        }
-        const data = await res.json();
-        const projects: ProjectItem[] = data.success && Array.isArray(data.projects) ? data.projects : [];
-        // Full list fetched; Admin projects view filters to projects owned by current user (user_id === currentUserId)
-        setPersonalProjects(projects);
-      } catch (e) {
-        console.error(e);
-        if (viewMode === "personal") toast.error("Failed to load your projects");
-      } finally {
-        setPersonalProjectsLoading(false);
-      }
-    };
-
-    fetchPersonalProjects();
-  }, [viewMode, currentUserId]);
-
-  useEffect(() => {
-    if (viewMode !== "members") return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    const fetchAllProjects = async () => {
-      setMembersLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/rfp/projects`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) {
-          toast.error("Failed to load projects");
-          return;
-        }
-        const data = await res.json();
-        const projects: ProjectItem[] = data.success && Array.isArray(data.projects) ? data.projects : [];
-        setAllProjects(projects);
-      } catch (e) {
-        console.error(e);
-        toast.error("Failed to load projects");
-      } finally {
-        setMembersLoading(false);
-      }
-    };
-
-    fetchAllProjects();
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (viewMode !== "archived") return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    const fetchArchived = async () => {
-      setArchivedProjectsLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/rfp/projects/archived`, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) {
-          toast.error("Failed to load archived projects");
-          return;
-        }
-        const data = await res.json();
-        const projects: ProjectItem[] = data.success && Array.isArray(data.projects) ? data.projects : [];
-        setArchivedProjects(projects);
-      } catch (e) {
-        console.error(e);
-        toast.error("Failed to load archived projects");
-      } finally {
-        setArchivedProjectsLoading(false);
-      }
-    };
-    fetchArchived();
-  }, [viewMode]);
-
-  // Preload TM and Project data as soon as user is on Teams view so toggling doesn't show loading
-  useEffect(() => {
-    if (viewMode !== "teams") return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    setTmAssignmentsLoading(true);
-    fetch(`${API_BASE_URL}/api/rfp/team-member-assignments`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && Array.isArray(d.teamMembers)) setTmAssignments(d.teamMembers);
-        else setTmAssignments([]);
-      })
-      .catch(() => setTmAssignments([]))
-      .finally(() => setTmAssignmentsLoading(false));
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (viewMode !== "teams") return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
-    setProjectsForFilterLoading(true);
-    fetch(`${API_BASE_URL}/api/rfp/projects`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success && Array.isArray(d.projects)) setProjectsForFilter(d.projects);
-        else setProjectsForFilter([]);
-      })
-      .catch(() => setProjectsForFilter([]))
-      .finally(() => setProjectsForFilterLoading(false));
-  }, [viewMode]);
 
   const flattenedMembers: FlattenedMember[] = bidManagers.flatMap((bm) => {
     const bmEntry: FlattenedMember = {
@@ -338,7 +345,7 @@ export default function BidAdminDashboardPage() {
 
   const submitFinalBidUpload = async () => {
     if (!finalBidModal || !finalBidFile) return;
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) {
       toast.error("Please log in again");
       return;
@@ -372,7 +379,7 @@ export default function BidAdminDashboardPage() {
   const openAssignModalForAdmin = async (projectName: string) => {
     setAssignModalProject(projectName);
     setAssignModalAssignedIds([]);
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     try {
       const [assignRes, usersRes] = await Promise.all([
@@ -397,7 +404,7 @@ export default function BidAdminDashboardPage() {
     if (!assignModalProject) return;
     setAssignModalSaving(true);
     try {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       if (!token) return;
       const userIds = assignModalAssignedIds.map((id) => Number(id));
       const res = await fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(assignModalProject)}`, {
@@ -420,7 +427,7 @@ export default function BidAdminDashboardPage() {
   };
 
   const handleArchive = async (projectId: number) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/rfp/projects/${projectId}/archive`, {
@@ -459,7 +466,7 @@ export default function BidAdminDashboardPage() {
   };
 
   const handleUnarchive = async (projectId: number) => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     try {
       const res = await fetch(`${API_BASE_URL}/api/rfp/projects/${projectId}/unarchive`, {
@@ -509,6 +516,7 @@ export default function BidAdminDashboardPage() {
         const projects: ProjectItem[] = projData.success && Array.isArray(projData.projects) ? projData.projects : [];
         setPersonalProjects(projects);
         setAllProjects(projects);
+        setProjectsForFilter(projects);
       }
     } catch (e) {
       console.error(e);
@@ -517,7 +525,7 @@ export default function BidAdminDashboardPage() {
   };
 
   const refreshDashboard = useCallback(async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     try {
       const r = await fetch(`${API_BASE_URL}/api/auth/admin-dashboard`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
@@ -550,7 +558,7 @@ export default function BidAdminDashboardPage() {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     if (!createUserForm.fullName.trim() || !createUserForm.email.trim() || !createUserForm.password.trim()) {
       toast.error("Please fill all fields");
@@ -619,18 +627,19 @@ export default function BidAdminDashboardPage() {
   const navButtonBase = {
     display: "flex",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     width: "100%",
-    padding: "12px 16px",
+    padding: "10px 14px",
     justifyContent: "flex-start",
     border: "none",
-    borderRadius: 10,
+    borderRadius: 9,
     cursor: "pointer",
     fontWeight: 600,
     fontSize: 14,
     background: "transparent",
-    color: "#2d3319",
+    color: "#1e4a47",
     transition: "all 0.2s",
+    outline: "none",
   } as const;
 
   const NAVBAR_HEIGHT = 88;
@@ -639,6 +648,7 @@ export default function BidAdminDashboardPage() {
     <div className="universal-page-wrapper" style={{ minHeight: "100vh" }}>
       {/* Top header - CoachPro style: Welcome left, Search/Bell/User right */}
       <header
+        className="dashboard-top-header"
         style={{
           position: "fixed",
           top: 0,
@@ -646,59 +656,23 @@ export default function BidAdminDashboardPage() {
           right: 0,
           height: NAVBAR_HEIGHT,
           zIndex: 120,
-          background: "rgba(255,255,255,0.45)",
+          background: "rgba(165, 233, 221, 0.42)",
           backdropFilter: "blur(24px) saturate(180%)",
           WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
-          borderBottom: "1px solid rgba(255,255,255,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          boxShadow: "0 8px 32px rgba(52, 144, 139, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.55)",
+          borderBottom: "1px solid rgba(111, 190, 178, 0.4)",
           padding: "0 24px 0 20px"
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
+        <div className="dashboard-top-header__start">
+          <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)", pointerEvents: "none", display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="dashboard-top-header__brand">
           <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-          <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+          <span className="dashboard-top-header__title">Bid Intelligence</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            type="button"
-            className="header-profile-btn"
-            onClick={() => navigate("/account")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "8px 16px 8px 8px",
-              background: "rgba(255,179,179,0.5)",
-              border: "1px solid rgba(255,143,143,0.4)",
-              borderRadius: 14,
-              cursor: "pointer",
-              outline: "none",
-              transition: "all 0.3s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#FFB3B3";
-              e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(255,143,143,0.25)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
-              e.currentTarget.style.transform = "translateY(0)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
-            title="Account & security – Profile, two-step verification, change password"
-          >
-            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(255,143,143,0.3)" }}>
-              {(userDisplayName || "A").charAt(0).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
-          </button>
-          <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
+        <div className="dashboard-top-header__end">
+          <img src={cacheLogo} alt="Cache" className="header-cache-logo" />
         </div>
       </header>
 
@@ -711,17 +685,17 @@ export default function BidAdminDashboardPage() {
           bottom: 0,
           width: SIDEBAR_WIDTH,
           zIndex: 110,
-          background: "rgba(234,239,239,0.95)",
+          background: "rgba(232,247,244,0.95)",
           backdropFilter: "blur(20px)",
-          borderRight: "1px solid rgba(255,143,143,0.2)",
+          borderRight: "1px solid rgba(111,190,178,0.2)",
           boxShadow: "4px 0 24px rgba(0,0,0,0.04)",
           display: "flex",
           flexDirection: "column",
           transition: "width 0.25s ease",
         }}
       >
-        <nav style={{ flex: 1, padding: "20px 10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+        <nav style={{ flex: 1, padding: "16px 10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#34908B", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Views
           </div>
           <button
@@ -730,15 +704,15 @@ export default function BidAdminDashboardPage() {
             onClick={() => handleViewChange("teams")}
             style={{
               ...navButtonBase,
-              background: viewMode === "teams" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "teams" ? "#fff" : "#2d3319",
+              background: viewMode === "teams" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "teams" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "teams" ? 700 : 600,
-              boxShadow: viewMode === "teams" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "teams" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "teams" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "teams" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Dashboard"
           >
-            <LayoutDashboard size={20} style={{ flexShrink: 0 }} />
+            <LayoutDashboard size={18} style={{ flexShrink: 0 }} />
             <span>Dashboard</span>
           </button>
           <button
@@ -747,15 +721,15 @@ export default function BidAdminDashboardPage() {
             onClick={() => handleViewChange("personal")}
             style={{
               ...navButtonBase,
-              background: viewMode === "personal" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "personal" ? "#fff" : "#2d3319",
+              background: viewMode === "personal" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "personal" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "personal" ? 700 : 600,
-              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "personal" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "personal" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "personal" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Admin projects"
           >
-            <FolderOpen size={20} style={{ flexShrink: 0 }} />
+            <FolderOpen size={18} style={{ flexShrink: 0 }} />
             <span>Admin projects</span>
           </button>
           <button
@@ -764,15 +738,15 @@ export default function BidAdminDashboardPage() {
             onClick={() => handleViewChange("members")}
             style={{
               ...navButtonBase,
-              background: viewMode === "members" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "members" ? "#fff" : "#2d3319",
+              background: viewMode === "members" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "members" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "members" ? 700 : 600,
-              boxShadow: viewMode === "members" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "members" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "members" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "members" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="All members and their projects"
           >
-            <UserCircle size={20} style={{ flexShrink: 0 }} />
+            <UserCircle size={18} style={{ flexShrink: 0 }} />
             <span>All members</span>
           </button>
           <button
@@ -781,19 +755,19 @@ export default function BidAdminDashboardPage() {
             onClick={() => handleViewChange("archived")}
             style={{
               ...navButtonBase,
-              background: viewMode === "archived" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "archived" ? "#fff" : "#2d3319",
+              background: viewMode === "archived" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "archived" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "archived" ? 700 : 600,
-              boxShadow: viewMode === "archived" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "archived" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "archived" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "archived" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Archived projects"
           >
-            <Archive size={20} style={{ flexShrink: 0 }} />
+            <Archive size={18} style={{ flexShrink: 0 }} />
             <span>Archived</span>
           </button>
-          <div style={{ height: 2, background: "linear-gradient(90deg, transparent 0%, rgba(255,143,143,0.4) 50%, transparent 100%)", margin: "12px 0" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#5a6340", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
+          <div style={{ height: 1, background: "linear-gradient(90deg, transparent 0%, rgba(111,190,178,0.4) 50%, transparent 100%)", margin: "10px 0" }} />
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#34908B", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
           <button
@@ -802,15 +776,15 @@ export default function BidAdminDashboardPage() {
             onClick={() => handleViewChange("create_user")}
             style={{
               ...navButtonBase,
-              background: viewMode === "create_user" ? "#FF8F8F" : "rgba(255,179,179,0.4)",
-              color: viewMode === "create_user" ? "#fff" : "#2d3319",
+              background: viewMode === "create_user" ? "#6FBEB2" : "rgba(165,233,221,0.4)",
+              color: viewMode === "create_user" ? "#fff" : "#1e4a47",
               fontWeight: viewMode === "create_user" ? 700 : 600,
-              boxShadow: viewMode === "create_user" ? "0 2px 8px rgba(255,143,143,0.3)" : "none",
-              border: viewMode === "create_user" ? "none" : "1px solid rgba(255,143,143,0.3)",
+              boxShadow: viewMode === "create_user" ? "0 2px 8px rgba(111,190,178,0.3)" : "none",
+              border: viewMode === "create_user" ? "none" : "1px solid rgba(111,190,178,0.3)",
             }}
             title="Create Bid Manager or Technical Manager"
           >
-            <UserPlus size={20} style={{ flexShrink: 0 }} />
+            <UserPlus size={18} style={{ flexShrink: 0 }} />
             <span>Create User</span>
           </button>
           <button
@@ -819,13 +793,13 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/upload")}
             style={{
               ...navButtonBase,
-              background: "rgba(255,179,179,0.4)",
-              color: "#2d3319",
-              border: "1px solid rgba(255,143,143,0.3)",
+              background: "rgba(165,233,221,0.4)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.3)",
             }}
             title="Upload & Analyze"
           >
-            <FileUp size={20} style={{ flexShrink: 0 }} />
+            <FileUp size={18} style={{ flexShrink: 0 }} />
             <span>Upload & Analyze</span>
           </button>
           <button
@@ -834,13 +808,13 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/team")}
             style={{
               ...navButtonBase,
-              background: "rgba(255,179,179,0.4)",
-              color: "#2d3319",
-              border: "1px solid rgba(255,143,143,0.3)",
+              background: "rgba(165,233,221,0.4)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.3)",
             }}
             title="Manage Teams"
           >
-            <Users size={20} style={{ flexShrink: 0 }} />
+            <Users size={18} style={{ flexShrink: 0 }} />
             <span>Manage Teams</span>
           </button>
           <button
@@ -849,27 +823,44 @@ export default function BidAdminDashboardPage() {
             onClick={() => navigate("/team-quota")}
             style={{
               ...navButtonBase,
-              background: "rgba(255,179,179,0.4)",
-              color: "#2d3319",
-              border: "1px solid rgba(255,143,143,0.3)",
+              background: "rgba(165,233,221,0.4)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.3)",
             }}
             title="View total quota usage"
           >
-            <FolderKanban size={20} style={{ flexShrink: 0 }} />
+            <FolderKanban size={18} style={{ flexShrink: 0 }} />
             <span>Team Quota</span>
           </button>
         </nav>
-        <div style={{ padding: "12px 10px", borderTop: "1px solid rgba(255,143,143,0.2)", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "10px 10px", borderTop: "1px solid rgba(111,190,178,0.2)", display: "flex", flexDirection: "column", gap: 6 }}>
+          <button
+            type="button"
+            className="sidebar-nav-toggle"
+            onClick={() => navigate("/account")}
+            style={{
+              ...navButtonBase,
+              background: "rgba(165,233,221,0.4)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.3)",
+            }}
+            title="Account & security – Profile, two-step verification, change password"
+          >
+            <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#6FBEB2", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {(userDisplayName || "A").charAt(0).toUpperCase()}
+            </div>
+            <span>{userDisplayName}</span>
+          </button>
           <button
             type="button"
             onClick={handleLogout}
             style={{
               ...navButtonBase,
-              color: "#6b5344",
+              color: "#2c6b66",
             }}
             title="Logout"
           >
-            <LogOut size={20} style={{ flexShrink: 0 }} />
+            <LogOut size={18} style={{ flexShrink: 0 }} />
             <span>Logout</span>
           </button>
         </div>
@@ -879,37 +870,37 @@ export default function BidAdminDashboardPage() {
         <div className="dashboard-bg-base" style={{
           position: "absolute",
           inset: 0,
-          background: "linear-gradient(160deg, rgba(250,243,225,0.85) 0%, rgba(234,239,239,0.8) 50%, rgba(255,179,179,0.4) 100%)",
+          background: "linear-gradient(160deg, rgba(232,247,244,0.85) 0%, rgba(232,247,244,0.8) 50%, rgba(165,233,221,0.4) 100%)",
           animation: "dashboardBgPulse 8s ease-in-out infinite"
         }} />
         <div className="dashboard-bg-move" style={{
           position: "absolute",
           inset: -100,
-          background: "linear-gradient(120deg, transparent 0%, rgba(255,179,179,0.2) 25%, rgba(255,143,143,0.15) 50%, rgba(234,239,239,0.2) 75%, transparent 100%)",
+          background: "linear-gradient(120deg, transparent 0%, rgba(165,233,221,0.2) 25%, rgba(111,190,178,0.15) 50%, rgba(232,247,244,0.2) 75%, transparent 100%)",
           backgroundSize: "200% 200%",
           animation: "dashboardBgMove 15s linear infinite"
         }} />
         <div className="dashboard-bg-shimmer" style={{
           position: "absolute",
           inset: -80,
-          background: "radial-gradient(ellipse 70% 60% at 30% 30%, rgba(255,179,179,0.28) 0%, transparent 55%), radial-gradient(ellipse 50% 70% at 70% 70%, rgba(255,143,143,0.2) 0%, transparent 55%)",
+          background: "radial-gradient(ellipse 70% 60% at 30% 30%, rgba(165,233,221,0.28) 0%, transparent 55%), radial-gradient(ellipse 50% 70% at 70% 70%, rgba(111,190,178,0.2) 0%, transparent 55%)",
           animation: "dashboardBgShimmer 14s ease-in-out infinite"
         }} />
         <div className="background-shape dashboard-float-1" style={{
           top: "8%", left: "12%", width: 380, height: 380,
-          background: "rgba(255,179,179,0.45)", borderRadius: "50%", filter: "blur(50px)",
+          background: "rgba(165,233,221,0.45)", borderRadius: "50%", filter: "blur(50px)",
         }} />
         <div className="background-shape dashboard-float-2" style={{
           top: "55%", right: "5%", width: 320, height: 320,
-          background: "rgba(255,143,143,0.35)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(45px)",
+          background: "rgba(111,190,178,0.35)", borderRadius: "30% 70% 70% 30% / 30% 30% 70% 70%", filter: "blur(45px)",
         }} />
         <div className="background-shape dashboard-float-3" style={{
           bottom: "10%", left: "20%", width: 280, height: 280,
-          background: "rgba(234,239,239,0.6)", borderRadius: "50%", filter: "blur(40px)",
+          background: "rgba(232,247,244,0.6)", borderRadius: "50%", filter: "blur(40px)",
         }} />
         <div className="background-shape dashboard-float-4" style={{
           top: "30%", right: "20%", width: 220, height: 220,
-          background: "rgba(13,148,136,0.12)", borderRadius: "50%", filter: "blur(38px)",
+          background: "rgba(52,144,139,0.12)", borderRadius: "50%", filter: "blur(38px)",
         }} />
         <div style={{
           position: "absolute", inset: 0,
@@ -918,11 +909,7 @@ export default function BidAdminDashboardPage() {
         }} />
       </div>
 
-      {(isViewTransitioning ||
-          (viewMode === "teams" && loading) ||
-          (viewMode === "personal" && personalProjectsLoading) ||
-          (viewMode === "members" && membersLoading) ||
-          (viewMode === "archived" && archivedProjectsLoading)) && (
+      {(loading && bidManagers.length === 0) && (
         <div
           style={{
             position: "fixed",
@@ -931,7 +918,7 @@ export default function BidAdminDashboardPage() {
             right: 0,
             bottom: 0,
             zIndex: 50,
-            background: "rgba(250, 243, 225, 0.6)",
+            background: "rgba(232, 247, 244, 0.6)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             display: "flex",
@@ -943,8 +930,8 @@ export default function BidAdminDashboardPage() {
           aria-live="polite"
           aria-busy="true"
         >
-          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite" }} />
-          <span style={{ fontSize: 15, fontWeight: 600, color: "#5a6340" }}>Loading…</span>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: 15, fontWeight: 600, color: "#34908B" }}>Loading…</span>
         </div>
       )}
 
@@ -984,13 +971,13 @@ export default function BidAdminDashboardPage() {
                   alignItems: "center",
                   gap: 10,
                   padding: "12px 20px",
-                  background: isQuotaLow ? "rgba(180,120,100,0.2)" : "rgba(255,143,143,0.35)",
-                  border: isQuotaLow ? "1px solid rgba(150,90,70,0.3)" : "1px solid rgba(255,143,143,0.5)",
+                  background: isQuotaLow ? "rgba(180,120,100,0.2)" : "rgba(111,190,178,0.35)",
+                  border: isQuotaLow ? "1px solid rgba(150,90,70,0.3)" : "1px solid rgba(111,190,178,0.5)",
                   borderRadius: 12,
                   cursor: "pointer",
                   fontWeight: 700,
                   fontSize: 15,
-                  color: isQuotaLow ? "#6b5344" : "#2d3319",
+                  color: isQuotaLow ? "#2c6b66" : "#1e4a47",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                   transition: "all 0.2s",
                   outline: "none",
@@ -1013,18 +1000,18 @@ export default function BidAdminDashboardPage() {
             )}
           </div>
 
-          {viewMode === "teams" && loading ? null : viewMode === "create_user" ? (
+          {viewMode === "teams" && loading && bidManagers.length === 0 ? null : viewMode === "create_user" ? (
             <section style={{ maxWidth: 520, margin: "0 auto" }}>
               <div style={{
                 background: "#fff",
                 borderRadius: 20,
-                border: "1px solid #EAEFEF",
+                border: "1px solid #D4F0EB",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.06)",
                 overflow: "hidden",
                 padding: 28,
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-                  <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, rgba(255,143,143,0.25) 0%, rgba(234,239,239,0.8) 100%)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,143,143,0.4)" }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: "linear-gradient(135deg, rgba(111,190,178,0.25) 0%, rgba(232,247,244,0.8) 100%)", display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(111,190,178,0.4)" }}>
                     <UserPlus size={26} color="#c73e3e" />
                   </div>
                   <div>
@@ -1042,8 +1029,8 @@ export default function BidAdminDashboardPage() {
                         flex: 1,
                         padding: "12px 16px",
                         borderRadius: 12,
-                        border: "2px solid " + (createUserType === type ? "#FF8F8F" : "#EAEFEF"),
-                        background: createUserType === type ? "rgba(255,143,143,0.15)" : "#f8fafc",
+                        border: "2px solid " + (createUserType === type ? "#6FBEB2" : "#D4F0EB"),
+                        background: createUserType === type ? "rgba(111,190,178,0.15)" : "#f8fafc",
                         color: createUserType === type ? "#c73e3e" : "#64748b",
                         fontWeight: 700,
                         fontSize: 14,
@@ -1065,7 +1052,7 @@ export default function BidAdminDashboardPage() {
                       onChange={(e) => setCreateUserForm((f) => ({ ...f, fullName: e.target.value }))}
                       required
                       autoComplete="off"
-                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #EAEFEF", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
+                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #D4F0EB", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
                     />
                   </div>
                   <div>
@@ -1077,7 +1064,7 @@ export default function BidAdminDashboardPage() {
                       onChange={(e) => setCreateUserForm((f) => ({ ...f, email: e.target.value }))}
                       required
                       autoComplete="off"
-                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #EAEFEF", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
+                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #D4F0EB", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
                     />
                   </div>
                   <div>
@@ -1090,7 +1077,7 @@ export default function BidAdminDashboardPage() {
                       required
                       minLength={6}
                       autoComplete="new-password"
-                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #EAEFEF", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
+                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #D4F0EB", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
                     />
                   </div>
                   <button
@@ -1098,7 +1085,7 @@ export default function BidAdminDashboardPage() {
                     disabled={createUserLoading}
                     style={{
                       padding: "14px 24px",
-                      background: "linear-gradient(135deg, #FF8F8F 0%, #E87878 100%)",
+                      background: "linear-gradient(135deg, #6FBEB2 0%, #34908B 100%)",
                       color: "#fff",
                       border: "none",
                       borderRadius: 12,
@@ -1106,7 +1093,7 @@ export default function BidAdminDashboardPage() {
                       fontSize: 15,
                       cursor: createUserLoading ? "not-allowed" : "pointer",
                       opacity: createUserLoading ? 0.8 : 1,
-                      boxShadow: "0 4px 14px rgba(255,143,143,0.35)",
+                      boxShadow: "0 4px 14px rgba(111,190,178,0.35)",
                       transition: "all 0.2s",
                     }}
                   >
@@ -1118,59 +1105,60 @@ export default function BidAdminDashboardPage() {
           ) : viewMode === "personal" ? (
             <section>
               <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #5a6340" }}>
-                  <FolderOpen size={18} color="#5a6340" />
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
+                  <FolderOpen size={18} color="#34908B" />
                 </span>
                 Admin projects ({adminProjects.length})
               </h2>
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                 {personalProjectsLoading ? null : adminProjects.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.
                       </div>
                     ) : (
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                        <colgroup>{PROJECT_TABLE_COLS}</colgroup>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
-                            <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
-                            <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>Action</th>
-                            <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>Upload final bid</th>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                            <th style={{ ...TABLE_TH }}>Project</th>
+                            <th style={{ ...TABLE_TH }}>Tender ID</th>
+                            <th style={{ ...TABLE_TH }}>Client</th>
+                            <th style={{ ...TABLE_TH, textAlign: "right", whiteSpace: "nowrap" }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
                           {adminProjects.map((p) => (
-                            <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                              <td style={{ padding: "14px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
-                              <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
-                              <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
-                              <td style={{ padding: "14px 16px", textAlign: "right", verticalAlign: "middle" }}>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
-                                  <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, boxShadow: "0 2px 8px rgba(255,143,143,0.3)", whiteSpace: "nowrap" }}>View result</button>
-                                  <button type="button" onClick={() => openAssignModalForAdmin(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "rgba(79,70,229,0.12)", color: "#4f46e5", border: "1px solid rgba(79,70,229,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Assign Bid Managers or Technical Managers">Assign</button>
-                                  <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Archive project"><Archive size={14} /> Archive</button>
-                                </div>
-                              </td>
-                              <td style={{ padding: "14px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }} title="Upload final bid"><FileUp size={14} /> Upload final bid</button>
+                            <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                              <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
+                              <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
+                              <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
+                              <td style={{ ...TABLE_TD_ACTIONS }}>
+                                <ProjectActionButtons
+                                  onView={() => handleViewResult(p.project_name)}
+                                  onAssign={() => openAssignModalForAdmin(p.project_name)}
+                                  onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                  onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                  showAssign
+                                />
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     )}
                   </div>
                 </section>
           ) : viewMode === "members" ? (
             <section>
               <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(255,143,143,0.4)" }}>
-                  <UserCircle size={18} color="#FF8F8F" />
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#E8F8F5", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid rgba(111,190,178,0.4)" }}>
+                  <UserCircle size={18} color="#6FBEB2" />
                 </span>
                 All members ({allMembersList.length})
               </h2>
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                 {membersLoading ? null : allMembersList.length === 0 ? (
                       <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                         No Bid Managers or Technical Managers yet. Create them from this dashboard (Add Bid Manager).
@@ -1178,7 +1166,7 @@ export default function BidAdminDashboardPage() {
                     ) : (
                       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Member</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: 140 }}>Role</th>
                             <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: 160 }}>Team</th>
@@ -1189,7 +1177,7 @@ export default function BidAdminDashboardPage() {
                           {allMembersList.map((m) => {
                             const memberProjects = allProjects.filter((p) => p.user_id === m.id);
                             return (
-                              <tr key={m.role === "Bid Admin" ? `admin-${m.id}` : m.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                              <tr key={m.role === "Bid Admin" ? `admin-${m.id}` : m.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
                                 <td style={{ padding: "14px 16px" }}>
                                   <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{m.fullName}</div>
                                   <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
@@ -1204,9 +1192,9 @@ export default function BidAdminDashboardPage() {
                                       borderRadius: 8,
                                       fontSize: 12,
                                       fontWeight: 600,
-                                      background: m.role === "Bid Admin" ? "rgba(94, 114, 52, 0.2)" : m.role === "Bid Manager" ? "rgba(255,143,143,0.2)" : "rgba(255,179,179,0.3)",
-                                      color: m.role === "Bid Admin" ? "#2d3319" : "#2d3319",
-                                      border: m.role === "Bid Admin" ? "1px solid rgba(94, 114, 52, 0.5)" : m.role === "Bid Manager" ? "1px solid rgba(255,143,143,0.4)" : "1px solid rgba(255,179,179,0.5)",
+                                      background: m.role === "Bid Admin" ? "rgba(52, 144, 139, 0.2)" : m.role === "Bid Manager" ? "rgba(111,190,178,0.2)" : "rgba(165,233,221,0.3)",
+                                      color: m.role === "Bid Admin" ? "#1e4a47" : "#1e4a47",
+                                      border: m.role === "Bid Admin" ? "1px solid rgba(52, 144, 139, 0.5)" : m.role === "Bid Manager" ? "1px solid rgba(111,190,178,0.4)" : "1px solid rgba(165,233,221,0.5)",
                                     }}
                                   >
                                     {m.role}
@@ -1216,40 +1204,92 @@ export default function BidAdminDashboardPage() {
                                 <td style={{ padding: "14px 16px" }}>
                                   {memberProjects.length === 0 ? (
                                     <span style={{ fontSize: 13, color: "#94a3b8" }}>No projects</span>
-                                  ) : (
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                                      {memberProjects.map((p) => (
-                                        <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                                  ) : (() => {
+                                    const isExpanded = expandedMemberProjectIds.has(m.id);
+                                    const visibleProjects = isExpanded
+                                      ? memberProjects
+                                      : memberProjects.slice(0, MEMBER_PROJECTS_PREVIEW);
+                                    const hiddenCount = memberProjects.length - MEMBER_PROJECTS_PREVIEW;
+                                    const projectBtnStyle: CSSProperties = {
+                                      padding: "6px 12px",
+                                      background: "#6FBEB2",
+                                      color: "#fff",
+                                      border: "none",
+                                      borderRadius: 6,
+                                      fontWeight: 600,
+                                      fontSize: 12,
+                                      cursor: "pointer",
+                                      boxShadow: "0 2px 8px rgba(111,190,178,0.25)",
+                                      transition: "transform 0.2s, box-shadow 0.2s",
+                                      maxWidth: 180,
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
+                                    };
+                                    return (
+                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                                        {visibleProjects.map((p) => (
                                           <button
+                                            key={p.id}
                                             type="button"
                                             onClick={() => handleViewResult(p.project_name)}
-                                            style={{
-                                              padding: "6px 12px",
-                                              background: "#FF8F8F",
-                                              color: "#fff",
-                                              border: "none",
-                                              borderRadius: 6,
-                                              fontWeight: 600,
-                                              fontSize: 12,
-                                              cursor: "pointer",
-                                              boxShadow: "0 2px 8px rgba(255,143,143,0.25)",
-                                              transition: "transform 0.2s, box-shadow 0.2s",
-                                            }}
+                                            title={p.project_name}
+                                            style={projectBtnStyle}
                                             onMouseEnter={(e) => {
                                               e.currentTarget.style.transform = "translateY(-1px)";
-                                              e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.35)";
+                                              e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.35)";
                                             }}
                                             onMouseLeave={(e) => {
                                               e.currentTarget.style.transform = "translateY(0)";
-                                              e.currentTarget.style.boxShadow = "0 2px 8px rgba(255,143,143,0.25)";
+                                              e.currentTarget.style.boxShadow = "0 2px 8px rgba(111,190,178,0.25)";
                                             }}
                                           >
                                             {p.project_name}
                                           </button>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                                        ))}
+                                        {hiddenCount > 0 && !isExpanded && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedMemberProjectIds((prev) => new Set(prev).add(m.id))}
+                                            style={{
+                                              padding: "6px 12px",
+                                              background: "rgba(165,233,221,0.35)",
+                                              color: "#1e4a47",
+                                              border: "1px solid rgba(111,190,178,0.45)",
+                                              borderRadius: 6,
+                                              fontWeight: 700,
+                                              fontSize: 12,
+                                              cursor: "pointer",
+                                            }}
+                                          >
+                                            +{hiddenCount} more
+                                          </button>
+                                        )}
+                                        {isExpanded && memberProjects.length > MEMBER_PROJECTS_PREVIEW && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setExpandedMemberProjectIds((prev) => {
+                                              const next = new Set(prev);
+                                              next.delete(m.id);
+                                              return next;
+                                            })}
+                                            style={{
+                                              padding: "6px 12px",
+                                              background: "#fff",
+                                              color: "#34908B",
+                                              border: "1px solid #D4F0EB",
+                                              borderRadius: 6,
+                                              fontWeight: 600,
+                                              fontSize: 12,
+                                              cursor: "pointer",
+                                            }}
+                                          >
+                                            Show less
+                                          </button>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               </tr>
                             );
@@ -1262,12 +1302,12 @@ export default function BidAdminDashboardPage() {
           ) : viewMode === "archived" ? (
             <section>
               <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#EAEFEF", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #5a6340" }}>
-                  <Archive size={18} color="#5a6340" />
+                <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
+                  <Archive size={18} color="#34908B" />
                 </span>
                 Archived projects ({archivedProjects.length})
               </h2>
-              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
+              <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden" }}>
                 {archivedProjectsLoading ? null : archivedProjects.length === 0 ? (
                   <div style={{ padding: 48, textAlign: "center", color: "#64748b", fontSize: 15 }}>
                     No archived projects. Archive projects from Dashboard, Admin projects, or All members.
@@ -1275,7 +1315,7 @@ export default function BidAdminDashboardPage() {
                 ) : (
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
-                      <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
+                      <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
                         <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
                         <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
                         <th style={{ padding: "14px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
@@ -1285,7 +1325,7 @@ export default function BidAdminDashboardPage() {
                     </thead>
                     <tbody>
                       {archivedProjects.map((p) => (
-                        <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
+                        <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
                           <td style={{ padding: "14px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
                           <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
                           <td style={{ padding: "14px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
@@ -1301,7 +1341,7 @@ export default function BidAdminDashboardPage() {
                                 alignItems: "center",
                                 gap: 6,
                                 padding: "8px 16px",
-                                background: "#0d9488",
+                                background: "#34908B",
                                 color: "#fff",
                                 border: "none",
                                 borderRadius: 8,
@@ -1331,10 +1371,10 @@ export default function BidAdminDashboardPage() {
                     onClick={() => setActiveToggle(null)}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === null ? "rgba(255,143,143,0.15)" : "#fff",
+                      background: activeToggle === null ? "rgba(111,190,178,0.15)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === null ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
-                      boxShadow: activeToggle === null ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === null ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
+                      boxShadow: activeToggle === null ? "0 4px 16px rgba(111,190,178,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -1347,7 +1387,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== null) {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -1357,7 +1397,7 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(145deg, #FF8F8F 0%, #E87878 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(232,120,120,0.4)" }}>
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "linear-gradient(145deg, #6FBEB2 0%, #34908B 100%)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(52,144,139,0.4)" }}>
                       <Users size={26} color="#fff" />
                     </div>
                     <div>
@@ -1380,10 +1420,10 @@ export default function BidAdminDashboardPage() {
                     }}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "projects" ? "rgba(255,143,143,0.15)" : "#fff",
+                      background: activeToggle === "projects" ? "rgba(111,190,178,0.15)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "projects" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
-                      boxShadow: activeToggle === "projects" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "projects" ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
+                      boxShadow: activeToggle === "projects" ? "0 4px 16px rgba(111,190,178,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -1396,7 +1436,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "projects") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -1406,8 +1446,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "2px solid #E87878", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,120,120,0.15)" }}>
-                      <FolderKanban size={26} color="#E87878" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#E8F8F5", border: "2px solid #34908B", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(52,144,139,0.15)" }}>
+                      <FolderKanban size={26} color="#34908B" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalProjectsWithAdmin}</div>
@@ -1419,10 +1459,10 @@ export default function BidAdminDashboardPage() {
                     onClick={() => setActiveToggle(activeToggle === "people" ? null : "people")}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "people" ? "rgba(255,179,179,0.2)" : "#fff",
+                      background: activeToggle === "people" ? "rgba(165,233,221,0.2)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "people" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
-                      boxShadow: activeToggle === "people" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "people" ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
+                      boxShadow: activeToggle === "people" ? "0 4px 16px rgba(111,190,178,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -1435,7 +1475,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "people") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -1445,8 +1485,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(250,243,225,0.8)" }}>
-                      <UserCircle size={26} color="#FF8F8F" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#E8F8F5", border: "1px solid rgba(111,190,178,0.4)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(232,247,244,0.8)" }}>
+                      <UserCircle size={26} color="#6FBEB2" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{totalPeople}</div>
@@ -1458,10 +1498,10 @@ export default function BidAdminDashboardPage() {
                     onClick={() => setActiveToggle(activeToggle === "personal" ? null : "personal")}
                     style={{
                       padding: "22px 20px",
-                      background: activeToggle === "personal" ? "rgba(255,179,179,0.2)" : "#fff",
+                      background: activeToggle === "personal" ? "rgba(165,233,221,0.2)" : "#fff",
                       borderRadius: 16,
-                      border: activeToggle === "personal" ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
-                      boxShadow: activeToggle === "personal" ? "0 4px 16px rgba(255,143,143,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
+                      border: activeToggle === "personal" ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
+                      boxShadow: activeToggle === "personal" ? "0 4px 16px rgba(111,190,178,0.2)" : "0 2px 8px rgba(0,0,0,0.04)",
                       display: "flex",
                       alignItems: "center",
                       gap: 16,
@@ -1474,7 +1514,7 @@ export default function BidAdminDashboardPage() {
                     onMouseEnter={(e) => {
                       if (activeToggle !== "personal") {
                         e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.15)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.15)";
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -1484,8 +1524,8 @@ export default function BidAdminDashboardPage() {
                       }
                     }}
                   >
-                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#EAEFEF", borderLeft: "4px solid #5a6340", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(90,99,64,0.12)" }}>
-                      <FolderOpen size={26} color="#5a6340" />
+                    <div style={{ width: 52, height: 52, borderRadius: 14, background: "#D4F0EB", borderLeft: "4px solid #34908B", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(90,99,64,0.12)" }}>
+                      <FolderOpen size={26} color="#34908B" />
                     </div>
                     <div>
                       <div style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{adminProjects.length}</div>
@@ -1497,11 +1537,11 @@ export default function BidAdminDashboardPage() {
 
               {/* Toggle Details Section */}
               {activeToggle && (
-                <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "20px 24px", marginBottom: 24, position: "relative" }}>
+                <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "20px 24px", marginBottom: 24, position: "relative" }}>
                   {activeToggle === "projects" && (
                     <div style={{ width: "100%", minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#2d3319", display: "flex", alignItems: "center", gap: 10 }}>
+                        <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e4a47", display: "flex", alignItems: "center", gap: 10 }}>
                           <FolderKanban size={20} />
                           Total Projects Breakdown
                         </h3>
@@ -1535,6 +1575,31 @@ export default function BidAdminDashboardPage() {
                       </div>
                       {/* Name selector: click a name to show their projects in the stretch container below */}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
+                        {currentUserId != null && (
+                          <button
+                            key={`admin-${currentUserId}`}
+                            type="button"
+                            onClick={() => {
+                              const isSelected = expandedBmIdForProjects === currentUserId;
+                              setExpandedBmIdForProjects(isSelected ? null : currentUserId);
+                              setShowGrandTotalProjects(false);
+                            }}
+                            style={{
+                              padding: "10px 18px",
+                              background: expandedBmIdForProjects === currentUserId ? "rgba(52,144,139,0.2)" : "#f8fafc",
+                              border: expandedBmIdForProjects === currentUserId ? "2px solid #34908B" : "1px solid #D4F0EB",
+                              borderRadius: 10,
+                              cursor: "pointer",
+                              fontWeight: 600,
+                              fontSize: 14,
+                              color: expandedBmIdForProjects === currentUserId ? "#1e4a47" : "#64748b",
+                              transition: "all 0.2s",
+                              boxShadow: expandedBmIdForProjects === currentUserId ? "0 2px 8px rgba(52,144,139,0.2)" : "none",
+                            }}
+                          >
+                            {userDisplayName} ({adminProjects.length})
+                          </button>
+                        )}
                         {bidManagers.map((bm) => {
                           const isSelected = expandedBmIdForProjects === bm.id;
                           return (
@@ -1544,15 +1609,15 @@ export default function BidAdminDashboardPage() {
                               onClick={() => { setExpandedBmIdForProjects(isSelected ? null : bm.id); setShowGrandTotalProjects(false); }}
                               style={{
                                 padding: "10px 18px",
-                                background: isSelected ? "rgba(255,143,143,0.2)" : "#f8fafc",
-                                border: isSelected ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                                background: isSelected ? "rgba(111,190,178,0.2)" : "#f8fafc",
+                                border: isSelected ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
                                 borderRadius: 10,
                                 cursor: "pointer",
                                 fontWeight: 600,
                                 fontSize: 14,
-                                color: isSelected ? "#2d3319" : "#64748b",
+                                color: isSelected ? "#1e4a47" : "#64748b",
                                 transition: "all 0.2s",
-                                boxShadow: isSelected ? "0 2px 8px rgba(255,143,143,0.2)" : "none",
+                                boxShadow: isSelected ? "0 2px 8px rgba(111,190,178,0.2)" : "none",
                               }}
                             >
                               {bm.fullName} ({bm.teamProjectsUsed})
@@ -1568,7 +1633,7 @@ export default function BidAdminDashboardPage() {
                           padding: "20px",
                           background: "#fff",
                           borderRadius: 12,
-                          border: "1px solid #EAEFEF",
+                          border: "1px solid #D4F0EB",
                           boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
                           overflow: "auto",
                         }}
@@ -1581,30 +1646,28 @@ export default function BidAdminDashboardPage() {
                               {grandTotalProjects.length === 0 ? (
                                 <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
                               ) : (
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "auto" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                                  <colgroup>{PROJECT_TABLE_COLS}</colgroup>
                                   <thead>
-                                    <tr style={{ borderBottom: "2px solid #EAEFEF", background: "#f8fafc" }}>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Project</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Tender ID</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569" }}>Client</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569" }}>Action</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap" }}>Upload final bid</th>
+                                    <tr style={{ borderBottom: "2px solid #D4F0EB", background: "#f8fafc" }}>
+                                      <th style={{ ...TABLE_TH }}>Project</th>
+                                      <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                      <th style={{ ...TABLE_TH }}>Client</th>
+                                      <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {grandTotalProjects.map((p) => (
-                                      <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a" }}>{p.project_name}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.tender_id || "—"}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b" }}>{p.client_name || "—"}</td>
-                                        <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
-                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
-                                            <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>View result</button>
-                                            <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
-                                          </div>
-                                        </td>
-                                        <td style={{ padding: "12px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                          <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
+                                      <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                        <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
+                                        <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
+                                        <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
+                                        <td style={{ ...TABLE_TD_ACTIONS }}>
+                                          <ProjectActionButtons
+                                            onView={() => handleViewResult(p.project_name)}
+                                            onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                            onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                          />
                                         </td>
                                       </tr>
                                     ))}
@@ -1615,6 +1678,41 @@ export default function BidAdminDashboardPage() {
                           );
                         })() : expandedBmIdForProjects == null ? (
                           <div style={{ padding: "24px", textAlign: "center", color: "#94a3b8", fontSize: 14 }}>Select a name above or click Grand Total to view all projects.</div>
+                        ) : expandedBmIdForProjects === currentUserId ? (
+                          <>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: "#475569", marginBottom: 14 }}>{userDisplayName} – admin projects</div>
+                            {adminProjects.length === 0 ? (
+                              <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
+                            ) : (
+                              <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                                <colgroup>{PROJECT_TABLE_COLS}</colgroup>
+                                <thead>
+                                  <tr style={{ borderBottom: "2px solid #D4F0EB", background: "#f8fafc" }}>
+                                    <th style={{ ...TABLE_TH }}>Project</th>
+                                    <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                    <th style={{ ...TABLE_TH }}>Client</th>
+                                    <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {adminProjects.map((p) => (
+                                    <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                      <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
+                                      <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
+                                      <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
+                                      <td style={{ ...TABLE_TD_ACTIONS }}>
+                                        <ProjectActionButtons
+                                          onView={() => handleViewResult(p.project_name)}
+                                          onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                          onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                        />
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </>
                         ) : (() => {
                           const selectedBm = bidManagers.find((bm) => bm.id === expandedBmIdForProjects);
                           if (!selectedBm) return null;
@@ -1626,30 +1724,28 @@ export default function BidAdminDashboardPage() {
                               {bmProjects.length === 0 ? (
                                 <div style={{ padding: "20px 0", color: "#94a3b8", fontSize: 13 }}>No projects yet.</div>
                               ) : (
-                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, tableLayout: "fixed" }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                                  <colgroup>{PROJECT_TABLE_COLS}</colgroup>
                                   <thead>
-                                    <tr style={{ borderBottom: "2px solid #EAEFEF", background: "#f8fafc" }}>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "34%" }}>Project</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "18%" }}>Tender ID</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", width: "24%" }}>Client</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", width: "14%" }}>Action</th>
-                                      <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", whiteSpace: "nowrap", width: "10%" }}>Upload final bid</th>
+                                    <tr style={{ borderBottom: "2px solid #D4F0EB", background: "#f8fafc" }}>
+                                      <th style={{ ...TABLE_TH }}>Project</th>
+                                      <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                      <th style={{ ...TABLE_TH }}>Client</th>
+                                      <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {bmProjects.map((p) => (
-                                      <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                        <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.project_name}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.tender_id || "—"}</td>
-                                        <td style={{ padding: "12px 16px", color: "#64748b", overflowWrap: "anywhere", wordBreak: "break-word" }}>{p.client_name || "—"}</td>
-                                        <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
-                                          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
-                                            <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}>View result</button>
-                                            <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
-                                          </div>
-                                        </td>
-                                        <td style={{ padding: "12px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                          <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
+                                      <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                        <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
+                                        <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
+                                        <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
+                                        <td style={{ ...TABLE_TD_ACTIONS }}>
+                                          <ProjectActionButtons
+                                            onView={() => handleViewResult(p.project_name)}
+                                            onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                            onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                          />
                                         </td>
                                       </tr>
                                     ))}
@@ -1667,27 +1763,27 @@ export default function BidAdminDashboardPage() {
                           marginTop: 16,
                           width: "100%",
                           padding: "12px 16px",
-                          background: showGrandTotalProjects ? "rgba(255,143,143,0.25)" : "rgba(255,143,143,0.15)",
+                          background: showGrandTotalProjects ? "rgba(111,190,178,0.25)" : "rgba(111,190,178,0.15)",
                           borderRadius: 12,
-                          border: showGrandTotalProjects ? "2px solid #FF8F8F" : "1px solid rgba(255,143,143,0.3)",
+                          border: showGrandTotalProjects ? "2px solid #6FBEB2" : "1px solid rgba(111,190,178,0.3)",
                           cursor: "pointer",
                           fontSize: 14,
                           fontWeight: 700,
-                          color: "#2d3319",
+                          color: "#1e4a47",
                           textAlign: "left",
                           transition: "all 0.2s",
-                          boxShadow: showGrandTotalProjects ? "0 2px 8px rgba(255,143,143,0.2)" : "none",
+                          boxShadow: showGrandTotalProjects ? "0 2px 8px rgba(111,190,178,0.2)" : "none",
                         }}
                         onMouseEnter={(e) => {
                           if (!showGrandTotalProjects) {
-                            e.currentTarget.style.background = "rgba(255,143,143,0.22)";
-                            e.currentTarget.style.borderColor = "rgba(255,143,143,0.5)";
+                            e.currentTarget.style.background = "rgba(111,190,178,0.22)";
+                            e.currentTarget.style.borderColor = "rgba(111,190,178,0.5)";
                           }
                         }}
                         onMouseLeave={(e) => {
                           if (!showGrandTotalProjects) {
-                            e.currentTarget.style.background = "rgba(255,143,143,0.15)";
-                            e.currentTarget.style.borderColor = "rgba(255,143,143,0.3)";
+                            e.currentTarget.style.background = "rgba(111,190,178,0.15)";
+                            e.currentTarget.style.borderColor = "rgba(111,190,178,0.3)";
                           }
                         }}
                       >
@@ -1742,13 +1838,13 @@ export default function BidAdminDashboardPage() {
                                 style={{
                                   width: "100%",
                                   padding: "14px 16px",
-                                  background: isExpanded ? "rgba(255,179,179,0.15)" : "#f8fafc",
+                                  background: isExpanded ? "rgba(165,233,221,0.15)" : "#f8fafc",
                                   borderRadius: 12,
-                                  border: isExpanded ? "2px solid #FF8F8F" : "1px solid #EAEFEF",
+                                  border: isExpanded ? "2px solid #6FBEB2" : "1px solid #D4F0EB",
                                   cursor: "pointer",
                                   textAlign: "left",
                                   outline: "none",
-                                  boxShadow: isExpanded ? "0 4px 12px rgba(255,143,143,0.15)" : "none",
+                                  boxShadow: isExpanded ? "0 4px 12px rgba(111,190,178,0.15)" : "none",
                                 }}
                               >
                                 <div style={{ fontSize: 12, color: "#64748b", fontWeight: 600, marginBottom: 4 }}>{bm.fullName}</div>
@@ -1761,7 +1857,7 @@ export default function BidAdminDashboardPage() {
                                 </div>
                               </button>
                               {isExpanded && (
-                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                                <div style={{ marginTop: 12, padding: "16px", background: "#fff", borderRadius: 12, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                                   <div style={{ fontSize: 13, fontWeight: 700, color: "#475569", marginBottom: 12 }}>{bm.fullName} – people</div>
                                   <ul style={{ margin: 0, paddingLeft: 20, color: "#0f172a", fontSize: 13 }}>
                                     <li style={{ marginBottom: 6 }}><strong>{bm.fullName}</strong> (Bid Manager)</li>
@@ -1775,8 +1871,8 @@ export default function BidAdminDashboardPage() {
                           );
                         })}
                       </div>
-                      <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(255,179,179,0.2)", borderRadius: 12, border: "1px solid rgba(255,143,143,0.3)" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>Grand Total: {totalPeople} people</div>
+                      <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(165,233,221,0.2)", borderRadius: 12, border: "1px solid rgba(111,190,178,0.3)" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#1e4a47" }}>Grand Total: {totalPeople} people</div>
                       </div>
                     </div>
                   )}
@@ -1819,31 +1915,30 @@ export default function BidAdminDashboardPage() {
                         <div style={{ padding: 32, textAlign: "center", color: "#64748b", fontSize: 14 }}>No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.</div>
                       ) : (
                         <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                            <colgroup>{PROJECT_TABLE_COLS}</colgroup>
                             <thead>
-                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
-                                <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Action</th>
-                                <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
+                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                                <th style={{ ...TABLE_TH }}>Project</th>
+                                <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                <th style={{ ...TABLE_TH }}>Client</th>
+                                <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
                               {adminProjects.map((p) => (
-                                <tr key={p.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                  <td style={{ padding: "12px 16px", fontWeight: 500, color: "#0f172a", fontSize: 13 }}>{p.project_name}</td>
-                                  <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{p.tender_id || "—"}</td>
-                                  <td style={{ padding: "12px 16px", color: "#64748b", fontSize: 13 }}>{p.client_name || "—"}</td>
-                                  <td style={{ padding: "12px 16px", textAlign: "right", verticalAlign: "middle" }}>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, flexWrap: "nowrap" }}>
-                                      <button type="button" onClick={() => handleViewResult(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, boxShadow: "0 2px 8px rgba(255,143,143,0.25)", whiteSpace: "nowrap" }}>View result</button>
-                                      <button type="button" onClick={() => openAssignModalForAdmin(p.project_name)} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", height: 36, padding: "0 14px", background: "rgba(79,70,229,0.12)", color: "#4f46e5", border: "1px solid rgba(79,70,229,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Assign Bid Managers or Technical Managers">Assign</button>
-                                      <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, height: 36, padding: "0 14px", background: "transparent", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Archive project"><Archive size={12} /> Archive</button>
-                                    </div>
-                                  </td>
-                                  <td style={{ padding: "12px 16px", textAlign: "center", verticalAlign: "middle" }}>
-                                    <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 36, padding: "0 12px", background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, fontWeight: 600, cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
+                                <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                  <td style={{ ...TABLE_TD_NAME }} title={p.project_name}>{p.project_name}</td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id || "—"}</td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name || "—"}</td>
+                                  <td style={{ ...TABLE_TD_ACTIONS }}>
+                                    <ProjectActionButtons
+                                      onView={() => handleViewResult(p.project_name)}
+                                      onAssign={() => openAssignModalForAdmin(p.project_name)}
+                                      onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                      onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                      showAssign
+                                    />
                                   </td>
                                 </tr>
                               ))}
@@ -1856,11 +1951,11 @@ export default function BidAdminDashboardPage() {
                 </div>
               )}
 
-              <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #EAEFEF", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: 24, display: "flex", flexDirection: "column", height: 520, minHeight: 520, width: "100%", minWidth: "100%", flexShrink: 0 }}>
-                <div style={{ padding: "18px 22px", borderBottom: "1px solid #EAEFEF", background: "#f8fafc", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between", flexShrink: 0 }}>
+              <section style={{ background: "#fff", borderRadius: 16, border: "1px solid #D4F0EB", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", overflow: "hidden", marginBottom: 24, display: "flex", flexDirection: "column", height: 520, minHeight: 520, width: "100%", minWidth: "100%", flexShrink: 0 }}>
+                <div style={{ padding: "18px 22px", borderBottom: "1px solid #D4F0EB", background: "#f8fafc", display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between", flexShrink: 0 }}>
                   <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "#FAF3E1", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "2px solid #E87878" }}>
-                      <FolderKanban size={18} color="#E87878" />
+                    <span style={{ width: 36, height: 36, borderRadius: 10, background: "#E8F8F5", display: "inline-flex", alignItems: "center", justifyContent: "center", border: "2px solid #34908B" }}>
+                      <FolderKanban size={18} color="#34908B" />
                     </span>
                     {teamsViewFilter === "bid_manager" ? "Bid Managers" : teamsViewFilter === "technical_manager" ? "Technical Managers" : teamsViewFilter === "admin" ? "Admin projects" : "Projects"}
                   </h2>
@@ -1873,8 +1968,8 @@ export default function BidAdminDashboardPage() {
                         style={{
                           padding: "8px 14px",
                           borderRadius: 8,
-                          border: "1px solid " + (teamsViewFilter === f ? "#FF8F8F" : "#EAEFEF"),
-                          background: teamsViewFilter === f ? "rgba(255,143,143,0.2)" : "#fff",
+                          border: "1px solid " + (teamsViewFilter === f ? "#6FBEB2" : "#D4F0EB"),
+                          background: teamsViewFilter === f ? "rgba(111,190,178,0.2)" : "#fff",
                           color: teamsViewFilter === f ? "#c73e3e" : "#64748b",
                           fontWeight: 600,
                           fontSize: 13,
@@ -1896,7 +1991,7 @@ export default function BidAdminDashboardPage() {
                         style={{
                           width: "100%",
                           padding: "10px 12px 10px 40px",
-                          border: "1px solid #EAEFEF",
+                          border: "1px solid #D4F0EB",
                           borderRadius: 10,
                           fontSize: 14,
                           color: "#0f172a",
@@ -1916,14 +2011,15 @@ export default function BidAdminDashboardPage() {
                   </div>
                 ) : (
                   <>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
+                    <div style={{ overflowX: "auto" }} className="admin-dashboard-table">
+                      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 720 }}>
+                        <colgroup>{BM_TEAM_TABLE_COLS}</colgroup>
                         <thead>
-                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                            <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Team</th>
-                            <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13, width: "20%" }}>Projects</th>
-                            <th style={{ padding: "14px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, width: 140 }}>People</th>
-                            <th style={{ padding: "14px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 160 }}>Action</th>
+                          <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                            <th style={{ ...TABLE_TH }}>Team</th>
+                            <th style={{ ...TABLE_TH }}>Projects</th>
+                            <th style={{ ...TABLE_TH, textAlign: "center" }}>People</th>
+                            <th style={{ ...TABLE_TH, textAlign: "center" }}>Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1936,36 +2032,19 @@ export default function BidAdminDashboardPage() {
                               <Fragment key={bm.id}>
                                 <tr
                                   style={{
-                                    borderBottom: "1px solid #EAEFEF",
+                                    borderBottom: "1px solid #D4F0EB",
                                     background: isExpanded ? "#f8fafc" : undefined,
                                     transition: "background 0.15s",
                                   }}
                                 >
-                                  <td style={{ padding: "16px 16px" }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => setExpandedTeamId(isExpanded ? null : bm.id)}
-                                        style={{
-                                          background: "none",
-                                          border: "none",
-                                          padding: 4,
-                                          cursor: "pointer",
-                                          color: "#64748b",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                        }}
-                                        aria-label={isExpanded ? "Collapse" : "Expand"}
-                                      >
-                                        {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                      </button>
+                                  <td style={{ ...TABLE_TD_VMIDDLE }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                                       <div
                                         style={{
                                           width: 36,
                                           height: 36,
                                           borderRadius: 10,
-                                          background: "#FF8F8F",
+                                          background: "#6FBEB2",
                                           color: "#fff",
                                           fontSize: 14,
                                           fontWeight: 700,
@@ -1973,28 +2052,28 @@ export default function BidAdminDashboardPage() {
                                           alignItems: "center",
                                           justifyContent: "center",
                                           flexShrink: 0,
-                                          boxShadow: "0 2px 8px rgba(255,143,143,0.2)",
+                                          boxShadow: "0 2px 8px rgba(111,190,178,0.2)",
                                         }}
                                       >
                                         {initial}
                                       </div>
-                                      <div>
-                                        <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{bm.fullName}</div>
-                                        <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
-                                          <Mail size={11} /> {bm.email}
+                                      <div style={{ minWidth: 0 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a", ...cellEllipsis }} title={bm.fullName}>{bm.fullName}</div>
+                                        <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4, ...cellEllipsis }} title={bm.email}>
+                                          <Mail size={11} style={{ flexShrink: 0 }} /> {bm.email}
                                         </div>
                                       </div>
                                     </div>
                                   </td>
-                                  <td style={{ padding: "16px 16px" }}>
+                                  <td style={{ ...TABLE_TD_VMIDDLE }}>
                                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                      <div style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 3, background: "#EAEFEF", overflow: "hidden" }}>
+                                      <div style={{ flex: 1, minWidth: 60, height: 6, borderRadius: 3, background: "#D4F0EB", overflow: "hidden" }}>
                                         <div
                                           style={{
                                             height: "100%",
                                             width: `${pct}%`,
                                             borderRadius: 3,
-                                            background: bm.teamProjectsLeft === 0 ? "linear-gradient(90deg, #b8956b, #a08050)" : "linear-gradient(90deg, #FF8F8F, #E87878)",
+                                            background: bm.teamProjectsLeft === 0 ? "linear-gradient(90deg, #b8956b, #a08050)" : "linear-gradient(90deg, #6FBEB2, #34908B)",
                                           }}
                                         />
                                       </div>
@@ -2004,7 +2083,7 @@ export default function BidAdminDashboardPage() {
                                     </div>
                                     <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>{bm.teamProjectsLeft} left</div>
                                   </td>
-                                  <td style={{ padding: "16px 20px 16px 24px", textAlign: "center", paddingRight: 32, minWidth: 140 }}>
+                                  <td style={{ ...TABLE_TD_VMIDDLE, textAlign: "center" }}>
                                     <button
                                       type="button"
                                       className="people-toggle-btn"
@@ -2014,24 +2093,24 @@ export default function BidAdminDashboardPage() {
                                         alignItems: "center",
                                         gap: 6,
                                         padding: "8px 14px",
-                                        background: isExpanded ? "rgba(255,143,143,0.15)" : "rgba(250,243,225,0.9)",
-                                        border: "1px solid rgba(255,143,143,0.4)",
+                                        background: isExpanded ? "rgba(111,190,178,0.15)" : "rgba(232,247,244,0.9)",
+                                        border: "1px solid rgba(111,190,178,0.4)",
                                         borderRadius: 10,
                                         cursor: "pointer",
                                         fontWeight: 600,
                                         fontSize: 13,
-                                        color: "#2d3319",
+                                        color: "#1e4a47",
                                         transition: "all 0.2s",
-                                        boxShadow: isExpanded ? "0 2px 8px rgba(255,143,143,0.15)" : "0 1px 3px rgba(255,143,143,0.1)",
+                                        boxShadow: isExpanded ? "0 2px 8px rgba(111,190,178,0.15)" : "0 1px 3px rgba(111,190,178,0.1)",
                                       }}
                                       title={isExpanded ? "Hide who's working" : "Show who's working on this team"}
                                     >
                                       <span style={{ color: "#3730a3", fontWeight: 700 }}>{peopleCount}</span>
-                                      <span style={{ color: "#2d3319", fontSize: 12 }}>people</span>
-                                      {isExpanded ? <ChevronDown size={14} color="#5a6340" /> : <ChevronRight size={14} color="#5a6340" />}
+                                      <span style={{ color: "#1e4a47", fontSize: 12 }}>people</span>
+                                      {isExpanded ? <ChevronDown size={14} color="#34908B" /> : <ChevronRight size={14} color="#34908B" />}
                                     </button>
                                   </td>
-                                  <td style={{ padding: "16px 24px 16px 32px", textAlign: "right", minWidth: 160 }}>
+                                  <td style={{ ...TABLE_TD_ACTIONS, textAlign: "center" }}>
                                     <button
                                       onClick={() => navigate(`/team-projects/${bm.id}`)}
                                       style={{
@@ -2039,23 +2118,23 @@ export default function BidAdminDashboardPage() {
                                         alignItems: "center",
                                         gap: 6,
                                         padding: "8px 14px",
-                                        background: "#FF8F8F",
+                                        background: "#6FBEB2",
                                         color: "#fff",
                                         border: "none",
                                         borderRadius: 8,
                                         fontWeight: 600,
                                         fontSize: 13,
                                         cursor: "pointer",
-                                        boxShadow: "0 4px 12px rgba(255,143,143,0.3)",
+                                        boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
                                         transition: "transform 0.2s, box-shadow 0.2s",
                                       }}
                                       onMouseEnter={(e) => {
                                         e.currentTarget.style.transform = "translateY(-1px)";
-                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.4)";
+                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(111,190,178,0.4)";
                                       }}
                                       onMouseLeave={(e) => {
                                         e.currentTarget.style.transform = "translateY(0)";
-                                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(255,143,143,0.3)";
+                                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.3)";
                                       }}
                                     >
                                       View projects <ArrowRight size={14} />
@@ -2063,17 +2142,17 @@ export default function BidAdminDashboardPage() {
                                   </td>
                                 </tr>
                                 {isExpanded && (
-                                  <tr style={{ background: "#f8fafc", borderBottom: "1px solid #EAEFEF" }}>
+                                  <tr style={{ background: "#f8fafc", borderBottom: "1px solid #D4F0EB" }}>
                                     <td colSpan={4} style={{ padding: "12px 16px 16px 56px" }}>
                                       <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.05em" }}>People on this team</div>
                                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #EAEFEF", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-                                          <UserCircle size={16} color="#5a6340" />
+                                        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #D4F0EB", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                                          <UserCircle size={16} color="#34908B" />
                                           <span style={{ fontSize: 13, fontWeight: 600, color: "#0f172a" }}>{bm.fullName}</span>
                                           <span style={{ fontSize: 11, color: "#64748b" }}>Bid Manager</span>
                                         </div>
                                         {(bm.technicalManagers || []).map((tm) => (
-                                          <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #EAEFEF", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+                                          <div key={tm.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#fff", borderRadius: 8, border: "1px solid #D4F0EB", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
                                             <UserCircle size={16} color="#059669" />
                                             <span style={{ fontSize: 13, fontWeight: 500, color: "#475569" }}>{tm.fullName}</span>
                                             <span style={{ fontSize: 11, color: "#64748b" }}>{tm.email}</span>
@@ -2094,7 +2173,7 @@ export default function BidAdminDashboardPage() {
                     </div>
 
                     {totalFilteredPages > 1 && (
-                      <div style={{ padding: "14px 20px", borderTop: "1px solid #EAEFEF", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <div style={{ padding: "14px 20px", borderTop: "1px solid #D4F0EB", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
                         <span style={{ fontSize: 13, color: "#64748b" }}>
                           Showing {(teamPage - 1) * TEAMS_PER_PAGE + 1}–{Math.min(teamPage * TEAMS_PER_PAGE, filteredTeams.length)} of {filteredTeams.length} teams
                         </span>
@@ -2105,7 +2184,7 @@ export default function BidAdminDashboardPage() {
                             disabled={teamPage <= 1}
                             style={{
                               padding: "8px 14px",
-                              border: "1px solid #EAEFEF",
+                              border: "1px solid #D4F0EB",
                               borderRadius: 8,
                               background: teamPage <= 1 ? "#f1f5f9" : "#fff",
                               color: teamPage <= 1 ? "#94a3b8" : "#475569",
@@ -2125,7 +2204,7 @@ export default function BidAdminDashboardPage() {
                             disabled={teamPage >= totalFilteredPages}
                             style={{
                               padding: "8px 14px",
-                              border: "1px solid #EAEFEF",
+                              border: "1px solid #D4F0EB",
                               borderRadius: 8,
                               background: teamPage >= totalFilteredPages ? "#f1f5f9" : "#fff",
                               color: teamPage >= totalFilteredPages ? "#94a3b8" : "#475569",
@@ -2146,7 +2225,7 @@ export default function BidAdminDashboardPage() {
                   <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
                     {tmAssignmentsLoading ? (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
                         <span style={{ fontSize: 14 }}>Loading…</span>
                       </div>
                     ) : tmAssignments.length === 0 ? (
@@ -2155,15 +2234,16 @@ export default function BidAdminDashboardPage() {
                         No Technical Managers found.
                       </div>
                     ) : (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
+                      <div style={{ overflowX: "auto" }} className="admin-dashboard-table">
+                        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 860 }}>
+                          <colgroup>{TM_TABLE_COLS}</colgroup>
                           <thead>
-                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Technical Manager</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Email</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Bid Manager</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Assigned projects</th>
-                              <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>Action</th>
+                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                              <th style={{ ...TABLE_TH }}>Technical Manager</th>
+                              <th style={{ ...TABLE_TH }}>Email</th>
+                              <th style={{ ...TABLE_TH }}>Bid Manager</th>
+                              <th style={{ ...TABLE_TH }}>Assigned projects</th>
+                              <th style={{ ...TABLE_TH, textAlign: "right" }}>Action</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2180,39 +2260,33 @@ export default function BidAdminDashboardPage() {
                                     (bmByTmId[tm.id] || "").toLowerCase().includes(teamSearchLower)
                                   )
                                 : tmAssignments;
-                              return filtered.map((tm) => (
-                                <tr key={tm.id} style={{ borderBottom: "1px solid #EAEFEF" }}>
-                                  <td style={{ padding: "14px 16px" }}>
-                                    <div style={{ fontWeight: 600, fontSize: 14, color: "#0f172a" }}>{tm.fullName}</div>
+                              return filtered.map((tm) => {
+                                const assignedNames = (tm.assignedProjects || []).map((p) => p.project_name).join(", ");
+                                const parentBmId = bidManagers.find((bm) => (bm.technicalManagers || []).some((t) => t.id === tm.id))?.id;
+                                return (
+                                <tr key={tm.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                  <td style={{ ...TABLE_TD_STRONG }} title={tm.fullName}>{tm.fullName}</td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={tm.email}>{tm.email}</td>
+                                  <td style={{ ...TABLE_TD_MANAGER }} title={bmByTmId[tm.id] ?? "—"}>{bmByTmId[tm.id] ?? "—"}</td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={assignedNames || undefined}>
+                                    {assignedNames || "—"}
                                   </td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#64748b" }}>{tm.email}</td>
-                                  <td style={{ padding: "14px 16px", fontSize: 13, color: "#475569" }}>{bmByTmId[tm.id] ?? "—"}</td>
-                                  <td style={{ padding: "14px 16px" }}>
-                                    {(tm.assignedProjects || []).length === 0 ? (
-                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
-                                    ) : (
-                                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                                        {(tm.assignedProjects || []).map((p) => (
-                                          <span key={p.id} style={{ fontSize: 12, padding: "4px 8px", background: "#f1f5f9", borderRadius: 6, color: "#475569" }}>{p.project_name}</span>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: "14px 16px", textAlign: "right" }}>
-                                    {(tm.assignedProjects || []).length === 0 ? (
-                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>None</span>
-                                    ) : (
+                                  <td style={{ ...TABLE_TD_ACTIONS }}>
+                                    {(tm.assignedProjects || []).length > 0 && parentBmId != null ? (
                                       <button
                                         type="button"
-                                        onClick={() => navigate(`/team-projects/${bidManagers.find((bm) => (bm.technicalManagers || []).some((t) => t.id === tm.id))?.id ?? tm.id}`)}
-                                        style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}
+                                        onClick={() => navigate(`/team-projects/${parentBmId}`)}
+                                        style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", whiteSpace: "nowrap" }}
                                       >
                                         View projects
                                       </button>
+                                    ) : (
+                                      <span style={{ fontSize: 13, color: "#94a3b8" }}>—</span>
                                     )}
                                   </td>
                                 </tr>
-                              ));
+                              );
+                              });
                             })()}
                           </tbody>
                         </table>
@@ -2225,7 +2299,7 @@ export default function BidAdminDashboardPage() {
                   <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
                     {projectsForFilterLoading ? (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
                         <span style={{ fontSize: 14 }}>Loading…</span>
                       </div>
                     ) : projectsForFilter.length === 0 ? (
@@ -2235,20 +2309,6 @@ export default function BidAdminDashboardPage() {
                       </div>
                     ) : (
                       <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
-                          <thead>
-                            <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Bid Manager</th>
-                              <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Technical Manager(s)</th>
-                              <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 100 }}>Archive</th>
-                              <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>Action</th>
-                              <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
-                            </tr>
-                          </thead>
-                        </table>
                         {(() => {
                           const bmById: Record<number, string> = {};
                           bidManagers.forEach((bm) => { bmById[bm.id] = bm.fullName; });
@@ -2262,47 +2322,43 @@ export default function BidAdminDashboardPage() {
                                 (p.assigned_users || []).some((u) => (u.fullName + " " + u.email).toLowerCase().includes(teamSearchLower))
                               )
                             : projectsForFilter;
-                          const rowHeight = 86;
-                          const listHeight = Math.min(520, Math.max(rowHeight, filtered.length * rowHeight));
                           return (
-                            <div style={{ minWidth: 640, height: listHeight, contain: "strict" }}>
-                              <List
-                                height={listHeight}
-                                itemCount={filtered.length}
-                                itemSize={rowHeight}
-                                width={"100%"}
-                                overscanCount={6}
-                              >
-                                {({ index, style }: ListChildComponentProps) => {
-                                  const p = filtered[index];
-                                  return (
-                                    <div style={{ ...style, display: "grid", gridTemplateColumns: "1.8fr 1.1fr 1.2fr 1.2fr 1.6fr 0.9fr 0.9fr 1.1fr", alignItems: "center", borderBottom: "1px solid #EAEFEF", padding: "0 8px", background: "#fff" }}>
-                                      <div style={{ padding: "0 8px", fontWeight: 600, fontSize: 14, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.project_name}>
-                                        {p.project_name}
-                                        {p.user_id === currentUserId && <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>}
-                                      </div>
-                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tender_id ?? "—"}</div>
-                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.client_name ?? "—"}</div>
-                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</div>
-                                      <div style={{ padding: "0 8px", fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                        {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
-                                      </div>
-                                      <div style={{ padding: "0 8px", textAlign: "right" }}>
-                                        <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} title="Archive project" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                          <Archive size={14} /> Archive
-                                        </button>
-                                      </div>
-                                      <div style={{ padding: "0 8px", textAlign: "right" }}>
-                                        <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
-                                      </div>
-                                      <div style={{ padding: "0 8px", textAlign: "center" }}>
-                                        <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
-                                      </div>
-                                    </div>
-                                  );
-                                }}
-                              </List>
-                            </div>
+                            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 940 }}>
+                              <colgroup>{PROJECT_FILTER_TABLE_COLS}</colgroup>
+                              <thead>
+                                <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                                  <th style={{ ...TABLE_TH }}>Project</th>
+                                  <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                  <th style={{ ...TABLE_TH }}>Client</th>
+                                  <th style={{ ...TABLE_TH }}>Bid Manager</th>
+                                  <th style={{ ...TABLE_TH }}>Technical Manager(s)</th>
+                                  <th style={{ ...TABLE_TH, textAlign: "right" }}>Actions</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {filtered.map((p) => (
+                                  <tr key={p.id} style={{ borderBottom: "1px solid #D4F0EB" }}>
+                                    <td style={{ ...TABLE_TD_STRONG }} title={p.project_name}>
+                                      {p.project_name}
+                                      {p.user_id === currentUserId && <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>}
+                                    </td>
+                                    <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id ?? "—"}</td>
+                                    <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name ?? "—"}</td>
+                                    <td style={{ ...TABLE_TD_MANAGER }} title={p.user_id ? (bmById[p.user_id] ?? "—") : "—"}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
+                                    <td style={{ ...TABLE_TD_TM }} title={(p.assigned_users || []).map((u) => u.fullName).join(", ") || "None"}>
+                                      {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
+                                    </td>
+                                    <td style={{ ...TABLE_TD_ACTIONS }}>
+                                      <ProjectActionButtons
+                                        onView={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
+                                        onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                        onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           );
                         })()}
                       </div>
@@ -2314,7 +2370,7 @@ export default function BidAdminDashboardPage() {
                   <div style={{ padding: "20px 22px", minHeight: 460, height: "100%", display: "flex", flexDirection: "column" }}>
                     {projectsForFilterLoading ? (
                       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, color: "#64748b" }}>
-                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #EAEFEF", borderTopColor: "#FF8F8F", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite", marginBottom: 12 }} />
                         <span style={{ fontSize: 14 }}>Loading…</span>
                       </div>
                     ) : (() => {
@@ -2340,57 +2396,51 @@ export default function BidAdminDashboardPage() {
                         );
                       }
                       return (
-                        <div style={{ overflowX: "auto" }}>
-                          <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 12px", minWidth: 640 }}>
+                        <div style={{ overflowX: "auto", minWidth: 940 }}>
+                          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", minWidth: 940 }}>
+                            <colgroup>{PROJECT_FILTER_TABLE_COLS}</colgroup>
                             <thead>
-                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #EAEFEF" }}>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Project</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Tender ID</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Client</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Bid Manager</th>
-                                <th style={{ padding: "12px 16px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 13 }}>Technical Manager(s)</th>
-                                <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 100 }}>Archive</th>
-                                <th style={{ padding: "12px 16px", textAlign: "right", fontWeight: 600, color: "#475569", fontSize: 13, width: 120 }}>Action</th>
-                                <th style={{ padding: "12px 16px", textAlign: "center", fontWeight: 600, color: "#475569", fontSize: 13, whiteSpace: "nowrap" }}>Upload final bid</th>
+                              <tr style={{ background: "#f1f5f9", borderBottom: "2px solid #D4F0EB" }}>
+                                <th style={{ ...TABLE_TH }}>Project</th>
+                                <th style={{ ...TABLE_TH }}>Tender ID</th>
+                                <th style={{ ...TABLE_TH }}>Client</th>
+                                <th style={{ ...TABLE_TH }}>Bid Manager</th>
+                                <th style={{ ...TABLE_TH }}>Technical Manager(s)</th>
+                                <th style={{ ...TABLE_TH, textAlign: "center" }}>Actions</th>
                               </tr>
                             </thead>
                           </table>
-                          <div style={{ minWidth: 640, height: Math.min(520, Math.max(86, filtered.length * 86)), contain: "strict" }}>
-                            <List
-                              height={Math.min(520, Math.max(86, filtered.length * 86))}
-                              itemCount={filtered.length}
-                              itemSize={86}
-                              width={"100%"}
-                              overscanCount={6}
-                            >
-                              {({ index, style }: ListChildComponentProps) => {
-                                const p = filtered[index];
-                                return (
-                                  <div style={{ ...style, display: "grid", gridTemplateColumns: "1.8fr 1.1fr 1.2fr 1.2fr 1.6fr 0.9fr 0.9fr 1.1fr", alignItems: "center", borderBottom: "1px solid #EAEFEF", padding: "0 8px", background: "#fff" }}>
-                                    <div style={{ padding: "0 8px", fontWeight: 600, fontSize: 14, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.project_name}>
-                                      {p.project_name} <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
-                                    </div>
-                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tender_id ?? "—"}</div>
-                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.client_name ?? "—"}</div>
-                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#475569", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</div>
-                                    <div style={{ padding: "0 8px", fontSize: 13, color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                      {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
-                                    </div>
-                                    <div style={{ padding: "0 8px", textAlign: "right" }}>
-                                      <button type="button" onClick={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }} title="Archive project" style={{ padding: "6px 10px", fontSize: 12, fontWeight: 600, background: "#64748b", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                        <Archive size={14} /> Archive
-                                      </button>
-                                    </div>
-                                    <div style={{ padding: "0 8px", textAlign: "right" }}>
-                                      <button type="button" onClick={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" }}>View result</button>
-                                    </div>
-                                    <div style={{ padding: "0 8px", textAlign: "center" }}>
-                                      <button type="button" onClick={() => openFinalBidModal(p.id, p.project_name)} style={{ padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "rgba(34,197,94,0.12)", color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }} title="Upload final bid"><FileUp size={12} /> Upload final bid</button>
-                                    </div>
-                                  </div>
-                                );
-                              }}
-                            </List>
+                          <div style={{ contain: "strict" }}>
+                            <VirtualizedSimpleTable
+                              colgroup={PROJECT_FILTER_TABLE_COLS}
+                              header={<></>}
+                              items={filtered}
+                              rowHeight={64}
+                              maxHeight={520}
+                              ariaLabel="Admin projects"
+                              renderRow={(p) => (
+                                <>
+                                  <td style={{ ...TABLE_TD_STRONG }} title={p.project_name}>
+                                    {p.project_name} <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 600, color: "#16a34a" }}>[Admin]</span>
+                                  </td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={p.tender_id || undefined}>{p.tender_id ?? "—"}</td>
+                                  <td style={{ ...TABLE_TD_MUTED }} title={p.client_name || undefined}>{p.client_name ?? "—"}</td>
+                                  <td style={{ ...TABLE_TD_MANAGER }} title={p.user_id ? (bmById[p.user_id] ?? "—") : "—"}>{p.user_id ? (bmById[p.user_id] ?? "—") : "—"}</td>
+                                  <td style={{ ...TABLE_TD_TM }} title={(p.assigned_users || []).map((u) => u.fullName).join(", ") || "None"}>
+                                    {(p.assigned_users || []).length === 0 ? "None" : (p.assigned_users || []).map((u) => u.fullName).join(", ")}
+                                  </td>
+                                  <td style={{ ...TABLE_TD_ACTIONS }}>
+                                    <ProjectActionButtons
+                                      onView={() => navigate(`/project-results/${encodeURIComponent(p.project_name)}`)}
+                                      onAssign={() => openAssignModalForAdmin(p.project_name)}
+                                      onArchive={() => { setArchiveConfirmProjectId(p.id); setArchiveConfirmStep(0); }}
+                                      onUpload={() => openFinalBidModal(p.id, p.project_name)}
+                                      showAssign
+                                    />
+                                  </td>
+                                </>
+                              )}
+                            />
                           </div>
                         </div>
                       );
@@ -2412,7 +2462,7 @@ export default function BidAdminDashboardPage() {
               {createUserSuccessPopup.roleLabel} {createUserSuccessPopup.fullName} has been created successfully.
             </p>
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" onClick={() => setCreateUserSuccessPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: "pointer" }}>OK</button>
+              <button type="button" onClick={() => setCreateUserSuccessPopup(null)} style={{ padding: "10px 20px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: "pointer" }}>OK</button>
             </div>
           </div>
         </div>,
@@ -2475,7 +2525,7 @@ export default function BidAdminDashboardPage() {
             <textarea value={finalBidDescription} onChange={(e) => setFinalBidDescription(e.target.value)} placeholder="e.g. Final commercial bid, signed version, annex A..." rows={3} style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #e2e8f0", fontSize: 14, marginBottom: 16, resize: "vertical", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => !finalBidUploading && setFinalBidModal(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
+              <button type="button" disabled={finalBidUploading || !finalBidFile || !finalBidDescription.trim()} onClick={submitFinalBidUpload} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: finalBidUploading || !finalBidFile || !finalBidDescription.trim() ? "not-allowed" : "pointer" }}>{finalBidUploading ? "Uploading…" : "Upload"}</button>
             </div>
           </div>
         </div>
@@ -2493,7 +2543,7 @@ export default function BidAdminDashboardPage() {
               <>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
                   {assignableUsersForModal.map((m) => (
-                    <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.12)" : "transparent", border: `1px solid ${assignModalAssignedIds.includes(m.id) ? "rgba(255,143,143,0.4)" : "#EAEFEF"}` }}>
+                    <label key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "10px 12px", borderRadius: 10, background: assignModalAssignedIds.includes(m.id) ? "rgba(111,190,178,0.12)" : "transparent", border: `1px solid ${assignModalAssignedIds.includes(m.id) ? "rgba(111,190,178,0.4)" : "#D4F0EB"}` }}>
                       <input type="checkbox" checked={assignModalAssignedIds.includes(m.id)} onChange={() => setAssignModalAssignedIds((prev) => (prev.includes(m.id) ? prev.filter((x) => x !== m.id) : [...prev, m.id]))} />
                       <span style={{ fontWeight: 600, color: "#1e293b" }}>{m.fullName}</span>
                       <span style={{ fontSize: 12, color: "#64748b", textTransform: "capitalize" }}>{m.role?.replace("_", " ") || ""}</span>
@@ -2503,7 +2553,7 @@ export default function BidAdminDashboardPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button type="button" onClick={() => setAssignModalProject(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-                  <button type="button" disabled={assignModalSaving} onClick={saveAssignmentsForAdmin} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#FF8F8F", color: "#fff", border: "none", cursor: assignModalSaving ? "wait" : "pointer" }}>{assignModalSaving ? "Saving…" : "Save"}</button>
+                  <button type="button" disabled={assignModalSaving} onClick={saveAssignmentsForAdmin} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: assignModalSaving ? "wait" : "pointer" }}>{assignModalSaving ? "Saving…" : "Save"}</button>
                 </div>
               </>
             ) : (
@@ -2557,24 +2607,12 @@ export default function BidAdminDashboardPage() {
         .dashboard-bg-wrap .dashboard-float-2 { animation: dashboardFloat2 26s ease-in-out infinite reverse; }
         .dashboard-bg-wrap .dashboard-float-3 { animation: dashboardFloat3 20s ease-in-out infinite 3s; }
         .dashboard-bg-wrap .dashboard-float-4 { animation: dashboardFloat4 24s ease-in-out infinite 1s reverse; }
-        .sidebar-nav-toggle:hover:not(.active) {
-          transform: translateX(4px);
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
-          transition: all 0.3s ease;
-        }
-        .sidebar-nav-toggle.active:hover {
-          opacity: 0.92;
-          transform: translateY(-1px);
-        }
-        .sidebar-nav-toggle {
-          transition: all 0.3s ease;
-        }
         .header-profile-btn:focus,
         .header-profile-btn:focus-visible { outline: none !important; box-shadow: none !important; }
         .people-toggle-btn:hover {
-          background: rgba(255,179,179,0.4) !important;
-          border-color: rgba(255,143,143,0.5) !important;
-          box-shadow: 0 4px 12px rgba(255,143,143,0.2) !important;
+          background: rgba(165,233,221,0.4) !important;
+          border-color: rgba(111,190,178,0.5) !important;
+          box-shadow: 0 4px 12px rgba(111,190,178,0.2) !important;
           transform: translateY(-1px);
         }
       `}</style>

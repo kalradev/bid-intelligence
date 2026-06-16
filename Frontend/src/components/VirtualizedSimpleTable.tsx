@@ -1,12 +1,20 @@
-import React, { CSSProperties, memo, useMemo } from "react";
-import AutoSizer from "react-virtualized-auto-sizer";
-import { FixedSizeList, ListChildComponentProps } from "react-window";
+import React, { memo, useMemo } from "react";
+import type { CSSProperties } from "react";
+import { AutoSizer } from "react-virtualized-auto-sizer";
+import { FixedSizeList } from "react-window";
 
 type RowRenderer<T> = (item: T, index: number) => React.ReactNode;
+
+type VirtualRowProps = {
+  index: number;
+  style: CSSProperties;
+};
 
 interface VirtualizedSimpleTableProps<T> {
   /** Column headers (already styled content) */
   header: React.ReactNode;
+  /** Optional column group for fixed layout alignment */
+  colgroup?: React.ReactNode;
   /** Data items */
   items: T[];
   /** Row height in pixels (fixed for performance) */
@@ -30,6 +38,7 @@ interface VirtualizedSimpleTableProps<T> {
  */
 export function VirtualizedSimpleTable<T>({
   header,
+  colgroup,
   items,
   rowHeight = 56,
   maxHeight = 480,
@@ -39,23 +48,24 @@ export function VirtualizedSimpleTable<T>({
   style,
 }: VirtualizedSimpleTableProps<T>) {
   const itemCount = items.length;
+  const viewportHeight = itemCount === 0 ? rowHeight * 2 : Math.min(maxHeight, Math.max(rowHeight * 3, Math.min(itemCount * rowHeight, maxHeight)));
   const containerStyle: CSSProperties = useMemo(
     () => ({
       position: "relative",
       maxHeight,
-      height: Math.min(maxHeight, Math.max(rowHeight * Math.min(itemCount, 8), rowHeight * Math.min(itemCount, 1))) || rowHeight * 3,
+      height: viewportHeight,
       overflow: "hidden",
       willChange: "transform",
       contain: "strict",
       ...style,
     }),
-    [itemCount, maxHeight, rowHeight, style]
+    [itemCount, maxHeight, rowHeight, style, viewportHeight]
   );
 
-  const Row = memo(({ index, style: rowStyle }: ListChildComponentProps) => {
+  const Row = memo(({ index, style: rowStyle }: VirtualRowProps) => {
     const item = items[index];
     return (
-      <tr style={{ ...rowStyle, borderBottom: "1px solid #EAEFEF" }}>
+      <tr style={{ ...rowStyle, borderBottom: "1px solid #D4F0EB" }}>
         {renderRow(item, index)}
       </tr>
     );
@@ -65,27 +75,32 @@ export function VirtualizedSimpleTable<T>({
   return (
     <div aria-label={ariaLabel} className={className}>
       <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+        {colgroup}
         {header}
       </table>
       <div style={containerStyle}>
-        <AutoSizer>
-          {({ width, height }) => (
-            <table style={{ width, borderCollapse: "collapse", tableLayout: "fixed" }}>
-              <tbody>
-                <FixedSizeList
-                  height={height}
-                  width={width}
-                  itemCount={itemCount}
-                  itemSize={rowHeight}
-                  overscanCount={6}
-                  innerElementType="tbody"
-                >
-                  {Row}
-                </FixedSizeList>
-              </tbody>
-            </table>
-          )}
-        </AutoSizer>
+        <AutoSizer
+          renderProp={({ width, height }) => {
+            if (width == null || height == null) return null;
+            return (
+              <table style={{ width, borderCollapse: "collapse", tableLayout: "fixed" }}>
+                {colgroup}
+                <tbody>
+                  <FixedSizeList
+                    height={height}
+                    width={width}
+                    itemCount={itemCount}
+                    itemSize={rowHeight}
+                    overscanCount={4}
+                    innerElementType="tbody"
+                  >
+                    {Row}
+                  </FixedSizeList>
+                </tbody>
+              </table>
+            );
+          }}
+        />
       </div>
     </div>
   );

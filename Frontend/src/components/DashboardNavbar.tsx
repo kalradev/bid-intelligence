@@ -53,24 +53,15 @@ export default function DashboardNavbar() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: "auto", display: "block" }} />
+        <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
       </div>
       <button
         type="button"
         onClick={() => navigate("/home")}
+        className="header-brand-center header-brand-center--clickable"
         style={{
           position: "absolute",
           left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          background: "transparent",
-          border: "none",
-          padding: "8px 12px",
-          cursor: "pointer",
-          outline: "none",
-          transition: "opacity 0.2s ease",
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.opacity = "0.85";
@@ -81,7 +72,7 @@ export default function DashboardNavbar() {
         title="Go to Dashboard"
       >
         <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-        <span style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.02em", background: "linear-gradient(90deg, #E87878, #2d3319)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "transparent" }}>Bid Intelligence</span>
+        <span className="dashboard-top-header__title">Bid Intelligence</span>
       </button>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {userDisplayName ? (
@@ -93,32 +84,32 @@ export default function DashboardNavbar() {
               alignItems: "center",
               gap: 10,
               padding: "8px 16px 8px 8px",
-              background: "rgba(255,179,179,0.5)",
-              border: "1px solid rgba(255,143,143,0.4)",
+              background: "rgba(165,233,221,0.5)",
+              border: "1px solid rgba(111,190,178,0.4)",
               borderRadius: 14,
               cursor: "pointer",
               outline: "none",
               transition: "all 0.3s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = "#FFB3B3";
+              e.currentTarget.style.background = "#A5E9DD";
               e.currentTarget.style.transform = "translateY(-2px)";
-              e.currentTarget.style.boxShadow = "0 6px 20px rgba(255,143,143,0.25)";
+              e.currentTarget.style.boxShadow = "0 6px 20px rgba(111,190,178,0.25)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.background = "rgba(255,179,179,0.5)";
+              e.currentTarget.style.background = "rgba(165,233,221,0.5)";
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.boxShadow = "none";
             }}
             title="Account & security"
           >
-            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FF8F8F", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(255,143,143,0.3)" }}>
+            <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#6FBEB2", color: "#fff", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(111,190,178,0.3)" }}>
               {userDisplayName.charAt(0).toUpperCase()}
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: "#2d3319" }}>{userDisplayName}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: "#1e4a47" }}>{userDisplayName}</span>
           </button>
         ) : null}
-        <img src={cacheLogo} alt="Cache" style={{ height: 105, width: "auto", display: "block", marginLeft: 8 }} />
+        <img src={cacheLogo} alt="Cache" className="header-cache-logo" style={{ marginLeft: 8 }} />
       </div>
     </header>
   );

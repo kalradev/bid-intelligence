@@ -2,6 +2,7 @@ import { CheckCircle, Globe, Package } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 import { fetchProjectAnalysis, updateAnalysisData } from "../utils/documentAnalysis";
 
 export default function ProductMappingPage() {
@@ -54,7 +55,7 @@ export default function ProductMappingPage() {
         // If we have a project name, fetch fresh data from API
         if (projName) {
           try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             if (token) {
               const result = await fetchProjectAnalysis(projName, docId, null);
               updateAnalysisData(result, projName);
@@ -104,7 +105,7 @@ export default function ProductMappingPage() {
         }
       } catch (_) {}
     }
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
 
     const updateLocal = () => {
@@ -360,48 +361,9 @@ export default function ProductMappingPage() {
     <>
       <style>{miiFlagWaveCSS}</style>
       {/* NAVBAR */}
-      <header
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          width: "100%",
-          background: "linear-gradient(135deg, #001f3f, #003d7a)",
-          zIndex: 100,
-          padding: "12px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          boxSizing: "border-box",
-        }}
-      >
-        <h1
-          style={{
-            flex: 1,
-            textAlign: "center",
-            fontSize: 24,
-            fontWeight: 800,
-            color: "#fff",
-            margin: 0,
-          }}
-        >
-          Product Mapping
-        </h1>
-
-        <button
-          onClick={() => navigate("/insights")}
-          style={{
-            background: "#06b6d4",
-            color: "#fff",
-            padding: "10px 20px",
-            borderRadius: 8,
-            border: "none",
-            cursor: "pointer",
-            flexShrink: 0,
-            marginLeft: "16px",
-          }}
-        >
+      <header className="department-navbar">
+        <h1 className="department-navbar-title department-navbar-title-center">Product Mapping</h1>
+        <button className="department-navbar-btn" onClick={() => navigate("/insights")}>
           Home
         </button>
       </header>

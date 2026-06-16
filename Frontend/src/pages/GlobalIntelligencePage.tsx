@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getAuthToken } from "../utils/authStorage";
 import { fetchProjectAnalysis } from "../utils/documentAnalysis";
 
 interface ProductData {
@@ -85,7 +86,7 @@ export default function GlobalIntelligencePage() {
     }
 
     const refreshFromApi = async () => {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       const currentDoc = localStorage.getItem("currentDocument");
       const analysisDataLocal2 = localStorage.getItem("analysisData");
       let projectName = "";
@@ -128,60 +129,9 @@ export default function GlobalIntelligencePage() {
   return (
     <>
       {/* NAVBAR - FIXED OUTSIDE WRAPPER */}
-      <header
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          width: "100%",
-          background: "linear-gradient(135deg, #001f3f 0%, #003d7a 100%)",
-          boxShadow: "0 4px 20px rgba(0, 31, 63, 0.3)",
-          zIndex: 100,
-          padding: "12px 20px",
-          display: "flex",
-          alignItems: "center",
-          boxSizing: "border-box",
-        }}
-      >
-        <h1
-          style={{
-            flex: 1,
-            textAlign: "center",
-            margin: 0,
-            fontSize: 24,
-            fontWeight: 800,
-            color: "#ffffff",
-          }}
-        >
-          Build Your Stack
-        </h1>
-
-        <button
-          onClick={() => navigate("/insights")}
-          style={{
-            background: "#06b6d4",
-            color: "#ffffff",
-            padding: "10px 20px",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: "pointer",
-            marginLeft: "auto",
-            boxShadow: "0px 4px 15px rgba(6, 182, 212, 0.3)",
-            transition: "all 0.25s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#0891b2";
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = "0px 6px 20px rgba(6, 182, 212, 0.4)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "#06b6d4";
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0px 4px 15px rgba(6, 182, 212, 0.3)";
-          }}
-        >
+      <header className="department-navbar">
+        <h1 className="department-navbar-title department-navbar-title-center">Build Your Stack</h1>
+        <button className="department-navbar-btn" onClick={() => navigate("/insights")}>
           Home
         </button>
       </header>
@@ -196,9 +146,7 @@ export default function GlobalIntelligencePage() {
         <div
           style={{
             minHeight: "100vh",
-            background: "#DBE9FA",
-            padding: "32px",
-            paddingTop: "80px",
+            padding: "90px 32px 32px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -218,10 +166,10 @@ export default function GlobalIntelligencePage() {
                 width: "100%",
                 padding: "12px 16px",
                 borderRadius: 10,
-                border: "1px solid #e5e7eb",
+                border: "1px solid rgba(111,190,178,0.25)",
                 fontSize: 14,
-                background: "#fff",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                background: "rgba(255,255,255,0.92)",
+                boxShadow: "0 2px 8px rgba(111,190,178,0.1)",
               }}
             />
           </div>
@@ -241,11 +189,11 @@ export default function GlobalIntelligencePage() {
                 <div
                   key={i}
                   style={{
-                    background: "#fff",
+                    background: "rgba(255,255,255,0.92)",
                     borderRadius: 12,
                     padding: "16px 20px",
-                    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
-                    border: "1px solid #e5e7eb",
+                    boxShadow: "0 2px 10px rgba(111,190,178,0.12)",
+                    border: "1px solid rgba(111,190,178,0.25)",
                     display: "flex",
                     flexDirection: "column",
                     gap: 8,
@@ -259,9 +207,9 @@ export default function GlobalIntelligencePage() {
                         borderRadius: 8,
                         fontSize: 13,
                         fontWeight: 600,
-                        background: "rgba(255,143,143,0.2)",
+                        background: "rgba(111,190,178,0.2)",
                         color: "#b91c1c",
-                        border: "1px solid rgba(255,143,143,0.4)",
+                        border: "1px solid rgba(111,190,178,0.4)",
                       }}
                     >
                       {item.oem}
@@ -279,14 +227,14 @@ export default function GlobalIntelligencePage() {
             ) : (
               <div
                 style={{
-                  background: "#fff",
+                  background: "rgba(255,255,255,0.92)",
                   borderRadius: 14,
                   padding: 48,
                   textAlign: "center",
                   color: "#64748b",
                   fontSize: 15,
-                  border: "1px solid #e5e7eb",
-                  boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+                  border: "1px solid rgba(111,190,178,0.25)",
+                  boxShadow: "0 2px 10px rgba(111,190,178,0.12)",
                 }}
               >
                 {data.length === 0

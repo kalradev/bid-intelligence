@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import NavbarBidManagement from "../components/NavbarBidManagement";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 import { filterEMD, processDepartmentData } from "../utils/deduplication";
 import { exportToPDF } from "../utils/pdfExport";
+import { parseBidDeadlines } from "../utils/deadlineUtils";
 
 // Normalize project name: "GEM 2025\B" or "GEM 2025" -> "GEM/2025" so API can resolve
 function normalizeProjectName(name) {
@@ -49,6 +51,7 @@ const BidManagement = () => {
     const [eligibilityDocuments, setEligibilityDocuments] = useState({}); // { criteriaText: { name, file } }
     const [projectName, setProjectName] = useState(null);
     const [documentId, setDocumentId] = useState(null);
+    const [projectOverview, setProjectOverview] = useState(null);
     const [isLoadingChecklist, setIsLoadingChecklist] = useState(false);
     const fileInputRefs = useRef({});
 
@@ -61,7 +64,7 @@ const BidManagement = () => {
 
         setIsLoadingChecklist(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             if (!token) {
                 console.warn("No token found, skipping checklist load");
                 setIsLoadingChecklist(false);
@@ -111,12 +114,14 @@ const BidManagement = () => {
             if (storedData) {
                 const parsed = JSON.parse(storedData);
                 const bidManagementData = parsed?.data?.departmentalSummaries?.bidManagement;
+                const overviewData = parsed?.data?.departmentalSummaries?.projectOverview || null;
 
                 // Extract project name and document ID (normalize project name e.g. "GEM 2025\\B" -> "GEM/2025")
                 const projName = normalizeProjectName(parsed?.data?.projectName) ?? parsed?.data?.projectName;
                 const docId = parsed?.data?.metadata?.documentId;
                 setProjectName(projName);
                 setDocumentId(docId);
+                setProjectOverview(overviewData);
 
                 // Process and deduplicate all list-based fields, filter N/A.
                 // Use empty object fallback so page never goes fully blank.
@@ -171,7 +176,7 @@ const BidManagement = () => {
 
         // Save to API
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             if (!token) {
                 console.warn("❌ No token found, cannot save checklist");
                 // Revert state if no token
@@ -341,7 +346,34 @@ const BidManagement = () => {
                 >
                     Key Deadlines
                 </h3>
-                <p>{data.keyDeadlines || "N/A"}</p>
+                {(() => {
+                    const { submissionDeadline, bidOpeningDate } = parseBidDeadlines(
+                        data.keyDeadlines,
+                        projectOverview?.lastSubmissionDate,
+                        projectOverview?.bidOpeningDate
+                    );
+                    const deadlineRows = [
+                        { label: "Bid Submission Deadline", value: submissionDeadline },
+                        { label: "Bid Opening Date", value: bidOpeningDate },
+                    ];
+                    const hasAny = deadlineRows.some((row) => row.value);
+                    if (!hasAny && !data.keyDeadlines) {
+                        return <p>N/A</p>;
+                    }
+                    if (!hasAny) {
+                        return <p>{data.keyDeadlines}</p>;
+                    }
+                    return (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+                            {deadlineRows.map((row) => (
+                                <div key={row.label} className="insight-pill-badge">
+                                    <span className="insight-pill-badge-label">{row.label}:</span>
+                                    <span className="insight-pill-badge-value">{row.value || "N/A"}</span>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
 
                 {/* Strategy */}
                 <h3

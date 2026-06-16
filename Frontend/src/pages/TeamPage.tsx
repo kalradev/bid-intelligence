@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 
 interface TeamMember {
   id: number;
@@ -48,7 +49,7 @@ export default function TeamPage() {
   }, [navigate]);
 
   const fetchTeamAndQuota = async () => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     setLoading(true);
     try {
@@ -98,7 +99,7 @@ export default function TeamPage() {
     if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
       return;
     }
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     setDeletingUserId(userId);
     try {
@@ -139,23 +140,23 @@ export default function TeamPage() {
             alignItems: "center",
             gap: 8,
             padding: "12px 20px",
-            background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
-            border: "1px solid rgba(13,148,136,0.4)",
+            background: "linear-gradient(135deg, #34908B 0%, #6FBEB2 100%)",
+            border: "1px solid rgba(52,144,139,0.4)",
             borderRadius: 12,
             cursor: "pointer",
             fontWeight: 600,
             fontSize: 14,
             color: "#fff",
-            boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+            boxShadow: "0 4px 12px rgba(52,144,139,0.3)",
             transition: "all 0.2s ease",
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
+            e.currentTarget.style.boxShadow = "0 6px 16px rgba(52,144,139,0.4)";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
+            e.currentTarget.style.boxShadow = "0 4px 12px rgba(52,144,139,0.3)";
           }}
         >
           <ArrowLeft size={18} /> Back to Dashboard

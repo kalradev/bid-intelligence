@@ -40,7 +40,7 @@ def get_all_global_oems() -> List[str]:
 def classify_mii_status(oem: str, category: str = "") -> str:
     """
     Classify an OEM as Indian OEM or Global OEM based on known lists.
-    Returns 'Indian OEM' or 'Global OEM'.
+      Returns 'Indian OEM' or 'Global OEM'.
     """
     if not oem or not isinstance(oem, str):
         return "Global OEM"

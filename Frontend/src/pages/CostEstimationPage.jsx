@@ -15,60 +15,9 @@ export default function CostEstimationPage() {
   return (
     <>
       {/* NAVBAR - FIXED OUTSIDE WRAPPER */}
-      <header
-        style={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          width: "100%",
-          background: "linear-gradient(135deg, #001f3f 0%, #003d7a 100%)",
-          boxShadow: "0 4px 20px rgba(0, 31, 63, 0.3)",
-          zIndex: 100,
-          padding: "12px 20px",
-          display: "flex",
-          alignItems: "center",
-          boxSizing: "border-box",
-        }}
-      >
-        <h1
-          style={{
-            flex: 1,
-            textAlign: "center",
-            margin: 0,
-            fontSize: 24,
-            fontWeight: 800,
-            color: "#ffffff",
-          }}
-        >
-          Cost Estimation & Bid Insights
-        </h1>
-
-        <button
-          onClick={() => navigate("/insights")}
-          style={{
-            background: "#06b6d4",
-            color: "#ffffff",
-            padding: "10px 20px",
-            border: "none",
-            borderRadius: 8,
-            fontWeight: 600,
-            cursor: "pointer",
-            marginLeft: "auto",
-            boxShadow: "0px 4px 15px rgba(6, 182, 212, 0.3)",
-            transition: "all 0.25s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#0891b2";
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = "0px 6px 20px rgba(6, 182, 212, 0.4)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "#06b6d4";
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0px 4px 15px rgba(6, 182, 212, 0.3)";
-          }}
-        >
+      <header className="department-navbar">
+        <h1 className="department-navbar-title department-navbar-title-center">Cost Estimation & Bid Insights</h1>
+        <button className="department-navbar-btn" onClick={() => navigate("/insights")}>
           Home
         </button>
       </header>

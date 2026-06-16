@@ -5,12 +5,16 @@ import toast, { Toaster } from "react-hot-toast";
 import { useLocation, useNavigate } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import { API_BASE_URL } from '../config';
+import { getAuthToken } from '../utils/authStorage';
 
 export default function UploadPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const [userRole, setUserRole] = useState<string | null>(null);
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const dragCounterRef = useRef(0);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const u = localStorage.getItem("user");
@@ -63,7 +67,7 @@ export default function UploadPage() {
     useEffect(() => {
         const fetchProjects = async () => {
             try {
-                const token = localStorage.getItem('token');
+                const token = getAuthToken();
                 if (!token) {
                     console.error("No authentication token found");
                     setAllProjects([]);
@@ -199,10 +203,17 @@ export default function UploadPage() {
         }
     };
 
-    // Filter projects based on search term
-    const filteredProjects = allProjects.filter((p: any) =>
-        p.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase())
-    );
+    const projectActivityTime = (p: any) => {
+        const raw = p.last_analysis_at || p.created_at;
+        return raw ? new Date(raw).getTime() : 0;
+    };
+
+    // Filter projects based on search term; newest analysis first
+    const filteredProjects = allProjects
+        .filter((p: any) =>
+            p.project_name.toLowerCase().includes(projectSearchTerm.toLowerCase())
+        )
+        .sort((a: any, b: any) => projectActivityTime(b) - projectActivityTime(a));
 
     const checkProjectStatus = async (nameToCheck?: string) => {
         const name = (nameToCheck ?? projectName).trim();
@@ -213,7 +224,7 @@ export default function UploadPage() {
 
         setIsLoadingStatus(true);
         try {
-            const token = localStorage.getItem('token');
+            const token = getAuthToken();
             if (!token) {
                 toast.error("Please login to check project status");
                 setIsLoadingStatus(false);
@@ -321,11 +332,10 @@ export default function UploadPage() {
         }
     };
 
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
+    const addFiles = (fileList: FileList | File[]) => {
+        const newFiles = Array.from(fileList);
+        if (newFiles.length === 0) return;
 
-        const newFiles = Array.from(files);
         const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp"];
 
         const validFiles = newFiles.filter(file => {
@@ -341,8 +351,53 @@ export default function UploadPage() {
             setUploadedFiles(prev => [...prev, ...validFiles]);
             toast.success(`Added ${validFiles.length} file(s)`);
         }
+    };
 
+    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+        addFiles(files);
         event.target.value = "";
+    };
+
+    const handleDragEnter = (event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (projectExists === null) return;
+        dragCounterRef.current += 1;
+        setIsDragOver(true);
+    };
+
+    const handleDragLeave = (event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dragCounterRef.current -= 1;
+        if (dragCounterRef.current <= 0) {
+            dragCounterRef.current = 0;
+            setIsDragOver(false);
+        }
+    };
+
+    const handleDragOver = (event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (projectExists === null) return;
+        event.dataTransfer.dropEffect = "copy";
+    };
+
+    const handleDrop = (event: React.DragEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        dragCounterRef.current = 0;
+        setIsDragOver(false);
+        if (projectExists === null) {
+            toast.error("Select or create a project before uploading files.");
+            return;
+        }
+        const { files } = event.dataTransfer;
+        if (files && files.length > 0) {
+            addFiles(files);
+        }
     };
 
     const removeFile = (index: number) => {
@@ -389,7 +444,7 @@ export default function UploadPage() {
             return;
         }
 
-        const token = localStorage.getItem("token");
+        const token = getAuthToken();
         if (!token) {
             toast.error("Please login to analyze documents");
             return;
@@ -535,7 +590,7 @@ export default function UploadPage() {
             if (projectName && (role === "bid_manager" || role === "bid_admin")) {
                 setLastAnalyzedProjectName(projectName);
                 setShowAssignTMs(true);
-                const token = localStorage.getItem("token");
+                const token = getAuthToken();
                 if (token) {
                     try {
                         const [assignRes, assignableRes] = await Promise.all([
@@ -610,9 +665,9 @@ export default function UploadPage() {
                             marginBottom: "24px",
                             padding: "24px",
                             borderRadius: "20px",
-                            background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(250,243,225,0.5) 100%)",
-                            border: "1px solid rgba(255,143,143,0.4)",
-                            boxShadow: "0 4px 0 rgba(255,143,143,0.2), 0 1px 0 rgba(255,255,255,0.8) inset, 0 20px 40px rgba(0,0,0,0.06)"
+                            background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(232,248,245,0.5) 100%)",
+                            border: "1px solid rgba(111,190,178,0.4)",
+                            boxShadow: "0 4px 0 rgba(111,190,178,0.2), 0 1px 0 rgba(255,255,255,0.8) inset, 0 20px 40px rgba(0,0,0,0.06)"
                         }}>
                             <h3 style={{ margin: "0 0 16px", fontSize: "20px", fontWeight: 700, color: "#3d4a2c" }}>
                                 Assign users to “{lastAnalyzedProjectName}”
@@ -646,7 +701,7 @@ export default function UploadPage() {
                                         onClick={async () => {
                                             setAssignSaving(true);
                                             try {
-                                                const token = localStorage.getItem("token");
+                                                const token = getAuthToken();
                                                 if (!token) return;
                                                 const res = await fetch(`${API_BASE_URL}/api/rfp/project-assignments/${encodeURIComponent(lastAnalyzedProjectName)}`, {
                                                     method: "POST",
@@ -661,14 +716,14 @@ export default function UploadPage() {
                                                 setAssignSaving(false);
                                             }
                                         }}
-                                        style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "linear-gradient(180deg, #FF8F8F 0%, #E87878 100%)", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer", boxShadow: "0 4px 0 rgba(232,120,120,0.35)" }}
+                                        style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "linear-gradient(180deg, #6FBEB2 0%, #34908B 100%)", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer", boxShadow: "0 4px 0 rgba(52,144,139,0.35)" }}
                                     >
                                         {assignSaving ? "Saving…" : "Save assignments"}
                                     </button>
                                 )}
                                 <button
                                     onClick={() => { setShowAssignTMs(false); setLastAnalyzedProjectName(""); navigate("/insights"); }}
-                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "rgba(255,179,179,0.4)", color: "#5a6344", border: "2px solid rgba(255,143,143,0.5)", cursor: "pointer" }}
+                                    style={{ padding: "12px 20px", borderRadius: "12px", fontWeight: 700, background: "rgba(165,233,221,0.4)", color: "#5a6344", border: "2px solid rgba(111,190,178,0.5)", cursor: "pointer" }}
                                 >
                                     View results
                                 </button>
@@ -687,13 +742,13 @@ export default function UploadPage() {
                     {/* Enhanced Toggle — palette + 3D */}
                     <div style={{
                         display: "flex",
-                        background: "linear-gradient(135deg, rgba(234,239,239,0.9) 0%, rgba(250,243,225,0.8) 100%)",
+                        background: "linear-gradient(135deg, rgba(234,239,239,0.9) 0%, rgba(232,248,245,0.8) 100%)",
                         backdropFilter: "blur(12px)",
                         padding: "6px",
                         borderRadius: "16px",
                         marginBottom: "24px",
-                        boxShadow: "0 4px 0 rgba(255,143,143,0.2), inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 20px rgba(0,0,0,0.06)",
-                        border: "1px solid rgba(255,143,143,0.35)"
+                        boxShadow: "0 4px 0 rgba(111,190,178,0.2), inset 0 1px 0 rgba(255,255,255,0.7), 0 8px 20px rgba(0,0,0,0.06)",
+                        border: "1px solid rgba(111,190,178,0.35)"
                     }}>
                         {(userRole || "").toLowerCase() !== "technical_manager" && (
                             <button
@@ -701,25 +756,25 @@ export default function UploadPage() {
                                 onMouseEnter={(e) => {
                                     if (!isExistingMode) {
                                         e.currentTarget.style.transform = "translateY(-2px)";
-                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,143,143,0.45)";
+                                        e.currentTarget.style.boxShadow = "0 6px 16px rgba(111,190,178,0.45)";
                                     }
                                 }}
                                 onMouseLeave={(e) => {
                                     e.currentTarget.style.transform = "translateY(0)";
-                                    e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 0 rgba(255,143,143,0.3), 0 4px 12px rgba(255,143,143,0.2)" : "none";
+                                    e.currentTarget.style.boxShadow = !isExistingMode ? "0 4px 0 rgba(111,190,178,0.3), 0 4px 12px rgba(111,190,178,0.2)" : "none";
                                 }}
                                 style={{
                                     flex: 1,
                                     padding: "13px",
                                     borderRadius: "12px",
                                     border: "none",
-                                    background: !isExistingMode ? "linear-gradient(180deg, #FF8F8F 0%, #E87878 100%)" : "transparent",
+                                    background: !isExistingMode ? "linear-gradient(180deg, #6FBEB2 0%, #34908B 100%)" : "transparent",
                                     color: !isExistingMode ? "#fff" : "#5a6344",
                                     fontWeight: "700",
                                     cursor: "pointer",
                                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                                     fontSize: "14px",
-                                    boxShadow: !isExistingMode ? "0 4px 0 rgba(232,120,120,0.4), 0 4px 12px rgba(255,143,143,0.2)" : "none",
+                                    boxShadow: !isExistingMode ? "0 4px 0 rgba(52,144,139,0.4), 0 4px 12px rgba(111,190,178,0.2)" : "none",
                                     letterSpacing: "0.3px"
                                 }}
                             >
@@ -731,25 +786,25 @@ export default function UploadPage() {
                             onMouseEnter={(e) => {
                                 if (isExistingMode) {
                                     e.currentTarget.style.transform = "translateY(-2px)";
-                                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(255,179,179,0.5)";
+                                    e.currentTarget.style.boxShadow = "0 6px 16px rgba(165,233,221,0.5)";
                                 }
                             }}
                             onMouseLeave={(e) => {
                                 e.currentTarget.style.transform = "translateY(0)";
-                                e.currentTarget.style.boxShadow = isExistingMode ? "0 4px 0 rgba(255,143,143,0.35), 0 4px 12px rgba(255,179,179,0.25)" : "none";
+                                e.currentTarget.style.boxShadow = isExistingMode ? "0 4px 0 rgba(111,190,178,0.35), 0 4px 12px rgba(165,233,221,0.25)" : "none";
                             }}
                             style={{
                                 flex: 1,
                                 padding: "13px",
                                 borderRadius: "12px",
                                 border: "none",
-                                background: isExistingMode ? "linear-gradient(180deg, #FFB3B3 0%, #FF8F8F 100%)" : "transparent",
+                                background: isExistingMode ? "linear-gradient(180deg, #A5E9DD 0%, #6FBEB2 100%)" : "transparent",
                                 color: isExistingMode ? "#fff" : "#5a6344",
                                 fontWeight: "700",
                                 cursor: "pointer",
                                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                                 fontSize: "14px",
-                                boxShadow: isExistingMode ? "0 4px 0 rgba(232,120,120,0.35), 0 4px 12px rgba(255,179,179,0.2)" : "none",
+                                boxShadow: isExistingMode ? "0 4px 0 rgba(52,144,139,0.35), 0 4px 12px rgba(165,233,221,0.2)" : "none",
                                 letterSpacing: "0.3px"
                             }}
                         >
@@ -760,13 +815,13 @@ export default function UploadPage() {
                     {/* Enhanced Form Container — visible border + 3D */}
                     <div style={{
                         width: "100%",
-                        background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(250,243,225,0.6) 50%, rgba(234,239,239,0.6) 100%)",
+                        background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(232,248,245,0.6) 50%, rgba(234,239,239,0.6) 100%)",
                         backdropFilter: "blur(20px)",
                         padding: "28px",
                         borderRadius: "20px",
-                        border: "2px solid rgba(255,143,143,0.65)",
+                        border: "2px solid rgba(111,190,178,0.65)",
                         marginBottom: "24px",
-                        boxShadow: "inset 0 2px 8px rgba(0,0,0,0.04), 0 4px 0 rgba(255,143,143,0.25), 0 12px 28px rgba(0,0,0,0.06)",
+                        boxShadow: "inset 0 2px 8px rgba(0,0,0,0.04), 0 4px 0 rgba(111,190,178,0.25), 0 12px 28px rgba(0,0,0,0.06)",
                         display: "flex",
                         flexDirection: "column",
                         gap: "22px"
@@ -1052,7 +1107,7 @@ export default function UploadPage() {
                                                                         whiteSpace: "nowrap",
                                                                         fontWeight: "400"
                                                                     }}>
-                                                                        {p.created_at ? formatDate(p.created_at) : ''}
+                                                                        {(p.last_analysis_at || p.created_at) ? formatDate(p.last_analysis_at || p.created_at) : ''}
                                                                     </span>
                                                                 </div>
                                                             ))
@@ -1286,28 +1341,66 @@ export default function UploadPage() {
                         </div>
                     </div>
 
-                    <label htmlFor="file-upload" className="upload-box" style={{
-                        opacity: projectExists === null ? 0.6 : 1,
-                        pointerEvents: projectExists === null ? "none" : "auto",
-                        transition: "all 0.4s ease",
-                        background: projectExists === null ? "rgba(0,0,0,0.02)" : "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(250,243,225,0.5) 100%)",
-                        border: projectExists === null ? "2px dashed rgba(0,0,0,0.1)" : "2px dashed rgba(255,143,143,0.6)",
-                        padding: "40px 20px",
-                        borderRadius: "20px",
-                        boxShadow: projectExists ? "0 4px 0 rgba(255,143,143,0.2), inset 0 2px 8px rgba(0,0,0,0.03)" : "none"
-                    }}>
+                    <div
+                        role="button"
+                        tabIndex={projectExists === null ? -1 : 0}
+                        className={`upload-box${isDragOver ? " upload-box--drag-over" : ""}`}
+                        onClick={() => projectExists !== null && fileInputRef.current?.click()}
+                        onKeyDown={(e) => {
+                            if ((e.key === "Enter" || e.key === " ") && projectExists !== null) {
+                                e.preventDefault();
+                                fileInputRef.current?.click();
+                            }
+                        }}
+                        onDragEnter={handleDragEnter}
+                        onDragLeave={handleDragLeave}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop}
+                        style={{
+                            opacity: projectExists === null ? 0.6 : 1,
+                            pointerEvents: projectExists === null ? "none" : "auto",
+                            transition: "all 0.4s ease",
+                            background: projectExists === null
+                                ? "rgba(0,0,0,0.02)"
+                                : isDragOver
+                                    ? "linear-gradient(180deg, rgba(255,243,235,0.98) 0%, rgba(165,233,221,0.35) 100%)"
+                                    : "linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(232,248,245,0.5) 100%)",
+                            border: projectExists === null
+                                ? "2px dashed rgba(0,0,0,0.1)"
+                                : isDragOver
+                                    ? "2px dashed #6FBEB2"
+                                    : "2px dashed rgba(111,190,178,0.6)",
+                            padding: "40px 20px",
+                            borderRadius: "20px",
+                            boxShadow: projectExists
+                                ? isDragOver
+                                    ? "0 6px 20px rgba(111,190,178,0.35), inset 0 2px 8px rgba(111,190,178,0.1)"
+                                    : "0 4px 0 rgba(111,190,178,0.2), inset 0 2px 8px rgba(0,0,0,0.03)"
+                                : "none",
+                        }}
+                    >
                         <p style={{ fontSize: "18px", marginBottom: "16px", color: projectExists === null ? "#9ba3af" : "#1f2937", fontWeight: "600" }}>
-                            {uploadedFiles.length > 0
-                                ? `✅ ${uploadedFiles.length} file(s) selected`
-                                : projectExists === true
-                                    ? "📤 Drop Corrigendums or Reference Files here"
-                                    : "📤 Drop Base RFP Document here"}
+                            {isDragOver
+                                ? "📥 Release to upload files"
+                                : uploadedFiles.length > 0
+                                    ? `✅ ${uploadedFiles.length} file(s) selected`
+                                    : projectExists === true
+                                        ? "📤 Drop Corrigendums or Reference Files here"
+                                        : "📤 Drop Base RFP Document here"}
                         </p>
-                        <input type="file" multiple onChange={handleFileUpload} className="hidden" id="file-upload" />
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            multiple
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.webp"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                            id="file-upload"
+                        />
                         <span className="btn-primary" style={{ padding: "14px 28px", borderRadius: "14px", fontSize: "15px", boxShadow: "0 8px 16px rgba(59,130,246,0.25)", background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)" }}>
                             {uploadedFiles.length > 0 ? "Add More Files" : "Select Documents"}
                         </span>
-                    </label>
+                    </div>
 
                     {uploadedFiles.length > 0 && (
                         <div className="file-list" style={{ marginTop: "24px", animation: "slideUp 0.4s ease-out" }}>
@@ -1503,23 +1596,23 @@ export default function UploadPage() {
                         alignItems: 'center',
                         gap: 8,
                         padding: '12px 20px',
-                        background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
-                        border: '1px solid rgba(13,148,136,0.4)',
+                        background: 'linear-gradient(135deg, #34908B 0%, #6FBEB2 100%)',
+                        border: '1px solid rgba(52,144,139,0.4)',
                         borderRadius: 12,
                         cursor: 'pointer',
                         fontWeight: 600,
                         fontSize: 14,
                         color: '#fff',
-                        boxShadow: '0 4px 12px rgba(13,148,136,0.3)',
+                        boxShadow: '0 4px 12px rgba(52,144,139,0.3)',
                         transition: 'all 0.2s ease',
                     }}
                     onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(13,148,136,0.4)';
+                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(52,144,139,0.4)';
                     }}
                     onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(13,148,136,0.3)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(52,144,139,0.3)';
                     }}
                 >
                     <ArrowLeft size={18} />

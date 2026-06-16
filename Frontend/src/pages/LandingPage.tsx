@@ -63,7 +63,7 @@ export default function LandingPage() {
     <div className="universal-page-wrapper">
       {/* Women Owned Logo - Top Left */}
       <div style={{ position: 'fixed', top: '4px', left: '32px', zIndex: 100, display: 'flex', alignItems: 'flex-start' }}>
-        <img src={womenOwnedLogo} alt="Women Owned" style={{ height: 110, width: 'auto', display: 'block' }} />
+        <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
       </div>
 
       {/* Cache Logo - Top Right */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import { API_BASE_URL } from "../config";
+import { getAuthToken } from "../utils/authStorage";
 import { UserCircle, Shield, KeyRound, ArrowLeft } from "lucide-react";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 
@@ -14,7 +15,7 @@ export default function AccountPage() {
   const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) {
       navigate("/login");
       return;
@@ -72,7 +73,7 @@ export default function AccountPage() {
       toast.error("New password must be at least 6 characters");
       return;
     }
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token) return;
     setChangingPassword(true);
     try {
@@ -108,7 +109,7 @@ export default function AccountPage() {
           <div className="universal-bg-gradient-3" />
         </div>
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: NAVBAR_HEIGHT }}>
-          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #e2e8f0", borderTopColor: "#0d9488", animation: "spin 0.8s linear infinite" }} />
+          <div style={{ width: 48, height: 48, borderRadius: "50%", border: "3px solid #D4F0EB", borderTopColor: "#6FBEB2", animation: "spin 0.8s linear infinite" }} />
         </div>
       </div>
     );
@@ -130,23 +131,23 @@ export default function AccountPage() {
           alignItems: "center",
           gap: 8,
           padding: "12px 20px",
-          background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
-          border: "1px solid rgba(13,148,136,0.4)",
+          background: "linear-gradient(135deg, #6FBEB2 0%, #34908B 100%)",
+          border: "1px solid rgba(111,190,178,0.4)",
           borderRadius: 12,
           cursor: "pointer",
           fontWeight: 600,
           fontSize: 14,
           color: "#fff",
-          boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+          boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
           transition: "all 0.2s ease",
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = "translateY(-1px)";
-          e.currentTarget.style.boxShadow = "0 6px 16px rgba(13,148,136,0.4)";
+          e.currentTarget.style.boxShadow = "0 6px 16px rgba(111,190,178,0.4)";
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = "translateY(0)";
-          e.currentTarget.style.boxShadow = "0 4px 12px rgba(13,148,136,0.3)";
+          e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.3)";
         }}
       >
         <ArrowLeft size={18} /> Back to Dashboard
@@ -167,8 +168,8 @@ export default function AccountPage() {
         {/* Profile */}
         <section id="profile" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FAF3E1", border: "1px solid rgba(255,143,143,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <UserCircle size={24} color="#FF8F8F" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#E8F8F5", border: "1px solid rgba(111,190,178,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <UserCircle size={24} color="#6FBEB2" />
             </div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Profile</h2>
           </div>
@@ -191,8 +192,8 @@ export default function AccountPage() {
         {/* Two-step verification */}
         <section id="two-step" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24, marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.2) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Shield size={24} color="#6366f1" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(111,190,178,0.2) 0%, rgba(52,144,139,0.15) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Shield size={24} color="#34908B" />
             </div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Two-step verification</h2>
           </div>
@@ -204,8 +205,8 @@ export default function AccountPage() {
         {/* Change password */}
         <section id="password" style={{ background: "rgba(255,255,255,0.95)", borderRadius: 16, border: "1px solid #e2e8f0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(245,158,11,0.2) 0%, rgba(249,115,22,0.2) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <KeyRound size={24} color="#f59e0b" />
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg, rgba(111,190,178,0.2) 0%, rgba(165,233,221,0.25) 100%)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <KeyRound size={24} color="#6FBEB2" />
             </div>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "#1e293b" }}>Change password</h2>
           </div>
@@ -250,14 +251,14 @@ export default function AccountPage() {
               disabled={changingPassword}
               style={{
                 padding: "12px 20px",
-                background: "linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)",
+                background: "linear-gradient(135deg, #6FBEB2 0%, #34908B 100%)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 10,
                 fontWeight: 600,
                 fontSize: 14,
                 cursor: changingPassword ? "not-allowed" : "pointer",
-                boxShadow: "0 4px 12px rgba(13,148,136,0.3)",
+                boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
               }}
             >
               {changingPassword ? "Updating…" : "Update password"}

@@ -266,6 +266,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     try:
         # Find user by email
         email = request.email.strip().lower()
+        password = (request.password or "").strip()
         user = db.query(User).filter(User.email == email).first()
         
         if not user:
@@ -275,7 +276,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             )
         
         # Verify password (safe: malformed hashes don't cause 500)
-        if not _verify_password_safe(request.password, user.password or ""):
+        if not _verify_password_safe(password, user.password or ""):
             raise HTTPException(
                 status_code=401,
                 detail="Invalid email or password"

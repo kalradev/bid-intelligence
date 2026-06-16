@@ -3,6 +3,7 @@
  */
 
 import { API_BASE_URL } from '../config';
+import { getAuthToken } from './authStorage';
 
 export interface DocumentAnalysisResult {
   success: boolean;
@@ -28,7 +29,7 @@ export async function fetchProjectAnalysis(
   documentId: number | null = null,
   documentType: string | null = null
 ): Promise<DocumentAnalysisResult> {
-  const token = localStorage.getItem('token');
+  const token = getAuthToken();
   if (!token) {
     throw new Error("Please login to view project analysis");
   }

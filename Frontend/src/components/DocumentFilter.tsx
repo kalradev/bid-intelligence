@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Filter, ChevronDown } from "lucide-react";
 import { API_BASE_URL } from '../config';
+import { getAuthToken } from '../utils/authStorage';
 
 interface Document {
   id: number;
@@ -46,7 +47,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
       }
 
       try {
-        const token = localStorage.getItem('token');
+        const token = getAuthToken();
         if (!token) {
           setIsLoading(false);
           return;
