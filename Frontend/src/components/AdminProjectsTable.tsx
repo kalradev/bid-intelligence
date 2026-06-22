@@ -1,5 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { memo } from "react";
 
 export type AdminProjectItem = {
   id: number;
@@ -8,20 +7,25 @@ export type AdminProjectItem = {
   client_name: string | null;
 };
 
-const ROW_HEIGHT = 50;
+const GRID_COLS = "28% 14% 32% 26%";
 
-type RowData = {
-  projects: AdminProjectItem[];
+type AdminProjectRowProps = {
+  project: AdminProjectItem;
   onView: (name: string) => void;
   onAssign: (name: string) => void;
   onArchive: (id: number) => void;
   onUpload: (id: number, name: string) => void;
 };
 
-function ProjectRow({ index, style, data }: ListChildComponentProps<RowData>) {
-  const project = data.projects[index];
+const AdminProjectRow = memo(function AdminProjectRow({
+  project,
+  onView,
+  onAssign,
+  onArchive,
+  onUpload,
+}: AdminProjectRowProps) {
   return (
-    <div className="admin-projects-virtual-row" style={style}>
+    <div className="admin-projects-virtual-row" style={{ gridTemplateColumns: GRID_COLS }}>
       <div className="admin-projects-virtual-cell admin-projects-virtual-cell--name" title={project.project_name}>
         {project.project_name}
       </div>
@@ -33,30 +37,29 @@ function ProjectRow({ index, style, data }: ListChildComponentProps<RowData>) {
       </div>
       <div className="admin-projects-virtual-cell admin-projects-virtual-cell--actions">
         <div className="admin-projects-actions">
-          <button type="button" className="admin-projects-action admin-projects-action--view" onClick={() => data.onView(project.project_name)} title="View result">
+          <button type="button" className="admin-projects-action admin-projects-action--view" onClick={() => onView(project.project_name)} title="View result">
             View
           </button>
-          <button type="button" className="admin-projects-action admin-projects-action--assign" onClick={() => data.onAssign(project.project_name)} title="Assign managers" aria-label="Assign managers">
+          <button type="button" className="admin-projects-action admin-projects-action--assign" onClick={() => onAssign(project.project_name)} title="Assign managers" aria-label="Assign managers">
             +
           </button>
-          <button type="button" className="admin-projects-action admin-projects-action--archive" onClick={() => data.onArchive(project.id)} title="Archive project">
+          <button type="button" className="admin-projects-action admin-projects-action--archive" onClick={() => onArchive(project.id)} title="Archive project">
             Archive
           </button>
-          <button type="button" className="admin-projects-action admin-projects-action--upload" onClick={() => data.onUpload(project.id, project.project_name)} title="Upload final bid">
+          <button type="button" className="admin-projects-action admin-projects-action--upload" onClick={() => onUpload(project.id, project.project_name)} title="Upload final bid">
             Upload
           </button>
         </div>
       </div>
     </div>
   );
-}
-
-const MemoProjectRow = memo(ProjectRow);
+});
 
 type AdminProjectsTableProps = {
   projects: AdminProjectItem[];
   loading: boolean;
   maxHeight?: string;
+  fillParent?: boolean;
   onView: (name: string) => void;
   onAssign: (name: string) => void;
   onArchive: (id: number) => void;
@@ -67,40 +70,18 @@ export const AdminProjectsTable = memo(function AdminProjectsTable({
   projects,
   loading,
   maxHeight = "calc(100vh - 280px)",
+  fillParent = false,
   onView,
   onAssign,
   onArchive,
   onUpload,
 }: AdminProjectsTableProps) {
-  const listHostRef = useRef<HTMLDivElement>(null);
-  const [listSize, setListSize] = useState({ width: 0, height: 0 });
-
-  const itemData = useMemo<RowData>(
-    () => ({ projects, onView, onAssign, onArchive, onUpload }),
-    [projects, onView, onAssign, onArchive, onUpload]
-  );
-
-  useEffect(() => {
-    const el = listHostRef.current;
-    if (!el) return;
-
-    const update = () => {
-      const width = el.clientWidth;
-      const height = el.clientHeight;
-      if (width > 0 && height > 0) {
-        setListSize({ width, height });
-      }
-    };
-
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [projects.length, loading, maxHeight]);
+  const panelClassName = fillParent ? "admin-projects-panel admin-projects-panel--fill" : "admin-projects-panel";
+  const panelStyle = fillParent ? undefined : { maxHeight, height: maxHeight };
 
   if (loading && projects.length === 0) {
     return (
-      <div className="admin-projects-panel" style={{ maxHeight }}>
+      <div className={panelClassName} style={panelStyle}>
         <div className="admin-projects-panel__empty">
           <div className="admin-projects-panel__spinner" />
           Loading projects…
@@ -111,7 +92,7 @@ export const AdminProjectsTable = memo(function AdminProjectsTable({
 
   if (projects.length === 0) {
     return (
-      <div className="admin-projects-panel" style={{ maxHeight }}>
+      <div className={panelClassName} style={panelStyle}>
         <div className="admin-projects-panel__empty">
           No admin-owned projects yet. Upload & analyze to create projects as Bid Admin.
         </div>
@@ -120,26 +101,24 @@ export const AdminProjectsTable = memo(function AdminProjectsTable({
   }
 
   return (
-    <div className="admin-projects-panel" style={{ maxHeight, height: maxHeight }}>
-      <div className="admin-projects-virtual-header">
+    <div className={panelClassName} style={panelStyle}>
+      <div className="admin-projects-virtual-header" style={{ gridTemplateColumns: GRID_COLS }}>
         <div className="admin-projects-virtual-cell admin-projects-virtual-cell--name">Project</div>
-        <div className="admin-projects-virtual-cell admin-projects-virtual-cell--tender">Tender ID</div>
-        <div className="admin-projects-virtual-cell admin-projects-virtual-cell--client">Client</div>
+        <div className="admin-projects-virtual-cell">Tender ID</div>
+        <div className="admin-projects-virtual-cell">Client</div>
         <div className="admin-projects-virtual-cell admin-projects-virtual-cell--actions">Actions</div>
       </div>
-      <div ref={listHostRef} className="admin-projects-virtual-list-host">
-        {listSize.width > 0 && listSize.height > 0 && (
-          <FixedSizeList
-            height={listSize.height}
-            width={listSize.width}
-            itemCount={projects.length}
-            itemSize={ROW_HEIGHT}
-            itemData={itemData}
-            overscanCount={5}
-          >
-            {MemoProjectRow}
-          </FixedSizeList>
-        )}
+      <div className="admin-projects-virtual-list-host admin-projects-virtual-list-host--scroll">
+        {projects.map((project) => (
+          <AdminProjectRow
+            key={project.id}
+            project={project}
+            onView={onView}
+            onAssign={onAssign}
+            onArchive={onArchive}
+            onUpload={onUpload}
+          />
+        ))}
       </div>
     </div>
   );

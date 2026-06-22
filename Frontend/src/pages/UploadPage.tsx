@@ -1,16 +1,21 @@
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import toast, { Toaster } from "react-hot-toast";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
+import DashboardSidebar, { getDashboardSidebarWidth } from "../components/DashboardSidebar";
+import EligibilityReferenceDocsPanel from "../components/EligibilityReferenceDocsPanel";
 import { API_BASE_URL } from '../config';
 import { getAuthToken } from '../utils/authStorage';
 
 export default function UploadPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams] = useSearchParams();
     const [userRole, setUserRole] = useState<string | null>(null);
+    const [userDisplayName, setUserDisplayName] = useState("");
+    const [uploadMode, setUploadMode] = useState<"rfp" | "eligibility">("rfp");
     const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
     const [isDragOver, setIsDragOver] = useState(false);
     const dragCounterRef = useRef(0);
@@ -24,13 +29,32 @@ export default function UploadPage() {
                 const role = (parsed.role || "").toLowerCase();
                 setUserRole(role);
                 if (role === "technical_manager") setIsExistingMode(true);
+                if (parsed.fullName && typeof parsed.fullName === "string") {
+                    setUserDisplayName(parsed.fullName);
+                } else if (role === "bid_admin") {
+                    setUserDisplayName("Bid Admin");
+                } else if (role === "bid_manager") {
+                    setUserDisplayName("Bid Manager");
+                } else if (role === "technical_manager") {
+                    setUserDisplayName("Technical Manager");
+                }
             } catch {
                 setUserRole(null);
+                setUserDisplayName("");
             }
         } else {
             setUserRole(null);
+            setUserDisplayName("");
         }
     }, []);
+
+    useEffect(() => {
+        const queryMode = searchParams.get("mode");
+        const stateMode = (location.state as { mode?: string } | null)?.mode;
+        const mode = queryMode || stateMode;
+        if (mode === "eligibility") setUploadMode("eligibility");
+        else if (mode === "rfp") setUploadMode("rfp");
+    }, [location.state, searchParams]);
 
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [analysisTime, setAnalysisTime] = useState(0); // Time in seconds
@@ -55,6 +79,7 @@ export default function UploadPage() {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const dropdownPanelRef = useRef<HTMLDivElement | null>(null);
+    const mainScrollRef = useRef<HTMLElement>(null);
     const [dropdownRect, setDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
     const [teamQuota, setTeamQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
 
@@ -122,6 +147,36 @@ export default function UploadPage() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    useEffect(() => {
+        document.body.classList.add("upload-page-inner-scroll");
+        return () => document.body.classList.remove("upload-page-inner-scroll");
+    }, []);
+
+    useEffect(() => {
+        const el = mainScrollRef.current;
+        if (!el) return;
+
+        let timeoutId = 0;
+        let rafId = 0;
+        const onScroll = () => {
+            if (rafId) return;
+            rafId = window.requestAnimationFrame(() => {
+                rafId = 0;
+                document.body.classList.add("upload-page-scrolling");
+                window.clearTimeout(timeoutId);
+                timeoutId = window.setTimeout(() => document.body.classList.remove("upload-page-scrolling"), 280);
+            });
+        };
+
+        el.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+            el.removeEventListener("scroll", onScroll);
+            window.clearTimeout(timeoutId);
+            if (rafId) window.cancelAnimationFrame(rafId);
+            document.body.classList.remove("upload-page-scrolling");
+        };
+    }, []);
+
     // Update dropdown position when open (for portal positioning)
     useEffect(() => {
         if (!isDropdownOpen || !dropdownRef.current) {
@@ -135,10 +190,11 @@ export default function UploadPage() {
             }
         };
         update();
-        window.addEventListener("scroll", update, true);
+        const scrollRoot = mainScrollRef.current;
+        scrollRoot?.addEventListener("scroll", update, { passive: true });
         window.addEventListener("resize", update);
         return () => {
-            window.removeEventListener("scroll", update, true);
+            scrollRoot?.removeEventListener("scroll", update);
             window.removeEventListener("resize", update);
         };
     }, [isDropdownOpen]);
@@ -578,8 +634,17 @@ export default function UploadPage() {
             setProgressPercent(100);
             setAnalysisStage("Analysis complete!");
             toast.success(`Analysis complete! (${formatTime(totalTime)})`, { duration: 3000 });
-            // Scroll to top so user sees "Assign users" and top of page (was stuck at bottom)
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            const autoCheck = result?.data?.metadata?.autoEligibilityChecklist as Record<string, string> | undefined;
+            if (autoCheck && Object.keys(autoCheck).length > 0) {
+                const yesCount = Object.values(autoCheck).filter((v) => v === "yes").length;
+                const noCount = Object.values(autoCheck).filter((v) => v === "no").length;
+                const manualCount = Object.values(autoCheck).filter((v) => v === "manual").length;
+                toast.success(
+                    `Eligibility auto-check: ${yesCount} Yes, ${noCount} No${manualCount ? `, ${manualCount} need manual review` : ""}. Open Bid Management to review.`,
+                    { duration: 5000 }
+                );
+            }
+            mainScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
             const userStr = localStorage.getItem("user");
             const role = (userStr ? (JSON.parse(userStr).role || "") : "").toString().toLowerCase();
             if (projectName && (role === "bid_manager" || role === "bid_admin")) {
@@ -641,9 +706,18 @@ export default function UploadPage() {
         }
     };
 
+    const sidebarWidth = getDashboardSidebarWidth(userRole);
+    const showSidebar = userRole === "bid_admin" || userRole === "bid_manager" || userRole === "technical_manager";
+    const sidebarActive = uploadMode === "eligibility" ? "eligibility_docs" : "upload";
+    const canManageEligibilityDocs = userRole === "bid_admin" || userRole === "bid_manager";
+
     return (
-        <div className="universal-page-wrapper">
+        <div className="universal-page-wrapper upload-page-wrapper">
             <DashboardNavbar />
+
+            {showSidebar && (
+                <DashboardSidebar activeItem={sidebarActive} userRole={userRole} userDisplayName={userDisplayName} />
+            )}
 
             <div className="universal-background">
                 <div className="universal-bg-gradient-1"></div>
@@ -651,10 +725,30 @@ export default function UploadPage() {
                 <div className="universal-bg-gradient-3"></div>
             </div>
 
-            <div className="min-h-screen py-12" style={{ position: "relative", zIndex: 1, paddingTop: NAVBAR_HEIGHT + 24 }}>
+            <main
+                ref={mainScrollRef}
+                className="upload-page-main"
+                style={{
+                    top: NAVBAR_HEIGHT,
+                    left: showSidebar ? sidebarWidth : 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 1,
+                    paddingTop: 28,
+                    paddingLeft: 28,
+                    paddingRight: 28,
+                    paddingBottom: 48,
+                    transition: "left 0.25s ease",
+                }}
+            >
                 <Toaster />
 
-                <div className="upload-container">
+                {uploadMode === "eligibility" && canManageEligibilityDocs ? (
+                <div className={`upload-container${showSidebar ? " upload-container--with-sidebar" : ""}`}>
+                    <EligibilityReferenceDocsPanel />
+                </div>
+                ) : (
+                <div className={`upload-container${showSidebar ? " upload-container--with-sidebar" : ""}`}>
                     {showAssignTMs && lastAnalyzedProjectName && (
                         <div style={{
                             marginBottom: "24px",
@@ -737,8 +831,7 @@ export default function UploadPage() {
                     {/* Enhanced Toggle — palette + 3D */}
                     <div style={{
                         display: "flex",
-                        background: "linear-gradient(135deg, rgba(234,239,239,0.9) 0%, rgba(232,248,245,0.8) 100%)",
-                        backdropFilter: "blur(12px)",
+                        background: "linear-gradient(135deg, rgba(234,239,239,0.95) 0%, rgba(232,248,245,0.92) 100%)",
                         padding: "6px",
                         borderRadius: "16px",
                         marginBottom: "24px",
@@ -810,8 +903,7 @@ export default function UploadPage() {
                     {/* Enhanced Form Container — visible border + 3D */}
                     <div style={{
                         width: "100%",
-                        background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(232,248,245,0.6) 50%, rgba(234,239,239,0.6) 100%)",
-                        backdropFilter: "blur(20px)",
+                        background: "linear-gradient(165deg, rgba(255,255,255,0.98) 0%, rgba(232,248,245,0.85) 50%, rgba(234,239,239,0.82) 100%)",
                         padding: "28px",
                         borderRadius: "20px",
                         border: "2px solid rgba(111,190,178,0.65)",
@@ -1569,45 +1661,8 @@ export default function UploadPage() {
                         <p style={{ margin: "6px 0", fontSize: "13px", color: "#4b5563", fontWeight: "500" }}>🔹 Historical Traceability & Corrigendum Merging Included</p>
                     </div>
                 </div>
-            </div>
-
-            {(userRole === "bid_admin" || userRole === "bid_manager") && (
-                <button
-                    type="button"
-                    onClick={() => navigate("/home")}
-                    title={userRole === "bid_admin" ? "Back to Bid Admin Dashboard" : "Back to Dashboard"}
-                    style={{
-                        position: 'fixed',
-                        bottom: '20px',
-                        left: '20px',
-                        zIndex: 1000,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        padding: '12px 20px',
-                        background: 'linear-gradient(135deg, #34908B 0%, #6FBEB2 100%)',
-                        border: '1px solid rgba(52,144,139,0.4)',
-                        borderRadius: 12,
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        fontSize: 14,
-                        color: '#fff',
-                        boxShadow: '0 4px 12px rgba(52,144,139,0.3)',
-                        transition: 'all 0.2s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-1px)';
-                        e.currentTarget.style.boxShadow = '0 6px 16px rgba(52,144,139,0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(52,144,139,0.3)';
-                    }}
-                >
-                    <ArrowLeft size={18} />
-                    Back to Dashboard
-                </button>
-            )}
+                )}
+            </main>
         </div>
     );
 }

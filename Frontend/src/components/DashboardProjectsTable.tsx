@@ -1,5 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { FixedSizeList, type ListChildComponentProps } from "react-window";
+import { memo, type CSSProperties } from "react";
 
 export type DashboardProjectItem = {
   id: number;
@@ -10,70 +9,129 @@ export type DashboardProjectItem = {
   assigned_users?: Array<{ id: number; fullName: string; email: string; role: string }>;
 };
 
-const ROW_HEIGHT = 54;
-const DASHBOARD_PROJECT_GRID = "22% 10% 14% 12% 12% 30%";
+const TH: CSSProperties = {
+  padding: "13px 16px",
+  textAlign: "left",
+  fontWeight: 600,
+  color: "#475569",
+  fontSize: 14,
+};
 
-type RowData = {
-  projects: DashboardProjectItem[];
-  bmById: Record<number, string>;
-  currentUserId: number | null;
-  showAdminBadge: "auto" | "always" | "off";
+const TD_NAME: CSSProperties = {
+  padding: "13px 16px",
+  fontWeight: 600,
+  color: "#0f172a",
+  fontSize: 15,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const TD_MUTED: CSSProperties = {
+  padding: "13px 16px",
+  color: "#64748b",
+  fontSize: 15,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+function normalizeRole(role?: string): string {
+  return (role || "").trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+function getAssignedNameList(
+  users: DashboardProjectItem["assigned_users"],
+  role: "bid_manager" | "technical_manager"
+): string[] {
+  return (users || [])
+    .filter((u) => normalizeRole(u.role) === role)
+    .map((u) => u.fullName)
+    .filter(Boolean);
+}
+
+function AssignedNamesCell({ names, emptyLabel = "None" }: { names: string[]; emptyLabel?: string }) {
+  if (names.length === 0) {
+    return <span className="dashboard-projects-assigned-empty">{emptyLabel}</span>;
+  }
+
+  return (
+    <div className="dashboard-projects-assigned-names" title={names.join(", ")}>
+      {names.map((name) => (
+        <span key={name} className="dashboard-projects-assigned-chip">
+          {name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ProjectTableRow({
+  project,
+  bidManagerNames,
+  technicalManagerNames,
+  showBadge,
+  showAssign,
+  onView,
+  onAssign,
+  onArchive,
+  onUpload,
+}: {
+  project: DashboardProjectItem;
+  bidManagerNames: string[];
+  technicalManagerNames: string[];
+  showBadge: boolean;
   showAssign: boolean;
   onView: (name: string) => void;
   onAssign?: (name: string) => void;
   onArchive: (id: number) => void;
   onUpload: (id: number, name: string) => void;
-};
-
-function ProjectRow({ index, style, data }: ListChildComponentProps<RowData>) {
-  const project = data.projects[index];
-  const bidManager = project.user_id ? (data.bmById[project.user_id] ?? "—") : "—";
-  const technicalManagers = (project.assigned_users || []).map((u) => u.fullName).join(", ") || "None";
-  const showBadge =
-    data.showAdminBadge === "always" ||
-    (data.showAdminBadge === "auto" && data.currentUserId != null && project.user_id === data.currentUserId);
-
+}) {
   return (
-    <div className="dashboard-projects-virtual-row" style={{ ...style, gridTemplateColumns: DASHBOARD_PROJECT_GRID }}>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--name" title={project.project_name}>
-        <span className="dashboard-projects-name">{project.project_name}</span>
-        {showBadge && <span className="dashboard-projects-admin-tag">[Admin]</span>}
-      </div>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--muted" title={project.tender_id || undefined}>
+    <tr className="dashboard-projects-table-row">
+      <td style={TD_NAME} title={project.project_name}>
+        <span>{project.project_name}</span>
+        {showBadge && <span className="dashboard-projects-admin-tag"> [Admin]</span>}
+      </td>
+      <td style={TD_MUTED} title={project.tender_id || undefined}>
         {project.tender_id ?? "—"}
-      </div>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--muted" title={project.client_name || undefined}>
+      </td>
+      <td style={TD_MUTED} title={project.client_name || undefined}>
         {project.client_name ?? "—"}
-      </div>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--muted" title={bidManager}>
-        {bidManager}
-      </div>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--muted" title={technicalManagers}>
-        {technicalManagers}
-      </div>
-      <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--actions">
-        <div className="admin-projects-actions">
-          <button type="button" className="admin-projects-action admin-projects-action--view" onClick={() => data.onView(project.project_name)} title="View result">
+      </td>
+      <td className="dashboard-projects-table-cell--assigned">
+        {bidManagerNames.length > 0 ? (
+          <AssignedNamesCell names={bidManagerNames} />
+        ) : (
+          <span className="dashboard-projects-assigned-empty">—</span>
+        )}
+      </td>
+      <td className="dashboard-projects-table-cell--assigned">
+        <AssignedNamesCell names={technicalManagerNames} />
+      </td>
+      <td className="dashboard-projects-table-cell--actions">
+        <div className="admin-projects-actions admin-projects-actions--centered">
+          <button type="button" className="admin-projects-action admin-projects-action--view" onClick={() => onView(project.project_name)} title="View result">
             View
           </button>
-          {data.showAssign && data.onAssign && (
-            <button type="button" className="admin-projects-action admin-projects-action--assign" onClick={() => data.onAssign!(project.project_name)} title="Assign managers" aria-label="Assign managers">
+          {showAssign && onAssign && (
+            <button type="button" className="admin-projects-action admin-projects-action--assign" onClick={() => onAssign(project.project_name)} title="Assign managers" aria-label="Assign managers">
               +
             </button>
           )}
-          <button type="button" className="admin-projects-action admin-projects-action--archive" onClick={() => data.onArchive(project.id)} title="Archive project">
+          <button type="button" className="admin-projects-action admin-projects-action--archive" onClick={() => onArchive(project.id)} title="Archive project">
             Archive
           </button>
-          <button type="button" className="admin-projects-action admin-projects-action--upload" onClick={() => data.onUpload(project.id, project.project_name)} title="Upload final bid">
+          <button type="button" className="admin-projects-action admin-projects-action--upload" onClick={() => onUpload(project.id, project.project_name)} title="Upload final bid">
             Upload
           </button>
         </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
-const MemoProjectRow = memo(ProjectRow);
+const MemoProjectTableRow = memo(ProjectTableRow);
 
 type DashboardProjectsTableProps = {
   projects: DashboardProjectItem[];
@@ -102,90 +160,84 @@ export const DashboardProjectsTable = memo(function DashboardProjectsTable({
   onArchive,
   onUpload,
 }: DashboardProjectsTableProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const listHostRef = useRef<HTMLDivElement>(null);
-  const [listSize, setListSize] = useState({ width: 0, height: 0 });
-
-  const itemData = useMemo<RowData>(
-    () => ({
-      projects,
-      bmById,
-      currentUserId,
-      showAdminBadge,
-      showAssign,
-      onView,
-      onAssign,
-      onArchive,
-      onUpload,
-    }),
-    [projects, bmById, currentUserId, showAdminBadge, showAssign, onView, onAssign, onArchive, onUpload]
-  );
-
-  useEffect(() => {
-    const panel = panelRef.current;
-    const listHost = listHostRef.current;
-    if (!panel || !listHost) return;
-
-    const update = () => {
-      const width = panel.clientWidth;
-      const height = listHost.clientHeight;
-      if (width > 0 && height > 0) {
-        setListSize({ width, height });
-      }
-    };
-
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(panel);
-    ro.observe(listHost);
-    return () => ro.disconnect();
-  }, [projects.length, loading]);
-
-  const panelStyle = { flex: 1, minHeight: 0, width: "100%" as const };
-
   if (loading && projects.length === 0) {
     return (
-      <div ref={panelRef} className="dashboard-projects-panel" style={panelStyle}>
-        <div className="dashboard-projects-panel__empty">
-          <div className="admin-projects-panel__spinner" />
-          Loading…
-        </div>
+      <div className="dashboard-teams-tab-pane__empty">
+        <div className="admin-projects-panel__spinner" />
+        Loading…
       </div>
     );
   }
 
   if (projects.length === 0) {
-    return (
-      <div ref={panelRef} className="dashboard-projects-panel" style={panelStyle}>
-        <div className="dashboard-projects-panel__empty">{emptyMessage}</div>
-      </div>
-    );
+    return <div className="dashboard-teams-tab-pane__empty">{emptyMessage}</div>;
   }
 
+  const colgroup = showAssign ? (
+    <>
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "9%" }} />
+      <col style={{ width: "11%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "32%" }} />
+    </>
+  ) : (
+    <>
+      <col style={{ width: "18%" }} />
+      <col style={{ width: "10%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "16%" }} />
+      <col style={{ width: "28%" }} />
+    </>
+  );
+
   return (
-    <div ref={panelRef} className="dashboard-projects-panel" style={panelStyle}>
-      <div className="dashboard-projects-virtual-header" style={{ gridTemplateColumns: DASHBOARD_PROJECT_GRID }}>
-        <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--name">Project</div>
-        <div className="dashboard-projects-virtual-cell">Tender ID</div>
-        <div className="dashboard-projects-virtual-cell">Client</div>
-        <div className="dashboard-projects-virtual-cell">Bid Manager</div>
-        <div className="dashboard-projects-virtual-cell">Technical Manager(s)</div>
-        <div className="dashboard-projects-virtual-cell dashboard-projects-virtual-cell--actions">Actions</div>
-      </div>
-      <div ref={listHostRef} className="dashboard-projects-virtual-list-host">
-        {listSize.width > 0 && listSize.height > 0 && (
-          <FixedSizeList
-            height={listSize.height}
-            width={listSize.width}
-            itemCount={projects.length}
-            itemSize={ROW_HEIGHT}
-            itemData={itemData}
-            overscanCount={4}
-          >
-            {MemoProjectRow}
-          </FixedSizeList>
-        )}
-      </div>
+    <div className="admin-dashboard-table dashboard-teams-tab-pane__table dashboard-projects-table-scroll">
+      <table>
+        <colgroup>{colgroup}</colgroup>
+        <thead>
+          <tr>
+            <th style={TH}>Project</th>
+            <th style={TH}>Tender ID</th>
+            <th style={TH}>Client</th>
+            <th style={TH}>Bid Manager</th>
+            <th style={TH}>Technical Manager(s)</th>
+            <th className="dashboard-projects-table-actions-header">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {projects.map((project) => {
+            const assignedBMs = getAssignedNameList(project.assigned_users, "bid_manager");
+            const bidManagerNames =
+              assignedBMs.length > 0
+                ? assignedBMs
+                : project.user_id && bmById[project.user_id]
+                  ? [bmById[project.user_id]]
+                  : [];
+            const technicalManagerNames = getAssignedNameList(project.assigned_users, "technical_manager");
+            const showBadge =
+              showAdminBadge === "always" ||
+              (showAdminBadge === "auto" && currentUserId != null && project.user_id === currentUserId);
+
+            return (
+              <MemoProjectTableRow
+                key={project.id}
+                project={project}
+                bidManagerNames={bidManagerNames}
+                technicalManagerNames={technicalManagerNames}
+                showBadge={showBadge}
+                showAssign={showAssign}
+                onView={onView}
+                onAssign={onAssign}
+                onArchive={onArchive}
+                onUpload={onUpload}
+              />
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 });

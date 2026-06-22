@@ -468,7 +468,7 @@ const BidManagement = () => {
                                     </button>
                                 </div>
                                 <p style={{ fontSize: "13px", color: "#78350f", marginBottom: "12px", marginTop: "0" }}>
-                                    Mark each criterion Yes/No and optionally upload supporting documents.
+                                    Mark each criterion Yes/No. Auto-checked values from your eligibility documents appear after analysis; fill any remaining points manually.
                                 </p>
                                 {isLoadingChecklist && (
                                     <p style={{ fontSize: "14px", color: "#92400e", marginBottom: "12px" }}>

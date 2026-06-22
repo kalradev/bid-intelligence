@@ -182,25 +182,25 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
           display: "flex",
           alignItems: "center",
           gap: "6px",
-          padding: "8px 12px",
-          background: "rgba(255, 255, 255, 0.95)",
-          border: "2px solid rgba(99, 102, 241, 0.3)",
-          borderRadius: "8px",
+          padding: "10px 18px",
+          background: "#6FBEB2",
+          border: "none",
+          borderRadius: "12px",
           cursor: "pointer",
-          fontSize: "13px",
+          fontSize: "14px",
           fontWeight: "600",
-          color: "#4f46e5",
-          transition: "all 0.3s ease",
-          boxShadow: "0 2px 8px rgba(99, 102, 241, 0.1)",
+          color: "#fff",
+          transition: "all 0.2s ease",
+          boxShadow: "0 4px 12px rgba(111,190,178,0.3)",
           whiteSpace: "nowrap",
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.borderColor = "#6366f1";
-          e.currentTarget.style.boxShadow = "0 4px 12px rgba(99, 102, 241, 0.2)";
+          e.currentTarget.style.background = "#34908B";
+          e.currentTarget.style.boxShadow = "0 6px 16px rgba(111,190,178,0.4)";
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "rgba(99, 102, 241, 0.3)";
-          e.currentTarget.style.boxShadow = "0 2px 8px rgba(99, 102, 241, 0.1)";
+          e.currentTarget.style.background = "#6FBEB2";
+          e.currentTarget.style.boxShadow = "0 4px 12px rgba(111,190,178,0.3)";
         }}
       >
         <Filter size={14} />
@@ -240,7 +240,7 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
               background: "white",
-              border: "2px solid rgba(99, 102, 241, 0.3)",
+              border: "2px solid rgba(111, 190, 178, 0.35)",
               borderRadius: "12px",
               boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15)",
               minWidth: "280px",
@@ -253,10 +253,10 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
             <div
               style={{
                 padding: "8px",
-                borderBottom: "1px solid rgba(99, 102, 241, 0.1)",
+                borderBottom: "1px solid rgba(111, 190, 178, 0.2)",
                 fontWeight: "700",
                 fontSize: "12px",
-                color: "#6366f1",
+                color: "#34908B",
                 textTransform: "uppercase",
                 letterSpacing: "0.5px",
               }}
@@ -271,13 +271,13 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                 style={{
                   padding: "12px 16px",
                   cursor: "pointer",
-                  background: selectedDocument.id === null ? "rgba(99, 102, 241, 0.1)" : "transparent",
-                  borderLeft: selectedDocument.id === null ? "3px solid #6366f1" : "3px solid transparent",
+                  background: selectedDocument.id === null ? "rgba(111, 190, 178, 0.15)" : "transparent",
+                  borderLeft: selectedDocument.id === null ? "3px solid #34908B" : "3px solid transparent",
                   transition: "all 0.2s ease",
                 }}
                 onMouseEnter={(e) => {
                   if (selectedDocument.id !== null) {
-                    e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)";
+                    e.currentTarget.style.background = "rgba(111, 190, 178, 0.08)";
                   }
                 }}
                 onMouseLeave={(e) => {
@@ -307,13 +307,13 @@ export default function DocumentFilter({ projectName, onDocumentChange, currentD
                   style={{
                     padding: "12px 16px",
                     cursor: "pointer",
-                    background: selectedDocument.id === doc.id ? "rgba(99, 102, 241, 0.1)" : "transparent",
-                    borderLeft: selectedDocument.id === doc.id ? "3px solid #6366f1" : "3px solid transparent",
+                    background: selectedDocument.id === doc.id ? "rgba(111, 190, 178, 0.15)" : "transparent",
+                    borderLeft: selectedDocument.id === doc.id ? "3px solid #34908B" : "3px solid transparent",
                     transition: "all 0.2s ease",
                   }}
                   onMouseEnter={(e) => {
                     if (selectedDocument.id !== doc.id) {
-                      e.currentTarget.style.background = "rgba(99, 102, 241, 0.05)";
+                      e.currentTarget.style.background = "rgba(111, 190, 178, 0.08)";
                     }
                   }}
                   onMouseLeave={(e) => {

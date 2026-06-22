@@ -1,8 +1,8 @@
-import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, Eye, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Star, UserCircle, Users, UserPlus, X } from "lucide-react";
+import { Archive, ArchiveRestore, ArrowRight, ChevronDown, ChevronRight, ClipboardCheck, Eye, EyeOff, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Search, Star, UserCircle, Users, UserPlus, X } from "lucide-react";
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
 import { AdminProjectsTable } from "../components/AdminProjectsTable";
@@ -133,6 +133,7 @@ interface ProjectItem {
   tender_id: string | null;
   client_name: string | null;
   user_id: number | null;
+  assigned_users?: Array<{ id: number; fullName: string; email: string; role: string }>;
 }
 
 type ViewMode = "teams" | "personal" | "members" | "archived" | "create_user";
@@ -217,6 +218,7 @@ const MemberTableRow = memo(function MemberTableRow({
 
 export default function BidAdminDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [bidManagers, setBidManagers] = useState<BidManagerCard[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("teams");
@@ -238,6 +240,7 @@ export default function BidAdminDashboardPage() {
   const [createUserType, setCreateUserType] = useState<CreateUserType>("bid_manager");
   const [createUserForm, setCreateUserForm] = useState({ fullName: "", email: "", password: "" });
   const [createUserLoading, setCreateUserLoading] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [activeToggle, setActiveToggle] = useState<"projects" | "people" | "personal" | null>(null);
   const [expandedBmIdForProjects, setExpandedBmIdForProjects] = useState<number | null>(null);
   const [showGrandTotalProjects, setShowGrandTotalProjects] = useState(false);
@@ -267,6 +270,13 @@ export default function BidAdminDashboardPage() {
     if (nextMode === viewMode) return;
     setViewMode(nextMode);
   };
+
+  useEffect(() => {
+    const requestedView = (location.state as { view?: ViewMode } | null)?.view;
+    if (!requestedView || !["teams", "personal", "members", "archived", "create_user"].includes(requestedView)) return;
+    setViewMode(requestedView);
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const u = localStorage.getItem("user");
@@ -526,6 +536,21 @@ export default function BidAdminDashboardPage() {
       }
       toast.success("Assignments saved.");
       setAssignModalProject(null);
+      try {
+        const projRes = await fetch(`${API_BASE_URL}/api/rfp/projects`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+        if (projRes.ok) {
+          const data = await projRes.json();
+          const projects: ProjectItem[] = data.success && Array.isArray(data.projects) ? data.projects : [];
+          setProjectsForFilter(projects);
+          setPersonalProjects(projects);
+          setAllProjects(projects);
+        }
+      } catch {
+        /* list refresh is best-effort; save already succeeded */
+      }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Failed to save assignments");
     } finally {
@@ -729,6 +754,12 @@ export default function BidAdminDashboardPage() {
     };
   }, [viewMode, allMembersList.length]);
 
+  useEffect(() => {
+    const lockPageScroll = viewMode === "members" || viewMode === "personal";
+    document.body.classList.toggle("bid-admin-inner-scroll", lockPageScroll);
+    return () => document.body.classList.remove("bid-admin-inner-scroll");
+  }, [viewMode]);
+
   const totalProjectsWithAdmin = totalProjects + adminProjects.length;
 
   const filteredTeams = teamSearchLower
@@ -919,7 +950,7 @@ export default function BidAdminDashboardPage() {
           <button
             type="button"
             className="sidebar-nav-toggle"
-            onClick={() => navigate("/upload")}
+            onClick={() => navigate("/upload?mode=rfp")}
             style={{
               ...navButtonBase,
               background: "rgba(165,233,221,0.4)",
@@ -930,6 +961,21 @@ export default function BidAdminDashboardPage() {
           >
             <FileUp size={18} style={{ flexShrink: 0 }} />
             <span>Upload & Analyze</span>
+          </button>
+          <button
+            type="button"
+            className="sidebar-nav-toggle"
+            onClick={() => navigate("/upload?mode=eligibility")}
+            style={{
+              ...navButtonBase,
+              background: "rgba(165,233,221,0.4)",
+              color: "#1e4a47",
+              border: "1px solid rgba(111,190,178,0.3)",
+            }}
+            title="Upload company documents for eligibility auto-check"
+          >
+            <ClipboardCheck size={18} style={{ flexShrink: 0 }} />
+            <span>Eligibility documents</span>
           </button>
           <button
             type="button"
@@ -1007,7 +1053,13 @@ export default function BidAdminDashboardPage() {
       )}
 
       <main
-        className={viewMode === "members" ? "bid-admin-main--members" : undefined}
+        className={
+          viewMode === "members"
+            ? "bid-admin-main--members"
+            : viewMode === "personal"
+              ? "bid-admin-main--personal"
+              : undefined
+        }
         style={{ position: "relative", zIndex: 1, marginLeft: SIDEBAR_WIDTH, padding: `${NAVBAR_HEIGHT + 28}px 28px 48px` }}
       >
         <div className="bid-admin-content">
@@ -1102,16 +1154,39 @@ export default function BidAdminDashboardPage() {
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#475569", marginBottom: 6 }}>Password (min 6 characters)</label>
-                    <input
-                      type="password"
-                      placeholder="Password"
-                      value={createUserForm.password}
-                      onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      style={{ width: "100%", padding: "12px 14px", border: "1px solid #D4F0EB", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
-                    />
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type={showCreatePassword ? "text" : "password"}
+                        placeholder="Password"
+                        value={createUserForm.password}
+                        onChange={(e) => setCreateUserForm((f) => ({ ...f, password: e.target.value }))}
+                        required
+                        minLength={6}
+                        autoComplete="new-password"
+                        style={{ width: "100%", padding: "12px 44px 12px 14px", border: "1px solid #D4F0EB", borderRadius: 10, fontSize: 14, color: "#0f172a", background: "#fff", outline: "none", boxSizing: "border-box" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCreatePassword((v) => !v)}
+                        style={{
+                          position: "absolute",
+                          right: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          color: "#64748b",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 4,
+                        }}
+                        aria-label={showCreatePassword ? "Hide password" : "Show password"}
+                      >
+                        {showCreatePassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
                   <button
                     type="submit"
@@ -1137,8 +1212,8 @@ export default function BidAdminDashboardPage() {
             </section>
             )}
             {viewMode === "personal" && (
-            <section className="bid-admin-view-section">
-              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+            <section className="bid-admin-view-section admin-projects-view-section">
+              <h2 style={{ margin: "0 0 16px", fontSize: 17, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
                 <span style={{ width: 36, height: 36, borderRadius: 10, background: "#D4F0EB", display: "inline-flex", alignItems: "center", justifyContent: "center", borderLeft: "3px solid #34908B" }}>
                   <FolderOpen size={18} color="#34908B" />
                 </span>
@@ -1147,6 +1222,7 @@ export default function BidAdminDashboardPage() {
               <AdminProjectsTable
                 projects={adminProjects}
                 loading={personalProjectsLoading}
+                fillParent
                 onView={handleViewProject}
                 onAssign={openAssignModalForAdmin}
                 onArchive={handleArchiveProject}
@@ -1875,9 +1951,7 @@ export default function BidAdminDashboardPage() {
                   </div>
                 </div>
 
-                <div
-                  className={`bid-admin-teams-table-card__body${teamsViewFilter === "project" || teamsViewFilter === "admin" ? " bid-admin-teams-table-card__body--virtual" : ""}`}
-                >
+                <div className="bid-admin-teams-table-card__body">
                 {teamsViewFilter === "bid_manager" && (
                   <div className="dashboard-teams-tab-pane">
                 {bidManagers.length === 0 ? (
@@ -2325,7 +2399,27 @@ export default function BidAdminDashboardPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button type="button" onClick={() => setAssignModalProject(null)} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-                  <button type="button" disabled={assignModalSaving} onClick={saveAssignmentsForAdmin} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: assignModalSaving ? "wait" : "pointer" }}>{assignModalSaving ? "Saving…" : "Save"}</button>
+                  <button
+                    type="button"
+                    disabled={assignModalSaving || assignModalAssignedIds.length === 0}
+                    onClick={saveAssignmentsForAdmin}
+                    style={{
+                      padding: "10px 20px",
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      border: "none",
+                      cursor: assignModalSaving ? "wait" : assignModalAssignedIds.length === 0 ? "not-allowed" : "pointer",
+                      background: assignModalAssignedIds.length > 0
+                        ? "linear-gradient(135deg, #6FBEB2 0%, #34908B 100%)"
+                        : "#e2e8f0",
+                      color: assignModalAssignedIds.length > 0 ? "#fff" : "#94a3b8",
+                      boxShadow: assignModalAssignedIds.length > 0 ? "0 4px 14px rgba(52, 144, 139, 0.35)" : "none",
+                      opacity: assignModalSaving ? 0.85 : 1,
+                      transition: "background 0.2s, box-shadow 0.2s, color 0.2s",
+                    }}
+                  >
+                    {assignModalSaving ? "Saving…" : "Save"}
+                  </button>
                 </div>
               </>
             ) : (

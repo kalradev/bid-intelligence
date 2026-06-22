@@ -1,7 +1,7 @@
 import { ArrowRight, FileUp, FolderOpen, LayoutDashboard, LogOut, RefreshCw, Star, Users } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
@@ -22,6 +22,7 @@ const NAVBAR_HEIGHT = 88;
 
 export default function TechnicalManagerDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [userDisplayName, setUserDisplayName] = useState<string>("Technical Manager");
@@ -48,6 +49,14 @@ export default function TechnicalManagerDashboardPage() {
       navigate("/login");
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const requestedView = (location.state as { view?: string } | null)?.view;
+    if (requestedView === "by_bid_manager") {
+      setShowByBidManager(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   const fetchProjects = useCallback(async () => {
     const token = getAuthToken();

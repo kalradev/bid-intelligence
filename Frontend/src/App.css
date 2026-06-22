@@ -1767,18 +1767,20 @@ tbody tr:hover {
   background: var(--teal-dark) !important;
 }
 
-/* Department / analysis page navbars – frosted teal glass */
+/* Department / analysis page navbars – frosted teal glass (matches dashboard-top-header) */
 .department-navbar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   width: 100%;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(var(--teal-light-rgb), 0.42);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 8px 32px rgba(var(--teal-dark-rgb), 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  border-bottom: 1px solid rgba(var(--teal-mid-rgb), 0.4);
   z-index: 100;
   padding: 12px 24px;
   display: flex;
@@ -1795,7 +1797,7 @@ tbody tr:hover {
   border: 1px solid rgba(var(--teal-mid-rgb), 0.4);
   font-size: 18px;
   font-weight: 600;
-  color: var(--teal-dark);
+  color: #1e293b;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -1956,13 +1958,13 @@ tbody tr:hover {
   transform: translateY(-6px);
 }
 
-/* All members view – card scrolls, page header stays fixed */
-.members-view-section:not([hidden]) {
+/* All members / Admin projects – inner list scrolls, page does not */
+.members-view-section:not([hidden]),
+.admin-projects-view-section:not([hidden]) {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
-  height: auto;
   max-height: none;
 }
 
@@ -2023,18 +2025,11 @@ tbody tr:hover {
   min-height: 460px;
   width: 100%;
   flex-shrink: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: auto;
   background: #fff;
-}
-
-.bid-admin-teams-table-card__body--virtual {
-  overflow-y: hidden;
-}
-
-.bid-admin-teams-table-card__body--virtual .dashboard-teams-tab-pane {
-  padding: 20px 22px;
-  overflow: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .dashboard-teams-tab-pane {
@@ -2060,7 +2055,6 @@ tbody tr:hover {
 
 .dashboard-teams-tab-pane__table {
   width: 100%;
-  overflow-x: auto;
 }
 
 .dashboard-teams-tab-pane__table table {
@@ -2069,24 +2063,113 @@ tbody tr:hover {
   table-layout: fixed;
 }
 
-.bid-admin-main--members {
+.dashboard-projects-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-projects-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.dashboard-projects-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f5f9;
+  box-shadow: 0 1px 0 #D4F0EB;
+}
+
+.dashboard-projects-table-row {
+  border-bottom: 1px solid #D4F0EB;
+  background: #fff;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 54px;
+}
+
+.dashboard-projects-table-row:hover {
+  background: #f8fafc;
+}
+
+.dashboard-projects-table-cell--assigned {
+  padding: 10px 12px;
+  vertical-align: top;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.dashboard-projects-assigned-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  max-width: 100%;
+}
+
+.dashboard-projects-assigned-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(111, 190, 178, 0.14);
+  border: 1px solid rgba(111, 190, 178, 0.35);
+  color: #1e4a47;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.dashboard-projects-assigned-empty {
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.dashboard-projects-table-actions-header {
+  padding: 13px 16px;
+  text-align: center;
+  font-weight: 600;
+  color: #475569;
+  font-size: 14px;
+}
+
+.dashboard-projects-table-cell--actions {
+  padding: 13px 12px;
+  text-align: center;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+.dashboard-projects-table-scroll .admin-projects-actions--centered {
+  justify-content: center;
+  padding-right: 0;
+}
+
+.bid-admin-main--members,
+.bid-admin-main--personal {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  max-height: 100vh;
   overflow: hidden;
   box-sizing: border-box;
 }
 
-.bid-admin-main--members > div {
+.bid-admin-main--members > div,
+.bid-admin-main--personal > div {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.bid-admin-main--members .members-view-section:not([hidden]) {
-  flex: 1;
+.bid-admin-main--members .members-view-section:not([hidden]),
+.bid-admin-main--personal .admin-projects-view-section:not([hidden]) {
+  flex: 1 1 0;
   min-height: 0;
 }
 
@@ -2141,6 +2224,13 @@ tbody tr:hover {
   width: 100%;
 }
 
+.admin-projects-panel--fill {
+  flex: 1 1 0;
+  min-height: 0;
+  align-self: stretch;
+  width: 100%;
+}
+
 .admin-projects-panel__empty {
   padding: 48px;
   text-align: center;
@@ -2160,9 +2250,9 @@ tbody tr:hover {
 
 .admin-projects-virtual-header {
   display: grid;
-  grid-template-columns: 26% 16% 36% 22%;
   align-items: center;
-  min-width: 860px;
+  width: 100%;
+  box-sizing: border-box;
   background: #f1f5f9;
   border-bottom: 2px solid #D4F0EB;
   flex-shrink: 0;
@@ -2172,14 +2262,34 @@ tbody tr:hover {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background: #fff;
+}
+
+.admin-projects-virtual-list-host--scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-projects-virtual-list-outer {
+  background: #fff !important;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-projects-virtual-list-placeholder {
+  flex: 1;
+  min-height: 120px;
+  background: #fff;
 }
 
 .admin-projects-virtual-row {
   display: grid;
-  grid-template-columns: 26% 16% 36% 22%;
   align-items: center;
-  min-width: 860px;
+  width: 100%;
   box-sizing: border-box;
+  min-height: 52px;
   border-bottom: 1px solid #D4F0EB;
   background: #fff;
 }
@@ -2286,12 +2396,23 @@ tbody tr:hover {
 
 .dashboard-projects-virtual-header {
   display: grid;
-  grid-template-columns: 22% 10% 14% 12% 12% 30%;
+  grid-template-columns: var(--dashboard-project-cols);
   align-items: center;
   width: 100%;
+  box-sizing: border-box;
   background: #f1f5f9;
   border-bottom: 2px solid #D4F0EB;
   flex-shrink: 0;
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+.dashboard-projects-virtual-header::-webkit-scrollbar {
+  background: #f1f5f9;
+}
+
+.dashboard-projects-virtual-list-host > div {
+  scrollbar-gutter: stable;
 }
 
 .dashboard-projects-virtual-list-host {
@@ -2303,12 +2424,12 @@ tbody tr:hover {
 
 .dashboard-projects-virtual-row {
   display: grid;
-  grid-template-columns: 22% 10% 14% 12% 12% 30%;
+  grid-template-columns: var(--dashboard-project-cols);
   align-items: center;
-  width: 100%;
   box-sizing: border-box;
   border-bottom: 1px solid #D4F0EB;
   background: #fff;
+  contain: layout style;
 }
 
 .dashboard-projects-virtual-cell {
@@ -2324,8 +2445,10 @@ tbody tr:hover {
   padding: 13px 16px;
   font-weight: 600;
   color: #475569;
-  font-size: 14px;
+  font-size: 13px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dashboard-projects-virtual-cell--name {
@@ -2369,6 +2492,88 @@ tbody tr:hover {
 body.bid-admin-scrolling .bid-admin-ambient,
 body.bid-admin-scrolling .bid-admin-ambient * {
   animation-play-state: paused !important;
+}
+
+body.bid-admin-inner-scroll {
+  overflow: hidden;
+}
+
+/* Upload page: single inner scroll — avoids document scroll + fixed blur layers jank */
+body.upload-page-inner-scroll {
+  overflow: hidden;
+}
+
+.upload-page-wrapper {
+  height: 100vh;
+  overflow: hidden;
+  background: linear-gradient(165deg, #e8f8f5 0%, rgba(234, 239, 239, 0.98) 45%, #e8f8f5 100%);
+}
+
+/* Static, lighter background on upload — animated blur orbs are costly while scrolling */
+.upload-page-wrapper .universal-background::before,
+.upload-page-wrapper .universal-background::after {
+  animation: none !important;
+  opacity: 0.35;
+}
+
+.upload-page-wrapper .universal-bg-gradient-1,
+.upload-page-wrapper .universal-bg-gradient-2,
+.upload-page-wrapper .universal-bg-gradient-3 {
+  animation: none !important;
+  filter: blur(56px);
+  opacity: 0.38;
+}
+
+/* Solid chrome on upload — backdrop-filter on fixed layers causes scroll jank */
+.upload-page-wrapper .dashboard-top-header {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(var(--teal-light-rgb), 0.94) !important;
+}
+
+.upload-page-wrapper aside {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: rgba(232, 247, 244, 0.96) !important;
+}
+
+.upload-page-main {
+  position: fixed;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  contain: layout style;
+  transform: translateZ(0);
+}
+
+body.upload-page-scrolling .upload-page-main {
+  will-change: scroll-position;
+}
+
+.upload-page-wrapper .upload-container {
+  transition: none;
+}
+
+.upload-page-wrapper .upload-container:hover {
+  transform: none;
+}
+
+body.upload-page-scrolling .upload-page-wrapper .universal-background,
+body.upload-page-scrolling .upload-page-wrapper .universal-background::before,
+body.upload-page-scrolling .upload-page-wrapper .universal-background::after,
+body.upload-page-scrolling .upload-page-wrapper .universal-bg-gradient-1,
+body.upload-page-scrolling .upload-page-wrapper .universal-bg-gradient-2,
+body.upload-page-scrolling .upload-page-wrapper .universal-bg-gradient-3 {
+  animation-play-state: paused !important;
+}
+
+body.upload-page-scrolling .upload-page-wrapper .upload-box,
+body.upload-page-scrolling .upload-page-wrapper .upload-container,
+body.upload-page-scrolling .upload-page-main * {
+  transition: none !important;
 }
 
 .member-table-row {
@@ -2601,6 +2806,70 @@ body.bid-admin-scrolling .bid-admin-ambient * {
   color: var(--teal-dark) !important;
 }
 
+/* Smart RFP – teal theme cards */
+.smart-rfp-content-card {
+  width: 100%;
+  max-width: 1050px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.98) 0%, rgba(232, 248, 245, 0.55) 100%);
+  border-radius: 20px;
+  padding: 28px;
+  border: 2px solid rgba(var(--teal-mid-rgb), 0.45);
+  box-shadow:
+    0 4px 0 rgba(var(--teal-mid-rgb), 0.2),
+    0 12px 28px rgba(var(--teal-dark-rgb), 0.08);
+}
+
+.smart-rfp-detail-card {
+  border-radius: 14px;
+  padding: 18px 22px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(var(--teal-light-rgb), 0.22));
+  border: 1px solid rgba(var(--teal-mid-rgb), 0.35);
+  transition: all 0.25s ease;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(var(--teal-mid-rgb), 0.1);
+}
+
+.smart-rfp-detail-card:hover {
+  transform: translateY(-3px);
+  background: rgba(var(--teal-light-rgb), 0.35);
+  border-color: rgba(var(--teal-mid-rgb), 0.55);
+  box-shadow: 0 8px 20px rgba(var(--teal-mid-rgb), 0.18);
+}
+
+.smart-rfp-detail-label {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: var(--teal-text);
+}
+
+.smart-rfp-detail-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--teal-dark);
+  margin: 0;
+}
+
+.smart-rfp-detail-value--accent {
+  color: #059669;
+}
+
+.smart-rfp-detail-value--warn {
+  color: #d97706;
+}
+
+.smart-rfp-detail-value--urgent {
+  color: #dc2626;
+}
+
+.smart-rfp-page-title {
+  flex: 1;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--teal-text);
+  margin: 0;
+}
+
 /* ==== NEW UPLOAD PAGE STYLES (palette + 3D) ==== */
 .upload-container {
   max-width: 560px;
@@ -2621,6 +2890,18 @@ body.bid-admin-scrolling .bid-admin-ambient * {
   position: relative;
   z-index: 10;
   transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.upload-container--with-sidebar {
+  margin: 0 auto;
+}
+
+.upload-eligibility-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
 }
 
 .upload-container:hover {

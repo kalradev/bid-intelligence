@@ -1,7 +1,7 @@
 import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
+import { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
 import DepartmentCard from "../components/DepartmentCard";
 import FeatureCard from "../components/FeatureCard";
 import DocumentFilter from "../components/DocumentFilter";
@@ -90,12 +90,10 @@ export default function InsightsPage() {
     }
   };
 
-  const NAVBAR_HEIGHT = 72;
-
   return (
     <div className="universal-page-wrapper insights-page" style={{ position: 'relative', overflow: 'hidden' }}>
-      {/* Navbar: Bid Intelligence + 3 toggles only (no Women Owned, CACHE, profile) */}
       <header
+        className="dashboard-top-header"
         style={{
           position: "fixed",
           top: 0,
@@ -103,41 +101,33 @@ export default function InsightsPage() {
           right: 0,
           height: NAVBAR_HEIGHT,
           zIndex: 120,
-          background: "rgba(255,255,255,0.45)",
+          padding: "0 24px 0 20px",
           backdropFilter: "blur(24px) saturate(180%)",
           WebkitBackdropFilter: "blur(24px) saturate(180%)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
-          borderBottom: "1px solid rgba(255,255,255,0.5)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0 24px",
         }}
       >
-        <div style={{ minWidth: 200, display: "flex", justifyContent: "flex-start" }} />
-        <button
-          type="button"
-          onClick={() => navigate("/home")}
-          style={{
-            position: "absolute",
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            background: "transparent",
-            border: "none",
-            padding: "8px 12px",
-            cursor: "pointer",
-            outline: "none",
-            transition: "opacity 0.2s ease",
-          }}
-          title="Go to Dashboard"
-        >
-          <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
-          <span className="dashboard-top-header__title" style={{ fontSize: 24, fontWeight: 800 }}>Bid Intelligence</span>
-        </button>
-        <div style={{ minWidth: 200, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
+        <div className="dashboard-top-header__start" />
+        <div className="dashboard-top-header__brand" style={{ pointerEvents: "auto" }}>
+          <button
+            type="button"
+            onClick={() => navigate("/home")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              background: "transparent",
+              border: "none",
+              padding: "8px 12px",
+              cursor: "pointer",
+              outline: "none",
+              transition: "opacity 0.2s ease",
+            }}
+            title="Go to Dashboard"
+          >
+            <span className="dashboard-top-header__title">Bid Intelligence</span>
+          </button>
+        </div>
+        <div className="dashboard-top-header__end">
           {projectName && (
             <DocumentFilter
               projectName={projectName}

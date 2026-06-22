@@ -42,6 +42,7 @@ export default function DashboardNavbar() {
 
   return (
     <header
+      className="dashboard-top-header"
       style={{
         position: "fixed",
         top: 0,
@@ -49,40 +50,20 @@ export default function DashboardNavbar() {
         right: 0,
         height: NAVBAR_HEIGHT,
         zIndex: 120,
-        background: "rgba(255,255,255,0.45)",
+        padding: "0 24px 0 20px",
         backdropFilter: "blur(24px) saturate(180%)",
         WebkitBackdropFilter: "blur(24px) saturate(180%)",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.7)",
-        borderBottom: "1px solid rgba(255,255,255,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 24px 0 20px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+      <div className="dashboard-top-header__start">
         <img src={womenOwnedLogo} alt="Women Owned" className="header-women-owned-logo" />
       </div>
-      <button
-        type="button"
-        onClick={() => navigate("/home")}
-        className="header-brand-center header-brand-center--clickable"
-        style={{
-          position: "absolute",
-          left: "50%",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.opacity = "0.85";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.opacity = "1";
-        }}
-        title="Go to Dashboard"
-      >
-        <img src={bidIntelligenceLogo} alt="" style={{ height: 44, width: 44, flexShrink: 0 }} />
+
+      <div className="dashboard-top-header__brand">
         <span className="dashboard-top-header__title">Bid Intelligence</span>
-      </button>
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      </div>
+
+      <div className="dashboard-top-header__end">
         {userDisplayName && !hideProfileButton ? (
           <button
             type="button"
@@ -117,7 +98,7 @@ export default function DashboardNavbar() {
             <span style={{ fontSize: 14, fontWeight: 700, color: "#1e4a47" }}>{userDisplayName}</span>
           </button>
         ) : null}
-        <img src={cacheLogo} alt="Cache" className="header-cache-logo" style={{ marginLeft: 8 }} />
+        <img src={cacheLogo} alt="Cache" className="header-cache-logo" />
       </div>
     </header>
   );

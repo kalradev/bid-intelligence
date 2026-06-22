@@ -23,6 +23,7 @@ from services.project_service import ProjectService
 from models.file_cache import FileCache
 from models.project import ProjectModel
 from models.eligibility_checklist import EligibilityChecklistModel
+from models.eligibility_reference_document import EligibilityReferenceDocumentModel
 from api.auth_routes import get_current_user, get_current_user_optional
 
 logger = logging.getLogger(__name__)
@@ -145,11 +146,10 @@ async def analyze_rfp(
                 from core.sqlalchemy_db import get_db_session
                 from models.sqlalchemy_models import ProjectDocument
                 doc_id = None
+                project_id = result_data.get("project_id")
                 db = get_db_session()
                 try:
-                    project_id = result_data.get("project_id")
                     if not project_id:
-                        # Try to get project_id from project name
                         from models.sqlalchemy_models import Project
                         project = db.query(Project).filter(
                             Project.project_name == project_name,
@@ -157,7 +157,7 @@ async def analyze_rfp(
                         ).first()
                         if project:
                             project_id = project.id
-                    
+
                     if project_id:
                         doc = db.query(ProjectDocument).filter(
                             ProjectDocument.project_id == project_id,
@@ -178,6 +178,27 @@ async def analyze_rfp(
                 product_count = len(pm.get("miiProductStatus", []))
                 logger.info(f"📦 Returning analysis with {product_count} products in productMapping")
                 
+                # Auto-check eligibility against user's reference documents
+                auto_eligibility_checklist = {}
+                try:
+                    from services.eligibility_auto_check_service import auto_check_from_summaries
+                    ref_docs = EligibilityReferenceDocumentModel.get_texts_for_user(current_user["id"])
+                    criteria_checks = auto_check_from_summaries(
+                        result_data.get("departmentalSummaries") or {}, ref_docs
+                    )
+                    if criteria_checks and project_id:
+                        save_map = {k: v for k, v in criteria_checks.items() if v is not None}
+                        if save_map:
+                            EligibilityChecklistModel.save_checklist(
+                                project_id, doc_id, current_user["id"], save_map
+                            )
+                        auto_eligibility_checklist = {
+                            k: ("yes" if v is True else "no" if v is False else "manual")
+                            for k, v in criteria_checks.items()
+                        }
+                except Exception as ace:
+                    logger.warning(f"Eligibility auto-check skipped: {ace}")
+
                 # If everything went well, return the merged analysis
                 return {
                     "success": True,
@@ -194,7 +215,8 @@ async def analyze_rfp(
                             "documentId": doc_id,
                             "updateType": update_type,
                             "fileName": ", ".join(filenames),
-                            "lastUpdated": datetime.now().isoformat() if 'datetime' in dir() else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                            "lastUpdated": datetime.now().isoformat() if 'datetime' in dir() else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                            "autoEligibilityChecklist": auto_eligibility_checklist,
                         }
                     }
                 }
@@ -769,23 +791,21 @@ async def set_project_assignments(
     from models.project_assignment import ProjectAssignmentModel
     from services.role_quota_service import ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER
     from models.sqlalchemy_models import User
+
+    def _norm_role(value: Optional[str]) -> str:
+        return (value or "").strip().lower().replace(" ", "_")
+
     role = (current_user.get("role") or "").lower()
-    if role == "bid_manager":
-        # Bid Manager can assign any Technical Manager to their project (not restricted to "their" TMs)
-        allowed = set(
-            r[0] for r in db.query(User.id).filter(
-                User.id.in_(userIds), User.role == ROLE_TECHNICAL_MANAGER
-            ).all()
-        )
-        userIds = [u for u in userIds if u in allowed]
-    else:
-        # Bid Admin can assign any Bid Manager or Technical Manager to the project
-        allowed = set(
-            r[0] for r in db.query(User.id).filter(
-                User.id.in_(userIds), User.role.in_([ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER])
-            ).all()
-        )
-        userIds = [u for u in userIds if u in allowed]
+    if userIds:
+        candidates = db.query(User).filter(User.id.in_(userIds)).all()
+        if role == "bid_manager":
+            allowed = {u.id for u in candidates if _norm_role(u.role) == ROLE_TECHNICAL_MANAGER}
+        else:
+            allowed = {
+                u.id for u in candidates
+                if _norm_role(u.role) in (ROLE_TECHNICAL_MANAGER, ROLE_BID_MANAGER)
+            }
+        userIds = [uid for uid in userIds if uid in allowed]
     project_id = project["id"]
     ok = ProjectAssignmentModel.set_assignments(project_id, userIds)
     if not ok:
@@ -1302,6 +1322,153 @@ async def update_eligibility_item(
     except Exception as e:
         logger.error(f"Error updating eligibility checklist item: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+ALLOWED_ELIGIBILITY_REF_EXT = (".pdf", ".doc", ".docx", ".xls", ".xlsx", ".png", ".jpg", ".jpeg")
+
+
+@router.get("/eligibility-reference-documents")
+async def list_eligibility_reference_documents(current_user: dict = Depends(get_current_user)):
+    """List reference documents uploaded for eligibility auto-checking."""
+    role = (current_user.get("role") or "").lower()
+    if role not in ("bid_admin", "bid_manager"):
+        raise HTTPException(status_code=403, detail="Only Bid Admin and Bid Manager can manage eligibility reference documents")
+    docs = EligibilityReferenceDocumentModel.list_for_user(current_user["id"])
+    return {"success": True, "documents": docs}
+
+
+@router.post("/eligibility-reference-documents")
+async def upload_eligibility_reference_document(
+    file: UploadFile = File(...),
+    label: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Upload a reference document (certificates, registrations, etc.) for eligibility auto-check."""
+    role = (current_user.get("role") or "").lower()
+    if role not in ("bid_admin", "bid_manager"):
+        raise HTTPException(status_code=403, detail="Only Bid Admin and Bid Manager can upload eligibility reference documents")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_ELIGIBILITY_REF_EXT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Allowed types: {', '.join(ALLOWED_ELIGIBILITY_REF_EXT)}",
+        )
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    file_hash = hashlib.sha256(content).hexdigest()
+    refs_dir = os.path.join(settings.UPLOAD_DIR, "eligibility_refs", str(current_user["id"]))
+    os.makedirs(refs_dir, exist_ok=True)
+    safe_name = f"{int(time.time())}_{file_hash[:12]}{ext}"
+    file_path = os.path.join(refs_dir, safe_name)
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(content)
+    extraction = await extract_text(content, file.content_type or "", file.filename)
+    doc_id = EligibilityReferenceDocumentModel.create(
+        user_id=current_user["id"],
+        file_name=file.filename,
+        file_path=os.path.normpath(file_path),
+        file_hash=file_hash,
+        extracted_text=extraction.get("text") or "",
+        label=label.strip() if label and label.strip() else file.filename,
+    )
+    if not doc_id:
+        raise HTTPException(status_code=500, detail="Failed to save document")
+    return JSONResponse(
+        status_code=201,
+        content={
+            "success": True,
+            "message": "Eligibility reference document uploaded",
+            "document": {
+                "id": doc_id,
+                "label": label or file.filename,
+                "file_name": file.filename,
+                "word_count": extraction.get("wordCount", 0),
+            },
+        },
+    )
+
+
+@router.delete("/eligibility-reference-documents/{doc_id}")
+async def delete_eligibility_reference_document(
+    doc_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete an eligibility reference document."""
+    role = (current_user.get("role") or "").lower()
+    if role not in ("bid_admin", "bid_manager"):
+        raise HTTPException(status_code=403, detail="Only Bid Admin and Bid Manager can delete eligibility reference documents")
+    ok = EligibilityReferenceDocumentModel.delete(current_user["id"], doc_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"success": True, "message": "Document deleted"}
+
+
+@router.post("/eligibility-reference-documents/auto-check/{project_name:path}")
+async def run_eligibility_auto_check(
+    project_name: str,
+    document_id: Optional[str] = Body(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """Re-run eligibility auto-check for a project using stored reference documents."""
+    primary_name, fallback_names = _resolve_project_name_from_path(project_name)
+    if not primary_name:
+        raise HTTPException(status_code=400, detail="project_name is required")
+    project = ProjectModel.get_by_name_if_visible(primary_name, current_user=current_user)
+    for name in fallback_names:
+        if project:
+            break
+        project = ProjectModel.get_by_name_if_visible(name, current_user=current_user)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project_id = project["id"]
+    from core.sqlalchemy_db import get_db_session
+    from models.sqlalchemy_models import ProjectDocument
+    db = get_db_session()
+    summaries = None
+    doc_id_int = None
+    try:
+        if document_id:
+            try:
+                doc_id_int = int(document_id)
+            except (ValueError, TypeError):
+                doc_id_int = None
+        if doc_id_int:
+            doc = db.query(ProjectDocument).filter(
+                ProjectDocument.id == doc_id_int,
+                ProjectDocument.project_id == project_id,
+            ).first()
+        else:
+            doc = (
+                db.query(ProjectDocument)
+                .filter(ProjectDocument.project_id == project_id)
+                .order_by(ProjectDocument.created_at.desc())
+                .first()
+            )
+        if doc and doc.analysis_data:
+            summaries = doc.analysis_data if isinstance(doc.analysis_data, dict) else None
+            doc_id_int = doc.id
+    finally:
+        db.close()
+    if not summaries:
+        raise HTTPException(status_code=404, detail="No analysis found for this project")
+    from services.eligibility_auto_check_service import auto_check_from_summaries
+    ref_docs = EligibilityReferenceDocumentModel.get_texts_for_user(current_user["id"])
+    if not ref_docs:
+        raise HTTPException(status_code=400, detail="Upload eligibility reference documents first")
+    checks = auto_check_from_summaries(summaries, ref_docs)
+    save_map = {k: v for k, v in checks.items() if v is not None}
+    if save_map:
+        EligibilityChecklistModel.save_checklist(project_id, doc_id_int, current_user["id"], save_map)
+    return {
+        "success": True,
+        "checklist": {k: v for k, v in checks.items() if v is not None},
+        "manual_required": [k for k, v in checks.items() if v is None],
+        "document_id": doc_id_int,
+    }
+
 
 @router.get("/health")
 async def health_check():

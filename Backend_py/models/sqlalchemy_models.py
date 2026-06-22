@@ -118,6 +118,20 @@ class EligibilityChecklist(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class EligibilityReferenceDocument(Base):
+    """Company/org reference documents used to auto-check eligibility criteria during analysis."""
+    __tablename__ = "eligibility_reference_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    label = Column(Text, nullable=True)
+    file_name = Column(Text, nullable=False)
+    file_path = Column(Text, nullable=False)
+    file_hash = Column(Text, nullable=True)
+    extracted_text = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=False), server_default=func.now())
+
+
 class FinalBidUpload(Base):
     """User-uploaded final bid document per project (fallback model)."""
     __tablename__ = "final_bid_uploads"

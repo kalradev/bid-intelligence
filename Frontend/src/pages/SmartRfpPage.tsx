@@ -1,129 +1,206 @@
 import { Copy, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchProjectAnalysis, updateAnalysisData } from "../utils/documentAnalysis";
 import { parseBidDeadlines } from "../utils/deadlineUtils";
+
+function formatDisplayValue(value: unknown): string {
+  if (value == null) return "N/A";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : "N/A";
+  }
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    const joined = value.map((v) => formatDisplayValue(v)).filter((v) => v !== "N/A").join("; ");
+    return joined || "N/A";
+  }
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    const pick = o.text ?? o.criterion ?? o.description ?? o.value ?? o.date ?? o.deadline;
+    if (pick != null) return formatDisplayValue(pick);
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "N/A";
+    }
+  }
+  return String(value);
+}
 
 export default function SmartRfpPage() {
   const navigate = useNavigate();
   const [analysisData, setAnalysisData] = useState<any>(null);
   const [animate, setAnimate] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    const storedData = localStorage.getItem("analysisData");
-    if (storedData) {
-      const parsed = JSON.parse(storedData);
-      setAnalysisData(parsed);
-    }
-    setTimeout(() => setAnimate(true), 80);
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+
+        const currentDoc = localStorage.getItem("currentDocument");
+        const analysisDataLocal = localStorage.getItem("analysisData");
+
+        let projName = "";
+        let docId: number | null = null;
+
+        if (currentDoc) {
+          try {
+            const doc = JSON.parse(currentDoc);
+            projName = doc.projectName || "";
+            docId = doc.documentId ?? null;
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (analysisDataLocal && !projName) {
+          try {
+            const data = JSON.parse(analysisDataLocal);
+            projName = data.data?.projectName || "";
+            docId = data.data?.metadata?.documentId ?? null;
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (projName) {
+          try {
+            const result = await fetchProjectAnalysis(projName, docId, null);
+            updateAnalysisData(result, projName);
+            setAnalysisData(result);
+          } catch {
+            if (analysisDataLocal) {
+              setAnalysisData(JSON.parse(analysisDataLocal));
+            }
+          }
+        } else if (analysisDataLocal) {
+          setAnalysisData(JSON.parse(analysisDataLocal));
+        }
+      } catch {
+        setAnalysisData(null);
+      } finally {
+        setIsLoading(false);
+        setTimeout(() => setAnimate(true), 60);
+      }
+    };
+
+    loadData();
   }, []);
 
-  // Real-time countdown - updates every minute
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // Update every minute
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
 
-  if (!analysisData) {
+  if (isLoading) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p>Loading...</p>
+      <div className="universal-page-wrapper">
+        <div className="universal-background">
+          <div className="universal-bg-gradient-1" />
+          <div className="universal-bg-gradient-2" />
+          <div className="universal-bg-gradient-3" />
+        </div>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20, position: "relative", zIndex: 1 }}>
+          <div style={{ fontSize: 18, color: "#34908B", fontWeight: 600 }}>Loading Smart RFP analysis...</div>
+          <div style={{ width: 40, height: 40, border: "4px solid #e5e7eb", borderTop: "4px solid #6FBEB2", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+        </div>
       </div>
     );
   }
 
-  const projectOverview = analysisData?.data?.departmentalSummaries?.projectOverview || {};
-  const bidManagement = analysisData?.data?.departmentalSummaries?.bidManagement || {};
+  if (!analysisData?.data) {
+    return (
+      <div className="universal-page-wrapper">
+        <div className="universal-background">
+          <div className="universal-bg-gradient-1" />
+          <div className="universal-bg-gradient-2" />
+          <div className="universal-bg-gradient-3" />
+        </div>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 20, padding: 24, position: "relative", zIndex: 1 }}>
+          <p style={{ fontSize: 18, color: "#64748b", textAlign: "center" }}>No analysis data found. Upload and analyze an RFP first.</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            <button type="button" className="department-navbar-btn" onClick={() => navigate("/upload")}>
+              Go to Upload
+            </button>
+            <button type="button" className="department-navbar-btn department-navbar-btn--secondary" onClick={() => navigate("/insights")}>
+              Back to Insights
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const projectOverview = analysisData.data.departmentalSummaries?.projectOverview || {};
+  const bidManagement = analysisData.data.departmentalSummaries?.bidManagement || {};
   const { submissionDeadline, bidOpeningDate } = parseBidDeadlines(
     bidManagement.keyDeadlines,
     projectOverview.lastSubmissionDate,
     projectOverview.bidOpeningDate
   );
 
-  // Helper function to calculate days remaining until deadline
   const calculateDaysRemaining = (dateString: string) => {
     if (!dateString || dateString === "N/A") return null;
-    
+
     try {
-      // Try to parse the date string
       const deadline = new Date(dateString);
-      
-      // Check if date is valid
+
       if (isNaN(deadline.getTime())) {
-        // Try alternative parsing for formats like "2024-07-10 15:00:00"
-        const cleanedDate = dateString.replace(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/, '$1T$2');
+        const cleanedDate = dateString.replace(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/, "$1T$2");
         const alternativeDeadline = new Date(cleanedDate);
-        
+
         if (isNaN(alternativeDeadline.getTime())) {
           return null;
         }
-        
+
         const diffTime = alternativeDeadline.getTime() - currentTime.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        
+
         return { days: diffDays, isPassed: diffDays < 0 };
       }
-      
+
       const diffTime = deadline.getTime() - currentTime.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
+
       return { days: diffDays, isPassed: diffDays < 0 };
-    } catch (error) {
+    } catch {
       return null;
     }
   };
 
-  const daysRemaining = calculateDaysRemaining(submissionDeadline || projectOverview.lastSubmissionDate || "");
+  const lastSubmissionDisplay = formatDisplayValue(submissionDeadline || projectOverview.lastSubmissionDate);
+  const daysRemaining = calculateDaysRemaining(lastSubmissionDisplay === "N/A" ? "" : lastSubmissionDisplay);
 
-  // Filter out EMD if it's "N/A" or not present
+  const emdValue = formatDisplayValue(projectOverview.emd);
   const projectDetails = [
-    {
-      label: "Project Name",
-      value: projectOverview.projectName || "N/A",
-    },
-    {
-      label: "Client",
-      value: projectOverview.client || "N/A",
-    },
-    {
-      label: "Tender ID",
-      value: projectOverview.tenderId || "N/A",
-      copy: true,
-    },
-    {
-      label: "Bid Value",
-      value: projectOverview.bidValue || "N/A",
-      color: "#059669",
-    },
-    // Only include EMD if it's present and not "N/A"
-    ...(projectOverview.emd && projectOverview.emd !== "N/A" ? [{
-      label: "EMD",
-      value: projectOverview.emd,
-      color: "#D97706",
-    }] : []),
-    {
-      label: "Completion Period",
-      value: projectOverview.completionPeriod || "N/A",
-    },
+    { label: "Project Name", value: formatDisplayValue(projectOverview.projectName) },
+    { label: "Client", value: formatDisplayValue(projectOverview.client) },
+    { label: "Tender ID", value: formatDisplayValue(projectOverview.tenderId), copy: true },
+    { label: "Bid Value", value: formatDisplayValue(projectOverview.bidValue), tone: "accent" as const },
+    ...(emdValue !== "N/A"
+      ? [{ label: "EMD", value: emdValue, tone: "warn" as const }]
+      : []),
+    { label: "Completion Period", value: formatDisplayValue(projectOverview.completionPeriod) },
     {
       label: "Bid Submission Deadline",
-      value: submissionDeadline || projectOverview.lastSubmissionDate || "N/A",
-      color: "#DC2626",
+      value: lastSubmissionDisplay,
+      tone: "urgent" as const,
       showCountdown: true,
     },
-    {
-      label: "Bid Opening Date",
-      value: bidOpeningDate || "N/A",
-      color: "#7C3AED",
-    },
+    { label: "Bid Opening Date", value: formatDisplayValue(bidOpeningDate || projectOverview.bidOpeningDate) },
   ];
 
   const downloadExcel = () => {
     let csv = "Detail,Value\n";
-    projectDetails.forEach((row) => (csv += `${row.label},${row.value}\n`));
+    projectDetails.forEach((row) => {
+      csv += `${row.label},${row.value}\n`;
+    });
 
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -131,6 +208,7 @@ export default function SmartRfpPage() {
     a.href = url;
     a.download = "Smart_RFP_Details.csv";
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const copyToClipboard = (text: string) => {
@@ -139,147 +217,78 @@ export default function SmartRfpPage() {
   };
 
   return (
-    <div className="smart-rfp-page-wrapper">
-      {/* Background */}
-      <div className="smart-rfp-background">
-        <div className="smart-bg-gradient-1"></div>
-        <div className="smart-bg-gradient-2"></div>
-        <div className="smart-bg-gradient-3"></div>
-      </div>
+    <>
+      <header className="department-navbar">
+        <h1 className="department-navbar-title department-navbar-title-center">Smart RFP Analysis</h1>
+        <button type="button" className="department-navbar-btn" onClick={() => navigate("/insights")}>
+          Home
+        </button>
+      </header>
 
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          flexDirection: "column",
-          position: "relative",
-          zIndex: 1,
-          opacity: animate ? 1 : 0,
-          transform: animate ? "translateY(0)" : "translateY(12px)",
-          transition: "0.45s ease",
-        }}
-      >
-        {/* NAVBAR */}
-        <header className="department-navbar">
-          <h1 className="department-navbar-title department-navbar-title-center">Smart RFP Analysis</h1>
-          <button className="department-navbar-btn" onClick={() => navigate("/insights")}>
-            Home
-          </button>
-        </header>
+      <div className="universal-page-wrapper">
+        <div className="universal-background">
+          <div className="universal-bg-gradient-1" />
+          <div className="universal-bg-gradient-2" />
+          <div className="universal-bg-gradient-3" />
+        </div>
 
-        {/* CONTENT */}
         <main
           style={{
+            minHeight: "100vh",
             width: "100%",
-            padding: "80px 5px 5px 5px",
+            padding: "90px 16px 32px",
             display: "flex",
             justifyContent: "center",
+            position: "relative",
+            zIndex: 1,
+            opacity: animate ? 1 : 0,
+            transform: animate ? "translateY(0)" : "translateY(12px)",
+            transition: "0.45s ease",
           }}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "1050px",
-              background: "#fff",
-              borderRadius: 14,
-              padding: 28,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-              border: "1px solid #e5e7eb",
-            }}
-          >
-            {/* TITLE + DOWNLOAD */}
-            <div style={{ display: "flex", alignItems: "center", marginBottom: 26 }}>
-              <h2
-                style={{
-                  flex: 1,
-                  fontSize: 28,
-                  fontWeight: 800,
-                  color: "#111",
-                }}
-              >
-                Project Overview
-              </h2>
+          <div className="smart-rfp-content-card">
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 26, gap: 16 }}>
+              <h2 className="smart-rfp-page-title">Project Overview</h2>
 
-              <button
-                onClick={downloadExcel}
-                style={{
-                  background: "#059669",
-                  color: "white",
-                  padding: "8px 18px",
-                  borderRadius: 8,
-                  border: 0,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
+              <button type="button" className="department-navbar-btn" onClick={downloadExcel}>
                 Download
               </button>
             </div>
 
-            {/* DETAILS GRID */}
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "22px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                gap: 22,
               }}
             >
-              {projectDetails.map((item, i) => {
-                const hoverColors = [
-                  "rgba(59, 130, 246, 0.08)",
-                  "rgba(139, 92, 246, 0.08)",
-                  "rgba(16, 185, 129, 0.08)",
-                  "rgba(6, 182, 212, 0.08)",
-                  "rgba(249, 115, 22, 0.08)",
-                  "rgba(236, 72, 153, 0.08)",
-                  "rgba(20, 184, 166, 0.08)",
-                ];
+              {projectDetails.map((item) => {
+                const valueClass =
+                  item.tone === "accent"
+                    ? "smart-rfp-detail-value smart-rfp-detail-value--accent"
+                    : item.tone === "warn"
+                      ? "smart-rfp-detail-value smart-rfp-detail-value--warn"
+                      : item.tone === "urgent"
+                        ? "smart-rfp-detail-value smart-rfp-detail-value--urgent"
+                        : "smart-rfp-detail-value";
 
                 return (
-                  <div
-                    key={i}
-                    style={{
-                      borderRadius: 14,
-                      padding: "18px 22px",
-                      background: "linear-gradient(135deg, #ffffff, #f8faff)",
-                      border: "1px solid #e5e7eb",
-                      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                      cursor: "pointer",
-                      boxShadow: "0 2px 8px rgba(0, 0, 0, 0.04)",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-4px) scale(1.02)";
-                      e.currentTarget.style.background = hoverColors[i];
-                      e.currentTarget.style.boxShadow = "0 8px 24px rgba(0, 0, 0, 0.12)";
-                      e.currentTarget.style.borderColor = hoverColors[i].replace("0.08", "0.3");
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0) scale(1)";
-                      e.currentTarget.style.background = "linear-gradient(135deg, #ffffff, #f8faff)";
-                      e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.04)";
-                      e.currentTarget.style.borderColor = "#e5e7eb";
-                    }}
-                  >
-                    <p style={{ fontSize: 14, fontWeight: 800, marginBottom: 6 }}>
-                      {item.label}
-                    </p>
+                  <div key={item.label} className="smart-rfp-detail-card">
+                    <p className="smart-rfp-detail-label">{item.label}</p>
 
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <p style={{ fontSize: 16, fontWeight: 600, color: item.color || "#111" }}>
-                          {item.value}
-                        </p>
+                        <p className={valueClass}>{item.value}</p>
 
-                        {item.copy && (
+                        {item.copy && item.value !== "N/A" && (
                           <Copy
                             size={18}
-                            style={{ cursor: "pointer", color: "#2563eb" }}
+                            style={{ cursor: "pointer", color: "#34908B", flexShrink: 0 }}
                             onClick={() => copyToClipboard(item.value)}
                           />
                         )}
                       </div>
 
-                      {/* Countdown Badge for submission deadline */}
                       {item.showCountdown && daysRemaining && (
                         <div
                           style={{
@@ -288,24 +297,24 @@ export default function SmartRfpPage() {
                             gap: 6,
                             padding: "6px 12px",
                             borderRadius: 20,
-                            background: daysRemaining.isPassed 
-                              ? "linear-gradient(135deg, #ef4444, #dc2626)" 
+                            background: daysRemaining.isPassed
+                              ? "linear-gradient(135deg, #ef4444, #dc2626)"
                               : daysRemaining.days <= 7
-                              ? "linear-gradient(135deg, #f59e0b, #d97706)"
-                              : "linear-gradient(135deg, #10b981, #059669)",
+                                ? "linear-gradient(135deg, #f59e0b, #d97706)"
+                                : "linear-gradient(135deg, #6FBEB2, #34908B)",
                             color: "white",
                             fontSize: 13,
                             fontWeight: 700,
                             width: "fit-content",
-                            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                            boxShadow: "0 2px 8px rgba(52, 144, 139, 0.25)",
                             animation: daysRemaining.isPassed || daysRemaining.days <= 3 ? "pulse 2s infinite" : "none",
                           }}
                         >
                           <Clock size={14} />
                           <span>
-                            {daysRemaining.isPassed 
-                              ? "Deadline Passed" 
-                              : `${Math.abs(daysRemaining.days)} day${Math.abs(daysRemaining.days) !== 1 ? 's' : ''} left`}
+                            {daysRemaining.isPassed
+                              ? "Deadline Passed"
+                              : `${Math.abs(daysRemaining.days)} day${Math.abs(daysRemaining.days) !== 1 ? "s" : ""} left`}
                           </span>
                         </div>
                       )}
@@ -317,6 +326,6 @@ export default function SmartRfpPage() {
           </div>
         </main>
       </div>
-    </div>
+    </>
   );
 }

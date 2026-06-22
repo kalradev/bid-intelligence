@@ -1,8 +1,8 @@
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import DashboardNavbar, { NAVBAR_HEIGHT } from "../components/DashboardNavbar";
+import DashboardSidebar, { getDashboardSidebarWidth } from "../components/DashboardSidebar";
 import { API_BASE_URL } from "../config";
 import { getAuthToken } from "../utils/authStorage";
 
@@ -30,7 +30,6 @@ export default function TeamPage() {
   const [user, setUser] = useState<{ id: number; role?: string; fullName?: string } | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [bidManagerDashboard, setBidManagerDashboard] = useState<BidManagerDashboard[]>([]);
-  const [quota, setQuota] = useState<{ teamProjectsUsed?: number; teamProjectsLimit?: number; teamProjectsLeft?: number; appliesToTeam?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [deletingUserId, setDeletingUserId] = useState<number | null>(null);
 
@@ -64,19 +63,11 @@ export default function TeamPage() {
           if (d.success) setBidManagerDashboard(d.bidManagers || []);
         }
       } else {
-        // Bid Manager: fetch all TMs (team-member-assignments). Technical Manager: just quota.
-        const [assignRes, quotaRes] = await Promise.all([
-          fetch(`${API_BASE_URL}/api/rfp/team-member-assignments`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE_URL}/api/auth/team-quota`, { headers: { Authorization: `Bearer ${token}` } }),
-        ]);
+        // Bid Manager: fetch all TMs (team-member-assignments).
+        const assignRes = await fetch(`${API_BASE_URL}/api/rfp/team-member-assignments`, { headers: { Authorization: `Bearer ${token}` } });
         if (assignRes.ok && userRole === "bid_manager") {
           const d = await assignRes.json();
           if (d.success && Array.isArray(d.teamMembers)) setTeam(d.teamMembers || []);
-        }
-        if (quotaRes.ok) {
-          const d = await quotaRes.json();
-          if (d.appliesToTeam) setQuota({ teamProjectsUsed: d.teamProjectsUsed, teamProjectsLimit: d.teamProjectsLimit, teamProjectsLeft: d.teamProjectsLeft, appliesToTeam: true });
-          else setQuota(null);
         }
       }
     } catch (e) {
@@ -95,6 +86,11 @@ export default function TeamPage() {
   const role = (user?.role || "").toLowerCase();
   const isBidAdmin = role === "bid_admin";
   const isBidManager = role === "bid_manager";
+  const showSidebar = isBidAdmin || isBidManager;
+  const sidebarWidth = getDashboardSidebarWidth(role);
+  const userDisplayName =
+    user?.fullName ||
+    (isBidAdmin ? "Bid Admin" : isBidManager ? "Bid Manager" : user?.role || "User");
   const handleDeleteUser = async (userId: number, userName: string) => {
     if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
       return;
@@ -127,40 +123,8 @@ export default function TeamPage() {
     <div className="universal-page-wrapper">
       <DashboardNavbar />
 
-      {(isBidAdmin || isBidManager) && (
-        <button
-          type="button"
-          onClick={() => navigate("/home")}
-          style={{
-            position: "fixed",
-            bottom: 20,
-            left: 20,
-            zIndex: 1000,
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "12px 20px",
-            background: "linear-gradient(135deg, #34908B 0%, #6FBEB2 100%)",
-            border: "1px solid rgba(52,144,139,0.4)",
-            borderRadius: 12,
-            cursor: "pointer",
-            fontWeight: 600,
-            fontSize: 14,
-            color: "#fff",
-            boxShadow: "0 4px 12px rgba(52,144,139,0.3)",
-            transition: "all 0.2s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow = "0 6px 16px rgba(52,144,139,0.4)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 4px 12px rgba(52,144,139,0.3)";
-          }}
-        >
-          <ArrowLeft size={18} /> Back to Dashboard
-        </button>
+      {showSidebar && (
+        <DashboardSidebar activeItem="team" userRole={role} userDisplayName={userDisplayName} />
       )}
 
       <div className="universal-background">
@@ -169,32 +133,43 @@ export default function TeamPage() {
         <div className="universal-bg-gradient-3"></div>
       </div>
 
-      <div style={{ position: "relative", zIndex: 1, maxWidth: isBidAdmin ? 1000 : 800, margin: "0 auto 40px", padding: 24, paddingTop: NAVBAR_HEIGHT + 24 }}>
+      <main
+        style={{
+          position: "relative",
+          zIndex: 1,
+          maxWidth: isBidAdmin ? 1000 : 800,
+          margin: "0 auto 40px",
+          marginLeft: showSidebar ? sidebarWidth : undefined,
+          padding: 24,
+          paddingTop: NAVBAR_HEIGHT + 28,
+          paddingBottom: 48,
+          transition: "margin-left 0.25s ease",
+          boxSizing: "border-box",
+        }}
+      >
         <div style={{ background: "rgba(255,255,255,0.95)", borderRadius: 20, padding: 28, marginBottom: 24, boxShadow: "0 20px 50px rgba(99,102,241,0.12)" }}>
           <h1 style={{ margin: "0 0 8px", fontSize: 24, color: "#111827" }}>
-            {isBidAdmin ? "Dashboard - Organization Overview" : "Team & Quota"}
+            Team overview
           </h1>
           <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
-            {isBidAdmin ? "Monitor all Bid Managers, Technical Managers, and team quotas" : `Role: ${user.role || "—"} · ${user.fullName || ""}`}
+            {isBidAdmin
+              ? "See which Bid Managers have which Technical Managers on their team."
+              : isBidManager
+                ? "Your Technical Managers — assign them to projects from the dashboard or upload page."
+                : `Role: ${user.role || "—"} · ${user.fullName || ""}`}
           </p>
 
-          {quota && quota.appliesToTeam && (
-            <div style={{ marginTop: 20, padding: "14px 18px", borderRadius: 12, background: quota.teamProjectsLeft === 0 ? "rgba(239,68,68,0.1)" : "rgba(79,70,229,0.08)", border: `1px solid ${quota.teamProjectsLeft === 0 ? "rgba(239,68,68,0.3)" : "rgba(79,70,229,0.2)"}` }}>
-              <strong>Team quota:</strong> {quota.teamProjectsUsed} / {quota.teamProjectsLimit} used — <strong>{quota.teamProjectsLeft} left</strong>
-            </div>
-          )}
-
           {loading ? (
-            <p style={{ marginTop: 20, color: "#6b7280" }}>Loading dashboard…</p>
+            <p style={{ marginTop: 20, color: "#6b7280" }}>Loading team overview…</p>
           ) : (
             <>
               {isBidAdmin && (
                 <section style={{ marginTop: 24 }}>
-                  <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#4f46e5" }}>Bid Managers Dashboard</h2>
+                  <h2 style={{ margin: "0 0 12px", fontSize: 18, color: "#4f46e5" }}>Bid Managers & team members</h2>
                   {bidManagerDashboard.length === 0 ? <p style={{ color: "#6b7280", margin: 0 }}>No Bid Managers yet.</p> : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       {bidManagerDashboard.map((bm) => (
-                        <div key={bm.id} style={{ padding: 16, borderRadius: 12, background: "rgba(79,70,229,0.05)", border: "1px solid rgba(79,70,229,0.2)" }}>
+                        <div key={bm.id} style={{ padding: 18, borderRadius: 14, background: "#fff", border: "1px solid rgba(111,190,178,0.35)", boxShadow: "0 6px 18px rgba(15, 23, 42, 0.04)" }}>
                           <div style={{ marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <div>
                               <strong style={{ fontSize: 16, color: "#111827" }}>{bm.fullName}</strong>
@@ -208,16 +183,16 @@ export default function TeamPage() {
                               {deletingUserId === bm.id ? "Deleting..." : "Remove"}
                             </button>
                           </div>
-                          <div style={{ padding: "10px 14px", borderRadius: 8, background: bm.teamProjectsLeft === 0 ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${bm.teamProjectsLeft === 0 ? "rgba(239,68,68,0.3)" : "rgba(34,197,94,0.3)"}`, marginBottom: 12, fontSize: 14 }}>
-                            <strong>Team quota:</strong> {bm.teamProjectsUsed} / {bm.teamProjectsLimit} used — <strong>{bm.teamProjectsLeft} left</strong>
-                          </div>
                           {bm.technicalManagers.length > 0 ? (
                             <div>
                               <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "#6b7280" }}>Technical Managers ({bm.technicalManagers.length}):</p>
-                              <ul style={{ listStyle: "none", padding: 0, margin: 0, paddingLeft: 12 }}>
+                              <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                                 {bm.technicalManagers.map((tm) => (
-                                  <li key={tm.id} style={{ padding: "6px 0", fontSize: 14, color: "#374151", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                    <span>• {tm.fullName} · {tm.email}</span>
+                                  <li key={tm.id} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(226,232,240,0.9)", background: "#f8fafc", fontSize: 14, color: "#334155", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                    <span style={{ display: "flex", flexDirection: "column" }}>
+                                      <span style={{ fontWeight: 600, color: "#0f172a" }}>{tm.fullName}</span>
+                                      <span style={{ fontSize: 12, color: "#64748b" }}>{tm.email}</span>
+                                    </span>
                                     <button
                                       onClick={() => handleDeleteUser(tm.id, tm.fullName)}
                                       disabled={deletingUserId === tm.id}
@@ -255,13 +230,13 @@ export default function TeamPage() {
               )}
 
               {role === "technical_manager" && team.length === 0 && !loading && (
-                <p style={{ marginTop: 20, color: "#6b7280" }}>You are a Technical Manager. Team quota is shown above.</p>
+                <p style={{ marginTop: 20, color: "#6b7280" }}>You are a Technical Manager.</p>
               )}
             </>
           )}
 
         </div>
-      </div>
+      </main>
     </div>
   );
 }

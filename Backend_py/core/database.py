@@ -147,6 +147,20 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_analysis_project_section ON analysis_records(project_id, section);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_project_doc ON eligibility_checklist(project_id, document_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_user ON eligibility_checklist(user_id);")
+
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS eligibility_reference_documents (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                label TEXT,
+                file_name TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                file_hash TEXT,
+                extracted_text TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_eligibility_ref_docs_user ON eligibility_reference_documents(user_id);")
         
         # Fallback model: final bid uploads and comparison
         cursor.execute("""

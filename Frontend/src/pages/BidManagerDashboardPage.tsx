@@ -1,7 +1,7 @@
-import { ArrowRight, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Star, UserCircle, Users, X } from "lucide-react";
+import { ArrowRight, ClipboardCheck, FileUp, FolderKanban, FolderOpen, LayoutDashboard, LogOut, Mail, Star, UserCircle, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import bidIntelligenceLogo from "../assets/bid-intelligence-logo.svg";
 import cacheLogo from "../assets/Cache-Logo.png";
 import womenOwnedLogo from "../assets/women-owned-logo.png";
@@ -27,6 +27,7 @@ type ViewMode = "dashboard" | "personal";
 
 export default function BidManagerDashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [quota, setQuota] = useState<{ teamProjectsUsed: number; teamProjectsLimit: number; teamProjectsLeft: number; appliesToTeam: boolean } | null>(null);
@@ -69,6 +70,14 @@ export default function BidManagerDashboardPage() {
     if (typeof parsed.id === "number") setCurrentUserId(parsed.id);
     if (parsed.fullName && typeof parsed.fullName === "string") setUserDisplayName(parsed.fullName);
   }, [navigate]);
+
+  useEffect(() => {
+    const requestedView = (location.state as { view?: ViewMode } | null)?.view;
+    if (requestedView === "personal") {
+      setViewMode("personal");
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const token = getAuthToken();
@@ -376,9 +385,13 @@ export default function BidManagerDashboardPage() {
           <div style={{ fontSize: 11, fontWeight: 700, color: "#34908B", textTransform: "uppercase", letterSpacing: "0.05em", paddingLeft: 12, marginBottom: 6 }}>
             Actions
           </div>
-          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Upload & Analyze">
+          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload?mode=rfp")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Upload & Analyze">
             <FileUp size={20} style={{ flexShrink: 0 }} />
             <span>Upload & Analyze</span>
+          </button>
+          <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/upload?mode=eligibility")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Upload company documents for eligibility auto-check">
+            <ClipboardCheck size={20} style={{ flexShrink: 0 }} />
+            <span>Eligibility documents</span>
           </button>
           <button type="button" className="sidebar-nav-toggle" onClick={() => navigate("/team")} style={{ ...navButtonBase, background: "rgba(165,233,221,0.4)", color: "#1e4a47", border: "1px solid rgba(111,190,178,0.3)" }} title="Manage Teams">
             <Users size={20} style={{ flexShrink: 0 }} />
@@ -684,7 +697,26 @@ export default function BidManagerDashboardPage() {
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
                   <button onClick={() => { setAssignModalProject(null); setShowAddTMInModal(false); setAddTMForm({ fullName: "", email: "", password: "" }); }} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#f1f5f9", color: "#475569", border: "none", cursor: "pointer" }}>Cancel</button>
-                  <button disabled={assignSaving} onClick={saveAssignments} style={{ padding: "10px 18px", borderRadius: 10, fontWeight: 600, background: "#6FBEB2", color: "#fff", border: "none", cursor: assignSaving ? "wait" : "pointer" }}>{assignSaving ? "Saving…" : "Save"}</button>
+                  <button
+                    disabled={assignSaving || assignModalAssignedIds.length === 0}
+                    onClick={saveAssignments}
+                    style={{
+                      padding: "10px 20px",
+                      borderRadius: 10,
+                      fontWeight: 700,
+                      border: "none",
+                      cursor: assignSaving ? "wait" : assignModalAssignedIds.length === 0 ? "not-allowed" : "pointer",
+                      background: assignModalAssignedIds.length > 0
+                        ? "linear-gradient(135deg, #6FBEB2 0%, #34908B 100%)"
+                        : "#e2e8f0",
+                      color: assignModalAssignedIds.length > 0 ? "#fff" : "#94a3b8",
+                      boxShadow: assignModalAssignedIds.length > 0 ? "0 4px 14px rgba(52, 144, 139, 0.35)" : "none",
+                      opacity: assignSaving ? 0.85 : 1,
+                      transition: "background 0.2s, box-shadow 0.2s, color 0.2s",
+                    }}
+                  >
+                    {assignSaving ? "Saving…" : "Save"}
+                  </button>
                 </div>
               </>
             ) : (
